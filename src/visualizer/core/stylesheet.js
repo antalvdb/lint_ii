@@ -496,11 +496,20 @@ export const css = `
 
         .text {
             line-height: 1.5;
-        }
 
-        .strikethrough {
-            text-decoration: line-through;
-            opacity: 0.7;
+            del {
+                text-decoration: line-through;
+                opacity: 0.6;
+                text-decoration-color: currentColor;
+            }
+
+            ins {
+                text-decoration: none;
+                font-style: normal;
+                background: color-mix(in oklch, oklch(0.7 0.18 145) 30%, transparent);
+                border-radius: 0.2em;
+                padding: 0.05em 0.15em;
+            }
         }
     }
 

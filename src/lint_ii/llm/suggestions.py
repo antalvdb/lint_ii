@@ -33,6 +33,9 @@ class SuggestionType(str, Enum):
     CONTENT_WORDS_PER_CLAUSE = "content_words_per_clause"
     ABSTRACT_NOUNS = "abstract_nouns"
     SPELLING = "spelling"
+    PASSIVE = "passive"
+    SUBORDINATE_CLAUSE = "subordinate_clause"
+    SENTENCE_LENGTH = "sentence_length"
 
 
 # Default thresholds for triggering suggestions
@@ -41,6 +44,8 @@ DEFAULT_THRESHOLDS: dict[str, float] = {
     "max_sdl": 5,                    # SDL above this triggers suggestion
     "content_words_per_clause": 7,   # Content words/clause above this triggers
     "abstract_noun_ratio": 0.7,      # Abstract ratio above this (concrete < 30%)
+    "sentence_length": 25,           # Words above this triggers suggestion
+    "n_subordinate_clauses": 1,      # More than this many subordinate clauses triggers
 }
 
 
@@ -57,6 +62,7 @@ class SuggestionTrigger:
     word_index: int | None = None    # Token index within sentence
     context: str | None = None       # Surrounding text for context
     abstract_nouns: list[str] = field(default_factory=list)  # For abstract_nouns
+    passives: list[str] = field(default_factory=list)         # For passive
 
 
 @dataclass
@@ -180,6 +186,21 @@ class SuggestionEngine:
             if trigger:
                 triggers.append(trigger)
 
+            # Check for passive constructions
+            trigger = self._check_passive(sent_analysis, sent_idx, sentence_text)
+            if trigger:
+                triggers.append(trigger)
+
+            # Check for many subordinate clauses
+            trigger = self._check_subordinate_clauses(sent_analysis, sent_idx, sentence_text)
+            if trigger:
+                triggers.append(trigger)
+
+            # Check for long sentences
+            trigger = self._check_sentence_length(sent_analysis, sent_idx, sentence_text)
+            if trigger:
+                triggers.append(trigger)
+
         return triggers
 
     def _check_word_frequency(
@@ -281,6 +302,65 @@ class SuggestionEngine:
                 )
         return None
 
+    def _check_passive(
+        self,
+        sent_analysis: "SentenceAnalysis",
+        sent_idx: int,
+        sentence_text: str,
+    ) -> SuggestionTrigger | None:
+        """Check for passive constructions."""
+        if not sent_analysis.has_passive:
+            return None
+        passives = [span.text for span in sent_analysis.passives]
+        return SuggestionTrigger(
+            type=SuggestionType.PASSIVE,
+            sentence_index=sent_idx,
+            sentence_text=sentence_text,
+            feature_value=float(len(passives)),
+            threshold=0,
+            passives=passives,
+        )
+
+    def _check_subordinate_clauses(
+        self,
+        sent_analysis: "SentenceAnalysis",
+        sent_idx: int,
+        sentence_text: str,
+    ) -> SuggestionTrigger | None:
+        """Check for sentences with many subordinate clauses."""
+        threshold = self._thresholds["n_subordinate_clauses"]
+        n = sent_analysis.n_subordinate_clauses
+
+        if n > threshold:
+            return SuggestionTrigger(
+                type=SuggestionType.SUBORDINATE_CLAUSE,
+                sentence_index=sent_idx,
+                sentence_text=sentence_text,
+                feature_value=float(n),
+                threshold=threshold,
+            )
+        return None
+
+    def _check_sentence_length(
+        self,
+        sent_analysis: "SentenceAnalysis",
+        sent_idx: int,
+        sentence_text: str,
+    ) -> SuggestionTrigger | None:
+        """Check for sentences that are too long."""
+        threshold = self._thresholds["sentence_length"]
+        length = sent_analysis.sent_length
+
+        if length > threshold:
+            return SuggestionTrigger(
+                type=SuggestionType.SENTENCE_LENGTH,
+                sentence_index=sent_idx,
+                sentence_text=sentence_text,
+                feature_value=float(length),
+                threshold=threshold,
+            )
+        return None
+
     @staticmethod
     def _prioritize_triggers(
         triggers: list[SuggestionTrigger],
@@ -297,6 +377,9 @@ class SuggestionEngine:
 
         # Sentence-level types first, then word-level
         type_priority = [
+            SuggestionType.SENTENCE_LENGTH,
+            SuggestionType.PASSIVE,
+            SuggestionType.SUBORDINATE_CLAUSE,
             SuggestionType.MAX_SDL,
             SuggestionType.CONTENT_WORDS_PER_CLAUSE,
             SuggestionType.ABSTRACT_NOUNS,
@@ -523,6 +606,24 @@ class SuggestionEngine:
                     "abstract_nouns",
                     context=trigger.context or trigger.sentence_text,
                     abstract_nouns=", ".join(trigger.abstract_nouns),
+                )
+            elif trigger.type == SuggestionType.PASSIVE:
+                system_prompt, user_prompt = format_prompt(
+                    "passive",
+                    sentence=trigger.sentence_text,
+                    passives=", ".join(f'"{p}"' for p in trigger.passives),
+                )
+            elif trigger.type == SuggestionType.SUBORDINATE_CLAUSE:
+                system_prompt, user_prompt = format_prompt(
+                    "subordinate_clause",
+                    sentence=trigger.sentence_text,
+                    n_subordinate_clauses=int(trigger.feature_value),
+                )
+            elif trigger.type == SuggestionType.SENTENCE_LENGTH:
+                system_prompt, user_prompt = format_prompt(
+                    "sentence_length",
+                    sentence=trigger.sentence_text,
+                    sent_length=int(trigger.feature_value),
                 )
             else:
                 return None

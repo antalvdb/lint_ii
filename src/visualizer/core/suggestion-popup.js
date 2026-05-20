@@ -153,11 +153,11 @@ export class SuggestionPopupController {
                 <div class="suggestion-comparison">
                     <div class="original">
                         <span class="label">Origineel:</span>
-                        <span class="text strikethrough">${this._escapeHtml(suggestion.original_text)}</span>
+                        <span class="text">${this._renderDiff(suggestion.original_text, suggestion.suggested_text).origHtml}</span>
                     </div>
                     <div class="suggested">
                         <span class="label">Suggestie:</span>
-                        <span class="text">${this._escapeHtml(suggestion.suggested_text)}</span>
+                        <span class="text">${this._renderDiff(suggestion.original_text, suggestion.suggested_text).sugHtml}</span>
                     </div>
                 </div>
 
@@ -195,11 +195,11 @@ export class SuggestionPopupController {
                 <div class="suggestion-comparison">
                     <div class="original">
                         <span class="label">Origineel:</span>
-                        <span class="text strikethrough">${this._escapeHtml(suggestion.original_text)}</span>
+                        <span class="text">${this._renderDiff(suggestion.original_text, suggestion.suggested_text).origHtml}</span>
                     </div>
                     <div class="suggested">
                         <span class="label">Suggestie:</span>
-                        <span class="text">${this._escapeHtml(suggestion.suggested_text)}</span>
+                        <span class="text">${this._renderDiff(suggestion.original_text, suggestion.suggested_text).sugHtml}</span>
                     </div>
                 </div>
 
@@ -219,11 +219,14 @@ export class SuggestionPopupController {
 
     _typeLabel(type) {
         const typeLabels = {
-            'word_frequency': 'Woordfrequentie',
+            'word_frequency': 'Weinig gebruikt woord',
             'max_sdl': 'Zinsstructuur',
             'content_words_per_clause': 'Informatiedichtheid',
             'abstract_nouns': 'Abstracte taal',
-            'spelling': 'Spelling/grammatica'
+            'spelling': 'Spelling/grammatica',
+            'passive': 'Passieve zin',
+            'subordinate_clause': 'Bijzinsstructuur',
+            'sentence_length': 'Lange zin',
         }
         return typeLabels[type] || type
     }
@@ -259,6 +262,52 @@ export class SuggestionPopupController {
         }
 
         return { statusHTML, buttonsHTML }
+    }
+
+    /**
+     * Compute a word-level diff between original and suggested text.
+     * Returns two HTML strings: origHtml with <del> on removed words,
+     * sugHtml with <ins> on added words; all other words plain.
+     */
+    _renderDiff(originalText, suggestedText) {
+        const strip = t => t.replace(/[.,;:!?()"'“”‘’]/g, '').toLowerCase()
+        const escape = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+        const origTokens = originalText.trim().split(/\s+/).filter(Boolean)
+        const sugTokens = suggestedText.trim().split(/\s+/).filter(Boolean)
+        const origBare = origTokens.map(strip)
+        const sugBare = sugTokens.map(strip)
+
+        const m = origBare.length, n = sugBare.length
+        const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0))
+        for (let i = 1; i <= m; i++)
+            for (let j = 1; j <= n; j++)
+                dp[i][j] = origBare[i - 1] === sugBare[j - 1]
+                    ? dp[i - 1][j - 1] + 1
+                    : Math.max(dp[i - 1][j], dp[i][j - 1])
+
+        const origStatus = new Array(m).fill('keep')
+        const sugStatus = new Array(n).fill('keep')
+        let i = m, j = n
+        while (i > 0 || j > 0) {
+            if (i > 0 && j > 0 && origBare[i - 1] === sugBare[j - 1]) {
+                i--; j--
+            } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+                sugStatus[j - 1] = 'insert'; j--
+            } else {
+                origStatus[i - 1] = 'delete'; i--
+            }
+        }
+
+        const origHtml = origTokens.map((t, idx) =>
+            origStatus[idx] === 'delete' ? `<del>${escape(t)}</del>` : escape(t)
+        ).join(' ')
+
+        const sugHtml = sugTokens.map((t, idx) =>
+            sugStatus[idx] === 'insert' ? `<ins>${escape(t)}</ins>` : escape(t)
+        ).join(' ')
+
+        return { origHtml, sugHtml }
     }
 
     _escapeHtml(text) {

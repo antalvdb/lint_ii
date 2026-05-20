@@ -104,6 +104,65 @@ HERSCHRIJVING: [het concretere tekstfragment]
 UITLEG: [één korte, eenvoudige zin over hoe de tekst concreter is geworden — geen vakjargon]"""
     ),
 
+    "passive": PromptTemplate(
+        system=SYSTEM_PROMPT_BASE + """
+
+Je richt je specifiek op het omzetten van passieve zinnen naar actieve zinnen.""",
+        user="""Herschrijf de volgende zin door de passieve constructie(s) om te zetten naar actieve zinnen.
+
+Zin: "{sentence}"
+
+Passieve constructie(s): {passives}
+
+Actieve zinnen zijn makkelijker te begrijpen omdat duidelijk is wie de handeling uitvoert. Probeer:
+- Te benoemen wie de handeling uitvoert
+- De actieve werkwoordsvorm te gebruiken
+- De zinsstructuur zo min mogelijk te veranderen
+
+Geef je antwoord in het volgende formaat:
+PROBLEEM: [welke passieve constructie(s) zijn aangepakt]
+HERSCHRIJVING: [de actieve versie van de zin]
+UITLEG: [één korte, eenvoudige zin over de verbetering — geen vakjargon]"""
+    ),
+
+    "subordinate_clause": PromptTemplate(
+        system=SYSTEM_PROMPT_BASE + """
+
+Je richt je specifiek op het vereenvoudigen van zinnen met veel ingebedde bijzinnen.""",
+        user="""Herschrijf de volgende zin door de bijzinnen te vereenvoudigen of op te splitsen. De zin bevat {n_subordinate_clauses} bijzin(nen), wat de zin complex maakt.
+
+Zin: "{sentence}"
+
+Veel bijzinnen maken een zin moeilijker te volgen. Probeer:
+- De bijzin(nen) om te zetten naar afzonderlijke zinnen
+- De hoofdgedachte voorop te stellen
+- Verbindingswoorden te gebruiken voor samenhang
+
+Geef je antwoord in het volgende formaat:
+PROBLEEM: [welke bijzinsstructuur de zin complex maakt]
+HERSCHRIJVING: [de vereenvoudigde zin of zinnen]
+UITLEG: [één korte, eenvoudige zin over de verbetering — geen vakjargon]"""
+    ),
+
+    "sentence_length": PromptTemplate(
+        system=SYSTEM_PROMPT_BASE + """
+
+Je richt je specifiek op het opsplitsen van lange zinnen in kortere, beter te verwerken zinnen.""",
+        user="""Herschrijf de volgende lange zin ({sent_length} woorden) door deze op te splitsen in kortere zinnen.
+
+Zin: "{sentence}"
+
+Lange zinnen zijn moeilijker te verwerken. Probeer:
+- De zin op te splitsen in twee of drie kortere zinnen
+- Elke zin één hoofdgedachte te laten bevatten
+- Verbindingswoorden te gebruiken voor samenhang
+
+Geef je antwoord in het volgende formaat:
+PROBLEEM: [wat de zin lang maakt]
+HERSCHRIJVING: [de kortere zinnen]
+UITLEG: [één korte, eenvoudige zin over de verbetering — geen vakjargon]"""
+    ),
+
     "spelling": PromptTemplate(
         system="""Je bent een expert Nederlandse taalkundige en corrector. Je taak is om spelfouten en contextuele grammaticafouten te identificeren in Nederlandse tekst.
 
@@ -111,6 +170,7 @@ Belangrijke richtlijnen:
 - Identificeer echte spelfouten (tikfouten, verkeerd gespelde woorden)
 - Identificeer contextuele grammaticafouten (bijv. "ik wordt" → "ik word", "hij loop" → "hij loopt", dt-fouten, verkeerd lidwoord de/het)
 - Negeer stilistische keuzes — richt je alleen op objectieve fouten
+- Negeer woorden die correct gespeld zijn, ook als ze technisch, formeel of ongebruikelijk zijn — meld ze niet als fout
 - Geef voor elke fout de categorie aan: "spelfout" of "grammatica"
 - Schrijf uitleg in eenvoudige, korte zinnen die voor iedereen te begrijpen zijn — vermijd vakjargon
 - Antwoord altijd in het Nederlands""",
@@ -185,6 +245,9 @@ def parse_llm_response(response: str, template_name: str) -> dict[str, str]:
         "content_words_per_clause": ["PROBLEEM", "HERSCHRIJVING", "UITLEG"],
         "abstract_nouns": ["ABSTRACTIES", "HERSCHRIJVING", "UITLEG"],
         "spelling": ["WOORD", "ZIN_NUMMER", "CORRECTIE", "CATEGORIE", "UITLEG"],
+        "passive": ["PROBLEEM", "HERSCHRIJVING", "UITLEG"],
+        "subordinate_clause": ["PROBLEEM", "HERSCHRIJVING", "UITLEG"],
+        "sentence_length": ["PROBLEEM", "HERSCHRIJVING", "UITLEG"],
     }
 
     fields = expected_fields.get(template_name, [])
