@@ -1,0 +1,295 @@
+"""
+Dutch-language prompt templates for LiNT-II suggestion generation.
+
+Each prompt template is designed to generate specific types of readability
+improvements based on the linguistic features analyzed by LiNT-II.
+"""
+
+import re
+from typing import TypedDict
+
+
+class PromptTemplate(TypedDict):
+    """Structure for a prompt template."""
+    system: str
+    user: str
+
+
+SYSTEM_PROMPT_BASE = """Je bent een expert in begrijpelijk Nederlands schrijven. Je taak is om teksten leesbaarder te maken voor een breed publiek, inclusief mensen met een lager taalniveau.
+
+Belangrijke richtlijnen:
+- Behoud de oorspronkelijke betekenis volledig
+- Gebruik gangbaar, alledaags Nederlands
+- Houd de toon en stijl dicht bij die van de originele tekst
+- Geef alleen het verbeterde tekstfragment, zonder extra uitleg
+- Schrijf uitleg in eenvoudige, korte zinnen die voor iedereen te begrijpen zijn — vermijd vakjargon en ingewikkelde formuleringen
+- Antwoord altijd in het Nederlands"""
+
+
+PROMPT_TEMPLATES: dict[str, PromptTemplate] = {
+    "word_frequency": PromptTemplate(
+        system=SYSTEM_PROMPT_BASE + """
+
+Je richt je specifiek op het vervangen van infrequente of moeilijke woorden door meer gangbare synoniemen.""",
+        user="""Herschrijf het volgende tekstfragment door het onderstreepte woord "{word}" te vervangen door een frequenter, begrijpelijker synoniem.
+
+Tekstfragment: "{context}"
+
+Het woord "{word}" heeft een lage woordfrequentie ({frequency:.2f} Zipf), wat betekent dat veel lezers dit woord mogelijk niet kennen.
+
+Belangrijk: als de vervanging gevolgen heeft voor de grammaticale context (bijv. adjectief\u00adverbuiging, lidwoord de/het, meervoud/enkelvoud, werkwoordsvervoeging), pas dan ook de omringende woorden aan zodat de zin grammaticaal correct blijft.
+
+Geef je antwoord in het volgende formaat:
+VERVANGING: [het nieuwe woord of de nieuwe woordgroep]
+UITLEG: [één korte, eenvoudige zin die uitlegt waarom het nieuwe woord makkelijker is — schrijf alsof je het aan een leek uitlegt]
+HERSCHRIJVING: [het volledige herschreven tekstfragment met alle noodzakelijke grammaticale aanpassingen]"""
+    ),
+
+    "max_sdl": PromptTemplate(
+        system=SYSTEM_PROMPT_BASE + """
+
+Je richt je specifiek op het vereenvoudigen van zinnen met complexe zinsstructuren en lange afhankelijkheden tussen woorden.""",
+        user="""Herschrijf de volgende zin om de zinsstructuur te vereenvoudigen. De zin heeft een hoge syntactische complexiteit (maximale afhankelijkheidslengte: {max_sdl}).
+
+Zin: "{sentence}"
+
+Lange afhankelijkheden tussen woorden maken het moeilijker om de zin te begrijpen. Probeer:
+- Woorden die bij elkaar horen dichter bij elkaar te plaatsen
+- De zin eventueel op te splitsen in kortere zinnen
+- Een directere woordvolgorde te gebruiken
+
+Geef je antwoord in het volgende formaat:
+PROBLEEM: [korte beschrijving van wat de zin complex maakt]
+HERSCHRIJVING: [de vereenvoudigde zin of zinnen]
+UITLEG: [één korte, eenvoudige zin over wat er veranderd is — geen vakjargon]"""
+    ),
+
+    "content_words_per_clause": PromptTemplate(
+        system=SYSTEM_PROMPT_BASE + """
+
+Je richt je specifiek op het opsplitsen van zinnen met een te hoge informatiedichtheid.""",
+        user="""Herschrijf de volgende zin door deze op te splitsen in meerdere, kortere zinnen. De zin bevat te veel inhoudswoorden per deelzin ({content_words_per_clause:.1f} woorden/deelzin).
+
+Zin: "{sentence}"
+
+Een hoge informatiedichtheid maakt tekst moeilijker te verwerken. Probeer:
+- De informatie over meerdere zinnen te verdelen
+- Elke zin één hoofdgedachte te laten bevatten
+- Verbindingswoorden te gebruiken voor samenhang
+
+Geef je antwoord in het volgende formaat:
+PROBLEEM: [welke informatie is samengeperst in deze zin]
+HERSCHRIJVING: [de opgesplitste zinnen]
+UITLEG: [één korte, eenvoudige zin over hoe de informatie is verdeeld — geen vakjargon]"""
+    ),
+
+    "abstract_nouns": PromptTemplate(
+        system=SYSTEM_PROMPT_BASE + """
+
+Je richt je specifiek op het concreter maken van abstracte taal.""",
+        user="""Herschrijf het volgende tekstfragment om het concreter en beeldender te maken. Het fragment bevat veel abstracte zelfstandige naamwoorden.
+
+Tekstfragment: "{context}"
+
+Abstracte woorden in dit fragment: {abstract_nouns}
+
+Abstracte woorden zijn moeilijker te begrijpen omdat lezers zich er geen voorstelling bij kunnen maken. Probeer:
+- Abstracte begrippen te vervangen door concrete voorbeelden
+- Beeldende taal te gebruiken
+- Te laten zien in plaats van te vertellen
+
+Geef je antwoord in het volgende formaat:
+ABSTRACTIES: [welke abstracte begrippen je hebt aangepakt]
+HERSCHRIJVING: [het concretere tekstfragment]
+UITLEG: [één korte, eenvoudige zin over hoe de tekst concreter is geworden — geen vakjargon]"""
+    ),
+
+    "spelling": PromptTemplate(
+        system="""Je bent een expert Nederlandse taalkundige en corrector. Je taak is om spelfouten en contextuele grammaticafouten te identificeren in Nederlandse tekst.
+
+Belangrijke richtlijnen:
+- Identificeer echte spelfouten (tikfouten, verkeerd gespelde woorden)
+- Identificeer contextuele grammaticafouten (bijv. "ik wordt" → "ik word", "hij loop" → "hij loopt", dt-fouten, verkeerd lidwoord de/het)
+- Negeer stilistische keuzes — richt je alleen op objectieve fouten
+- Geef voor elke fout de categorie aan: "spelfout" of "grammatica"
+- Schrijf uitleg in eenvoudige, korte zinnen die voor iedereen te begrijpen zijn — vermijd vakjargon
+- Antwoord altijd in het Nederlands""",
+        user="""Controleer de volgende tekst op spelfouten en contextuele grammaticafouten. De tekst bestaat uit genummerde zinnen.
+
+Tekst:
+{text}
+
+Geef voor elke gevonden fout het volgende gestructureerde formaat (één blok per fout):
+
+---
+WOORD: [het foutieve woord]
+ZIN_NUMMER: [het nummer van de zin waarin de fout staat]
+CORRECTIE: [het gecorrigeerde woord]
+CATEGORIE: [spelfout of grammatica]
+UITLEG: [één korte, eenvoudige zin die uitlegt wat er fout is — schrijf alsof je het aan een leek uitlegt]
+---
+
+Als er geen fouten zijn, antwoord dan met:
+GEEN_FOUTEN"""
+    ),
+}
+
+
+def format_prompt(
+    template_name: str,
+    **kwargs,
+) -> tuple[str, str]:
+    """
+    Format a prompt template with the given parameters.
+
+    Args:
+        template_name: Name of the template ('word_frequency', 'max_sdl', etc.)
+        **kwargs: Parameters to fill in the template
+
+    Returns:
+        Tuple of (system_prompt, user_prompt)
+
+    Raises:
+        KeyError: If template_name is not found
+        KeyError: If required template parameters are missing
+    """
+    if template_name not in PROMPT_TEMPLATES:
+        raise KeyError(
+            f"Unknown template: {template_name}. "
+            f"Available: {', '.join(PROMPT_TEMPLATES.keys())}"
+        )
+
+    template = PROMPT_TEMPLATES[template_name]
+    return template["system"], template["user"].format(**kwargs)
+
+
+def parse_llm_response(response: str, template_name: str) -> dict[str, str]:
+    """
+    Parse a structured LLM response into its components.
+
+    Args:
+        response: Raw response text from the LLM
+        template_name: Name of the template used (determines expected fields)
+
+    Returns:
+        Dictionary with parsed fields (e.g., 'VERVANGING', 'UITLEG', 'HERSCHRIJVING')
+    """
+    result: dict[str, str] = {}
+    current_field: str | None = None
+    current_content: list[str] = []
+
+    # Define expected fields per template
+    expected_fields = {
+        "word_frequency": ["VERVANGING", "UITLEG", "HERSCHRIJVING"],
+        "max_sdl": ["PROBLEEM", "HERSCHRIJVING", "UITLEG"],
+        "content_words_per_clause": ["PROBLEEM", "HERSCHRIJVING", "UITLEG"],
+        "abstract_nouns": ["ABSTRACTIES", "HERSCHRIJVING", "UITLEG"],
+        "spelling": ["WOORD", "ZIN_NUMMER", "CORRECTIE", "CATEGORIE", "UITLEG"],
+    }
+
+    fields = expected_fields.get(template_name, [])
+
+    for line in response.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+
+        # Strip markdown formatting: **FIELD:** → FIELD:, ## FIELD: → FIELD:
+        clean_line = re.sub(r'^[#*_\s]*', '', line)
+        clean_line = re.sub(r'\*+', '', clean_line)
+
+        # Check if this line starts a new field
+        found_field = False
+        for field in fields:
+            if clean_line.upper().startswith(field + ":"):
+                # Save previous field if exists
+                if current_field:
+                    result[current_field] = " ".join(current_content).strip()
+                # Start new field
+                current_field = field
+                content = clean_line[len(field) + 1:].strip()
+                current_content = [content] if content else []
+                found_field = True
+                break
+
+        if not found_field and current_field:
+            current_content.append(line)
+
+    # Save last field
+    if current_field:
+        result[current_field] = " ".join(current_content).strip()
+
+    return result
+
+
+def parse_spelling_response(response: str) -> list[dict[str, str]]:
+    """
+    Parse a multi-error spelling/grammar response into a list of error dicts.
+
+    Each error block is delimited by '---' lines and contains fields:
+    WOORD, ZIN_NUMMER, CORRECTIE, CATEGORIE, UITLEG.
+
+    Returns:
+        List of dicts, each with keys matching the field names.
+    """
+    # Normalize "ZIN NUMMER" (space) to "ZIN_NUMMER" (underscore) for model variations
+    response = re.sub(r'\bZIN\s+NUMMER\b', 'ZIN_NUMMER', response, flags=re.IGNORECASE)
+
+    # Only short-circuit if there are no error blocks at all
+    if "GEEN_FOUTEN" in response and "WOORD:" not in response.upper():
+        return []
+
+    fields = ["WOORD", "ZIN_NUMMER", "CORRECTIE", "CATEGORIE", "UITLEG"]
+    errors: list[dict[str, str]] = []
+
+    current: dict[str, str] = {}
+    current_field: str | None = None
+    current_content: list[str] = []
+
+    def _flush_field():
+        nonlocal current_field, current_content
+        if current_field:
+            current[current_field] = " ".join(current_content).strip()
+            current_field = None
+            current_content = []
+
+    def _flush_block():
+        nonlocal current
+        _flush_field()
+        if current and "WOORD" in current:
+            errors.append(current)
+        current = {}
+
+    for line in response.split("\n"):
+        stripped = line.strip()
+
+        # Block delimiter
+        if stripped.startswith("---"):
+            _flush_block()
+            continue
+
+        if not stripped:
+            continue
+
+        # Strip markdown formatting
+        clean = re.sub(r'^[#*_\s]*', '', stripped)
+        clean = re.sub(r'\*+', '', clean)
+
+        # Check if this line starts a new field
+        found = False
+        for f in fields:
+            if clean.upper().startswith(f + ":"):
+                _flush_field()
+                current_field = f
+                content = clean[len(f) + 1:].strip()
+                current_content = [content] if content else []
+                found = True
+                break
+
+        if not found and current_field:
+            current_content.append(stripped)
+
+    # Flush any remaining block
+    _flush_block()
+
+    return errors

@@ -644,7 +644,7 @@ class WordFeatures:
 
     def as_dict(self) -> WordFeaturesDict:
         result: WordFeaturesDict = {
-            'text': self.text,
+            'text': self.token.text,
             'tag': self.token.tag_,
             'pos': self.token.pos_,
         }
