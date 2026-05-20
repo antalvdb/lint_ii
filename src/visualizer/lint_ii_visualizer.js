@@ -251,7 +251,19 @@ export class LintIIVisualizer extends HTMLElement {
         if (copyBtn) {
             copyBtn.addEventListener('click', async () => {
                 const editedText = this._editorController.getEditedText()
-                await navigator.clipboard.writeText(editedText)
+                try {
+                    // Requires HTTPS or localhost
+                    await navigator.clipboard.writeText(editedText)
+                } catch {
+                    // Fallback for plain HTTP contexts
+                    const ta = document.createElement('textarea')
+                    ta.value = editedText
+                    ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none'
+                    document.body.appendChild(ta)
+                    ta.select()
+                    document.execCommand('copy')
+                    document.body.removeChild(ta)
+                }
                 copyBtn.classList.add('copied')
                 copyBtn.textContent = 'Gekopieerd!'
                 setTimeout(() => {
