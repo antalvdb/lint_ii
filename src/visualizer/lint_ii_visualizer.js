@@ -527,7 +527,7 @@ export class LintIIVisualizer extends HTMLElement {
             </div>
             <div class="doc-stat">
                 <dt>lint score</dt>
-                <dd class="lint-score-value">${this._data.document_lint_score.toFixed(1)}</dd>
+                <dd class="lint-score-value">${this._data.document_lint_score != null ? this._data.document_lint_score.toFixed(1) : '—'}</dd>
             </div>
             ${this.renderDocumentLevel()}
         </dl>`

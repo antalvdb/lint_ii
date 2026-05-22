@@ -117,7 +117,7 @@
 
     <div class="input-section">
         <textarea id="text-input" placeholder="Plak hier een Nederlandse tekst…" spellcheck="false"></textarea>
-        <p class="hint">Minimaal 10 tekens. De analyse duurt ongeveer 1–2 minuten.</p>
+        <p class="hint">Minimaal 10 tekens. De analyse duurt ongeveer 10–30 seconden.</p>
         <div class="controls">
             <button id="analyze-btn" class="primary">Analyseren</button>
             <span id="status" class="status info">Voer een tekst in en klik op Analyseren.</span>
@@ -151,7 +151,7 @@
             }
 
             setLoading(true)
-            setStatus('<span class="spinner"></span>Analyse bezig… (1–2 minuten)', 'busy')
+            setStatus('<span class="spinner"></span>Analyse bezig… (10–30 seconden)', 'busy')
 
             try {
                 const response = await fetch('/analyze', {
