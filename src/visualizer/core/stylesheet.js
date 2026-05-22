@@ -94,8 +94,7 @@ export const css = `
     }
 
     #content-area {
-        overflow-y: auto;
-        overscroll-behavior: contain;
+        overflow-y: visible;
         }
 
     [data-view][hidden] {
