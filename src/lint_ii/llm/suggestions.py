@@ -289,7 +289,7 @@ class SuggestionEngine:
 
         # High abstract ratio means low concrete proportion
         if proportion_concrete < (1 - threshold):
-            abstract_nouns = sent_analysis.abstract_nouns
+            abstract_nouns = [wf.text for wf in sent_analysis.abstract_nouns]
             if abstract_nouns:  # Only trigger if there are actually abstract nouns
                 return SuggestionTrigger(
                     type=SuggestionType.ABSTRACT_NOUNS,

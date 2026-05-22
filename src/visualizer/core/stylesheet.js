@@ -14,7 +14,7 @@ export const css = `
         --color-level-4: hsl(348, 100%, 70%);
 
         display: grid;
-        grid-template-rows: auto 1fr;
+        grid-template-rows: auto auto;
         border-top: 1px solid currentColor;
         border-bottom: 1px solid currentColor;
     }
@@ -28,6 +28,7 @@ export const css = `
         gap: var(--gap);
 
         h1 {
+            display: none;
             user-select: none;
             line-height: 1.5em;
             padding-left: .35em;
@@ -272,8 +273,8 @@ export const css = `
 
     /* Editor mode styles */
     :host([mode="editor"]) {
-        --color-suggestion-pending: hsla(50, 100%, 50%, 0.3);
-        --color-suggestion-accepted: hsla(120, 60%, 50%, 0.2);
+        --color-suggestion-pending: rgba(255, 176, 176, 0.75);
+        --color-suggestion-accepted: rgba(157, 239, 182, 0.75);
         --color-suggestion-ignored: hsla(0, 0%, 50%, 0.1);
     }
 
@@ -416,10 +417,13 @@ export const css = `
         position: fixed;
         max-width: 500px;
         padding: 1rem;
-        border: 1px solid currentColor;
-        border-radius: 0.5rem;
-        background: var(--vscode-notebook-editorBackground, var(--background));
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        border: 2px solid #b3b3ab;
+        border-radius: 10px;
+        background: white;
+        color: #525347;
+        font-family: Verdana, sans-serif;
+        font-size: 12px;
+        box-shadow: 5px 5px 8px rgba(0,0,0,0.2);
         z-index: 1001;
 
         &.visible {
@@ -553,11 +557,12 @@ export const css = `
         }
 
         .accept-btn {
-            background: var(--color-suggestion-accepted);
-            border-color: hsl(120, 60%, 40%);
+            background: #9defb6;
+            border-color: #5cb87a;
+            color: #2a5c38;
 
             &:hover {
-                background: hsla(120, 60%, 50%, 0.4);
+                background: #7de0a0;
             }
         }
 
