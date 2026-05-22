@@ -515,25 +515,31 @@ class SuggestionEngine:
                 "No LLM provider configured. Pass llm_config or set provider in __init__."
             )
 
+        import time
+
         # Step 1: Spelling/grammar pass (single call for entire document)
+        t0 = time.perf_counter()
         spelling_suggestions = self.generate_spelling_suggestions(analysis, provider)
+        t1 = time.perf_counter()
+        logger.info("TIMING spelling_pass=%.2fs (%d suggestions)", t1 - t0, len(spelling_suggestions))
 
         # Step 2: Find readability triggers
         triggers = self.identify_triggers(analysis)
-
-        # Prioritize: ensure variety by taking at most one of each type
-        # first, then filling remaining slots with additional triggers
         triggers_to_process = self._prioritize_triggers(triggers, max_suggestions)
+        t2 = time.perf_counter()
+        logger.info("TIMING trigger_detection=%.2fs (%d triggers → %d to process)", t2 - t1, len(triggers), len(triggers_to_process))
 
         # Step 3: Generate readability suggestions for each trigger
         suggestions: list[Suggestion] = list(spelling_suggestions)
         for trigger in triggers_to_process:
+            t_trigger = time.perf_counter()
             try:
                 suggestion = self._generate_suggestion_for_trigger(trigger, provider)
             except _AuthenticationError as e:
                 raise RuntimeError(
                     f"LLM authentication failed: {e}. Check your API key."
                 ) from e
+            logger.info("TIMING trigger_%s=%.2fs", trigger.type.value, time.perf_counter() - t_trigger)
             if suggestion:
                 suggestions.append(suggestion)
 
@@ -548,8 +554,11 @@ class SuggestionEngine:
     def _analyze_suggested_text(text: str) -> dict[str, Any] | None:
         """Analyze the suggested text to precompute sentence metrics for score recomputation."""
         try:
+            import time
             from lint_ii.core.readability_analysis import ReadabilityAnalysis
+            t0 = time.perf_counter()
             analysis = ReadabilityAnalysis.from_text(text)
+            logger.info("TIMING _analyze_suggested_text spacy=%.2fs", time.perf_counter() - t0)
 
             word_freqs = [
                 f for feat in analysis.word_features

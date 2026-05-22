@@ -255,6 +255,63 @@ class OllamaProvider(LLMProvider):
         )
 
 
+class MLXProvider(LLMProvider):
+    """Apple Silicon MLX provider — loads model directly for fast on-device inference."""
+
+    DEFAULT_MODEL = "mlx-community/Qwen2.5-14B-Instruct-4bit"
+
+    def __init__(self, model: str | None = None):
+        self._model_path = model or os.environ.get("MLX_MODEL", self.DEFAULT_MODEL)
+        self._model = None
+        self._tokenizer = None
+
+    @property
+    def model_name(self) -> str:
+        return self._model_path
+
+    def load(self) -> None:
+        """Load model into memory. Call once at startup to avoid first-request delay."""
+        if self._model is not None:
+            return
+        try:
+            from mlx_lm import load
+        except ImportError:
+            raise ImportError(
+                "mlx-lm not installed. Install with: pip install mlx-lm"
+            )
+        self._model, self._tokenizer = load(self._model_path)
+
+    def complete(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
+        """Generate completion using MLX on Apple Silicon."""
+        from mlx_lm import generate
+        self.load()
+
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        formatted = self._tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+
+        content = generate(
+            self._model,
+            self._tokenizer,
+            prompt=formatted,
+            max_tokens=1024,
+            verbose=False,
+        )
+
+        return LLMResponse(
+            content=content,
+            model=self._model_path,
+            usage=None,
+        )
+
+
 def create_provider(
     provider: str = "openai",
     api_key: str | None = None,
@@ -282,6 +339,7 @@ def create_provider(
         "openai": OpenAIProvider,
         "anthropic": AnthropicProvider,
         "ollama": OllamaProvider,
+        "mlx": MLXProvider,
     }
 
     if provider not in providers:
@@ -291,7 +349,7 @@ def create_provider(
 
     provider_class = providers[provider]
 
-    if provider == "ollama":
+    if provider in ("ollama", "mlx"):
         return provider_class(model=model, **kwargs)
     else:
         return provider_class(api_key=api_key, model=model, **kwargs)

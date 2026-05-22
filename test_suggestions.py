@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 def main():
     parser = argparse.ArgumentParser(description='Test LLM suggestion generation')
     parser.add_argument('--api-key', help='OpenAI API key (or set OPENAI_API_KEY env var)')
-    parser.add_argument('--provider', default='openai', choices=['openai', 'anthropic', 'ollama'],
+    parser.add_argument('--provider', default='openai', choices=['openai', 'anthropic', 'ollama', 'mlx'],
                         help='LLM provider to use')
     parser.add_argument('--model', help='Model to use (provider-specific default if not set)')
     parser.add_argument('--max-suggestions', type=int, default=3,
