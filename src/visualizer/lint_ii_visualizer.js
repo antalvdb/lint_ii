@@ -522,7 +522,7 @@ export class LintIIVisualizer extends HTMLElement {
 
         return `<dl class="document-scores">
             <div class="doc-stat">
-                <dt>sentences</dt>
+                <dt>zinnen</dt>
                 <dd>${this._data.sentences.length}</dd>
             </div>
             <div class="doc-stat">
