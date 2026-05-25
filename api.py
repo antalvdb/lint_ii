@@ -33,8 +33,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-_executor = ThreadPoolExecutor(max_workers=1)
-_busy = False
+_executor = ThreadPoolExecutor(max_workers=4)
 _provider = None
 
 LINT_PROVIDER = os.environ.get("LINT_PROVIDER", "mlx")
@@ -97,18 +96,11 @@ def _run_analysis(text: str, max_suggestions: int) -> dict:
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "busy": _busy, "model": _provider.model_name if _provider else None}
+    return {"status": "ok", "model": _provider.model_name if _provider else None}
 
 
 @app.post("/analyze")
 async def analyze(request: AnalyzeRequest):
-    global _busy
-    if _busy:
-        raise HTTPException(
-            status_code=503,
-            detail="Een andere analyse is bezig. Probeer het over een minuut opnieuw.",
-        )
-    _busy = True
     try:
         logger.info("Starting analysis (%d chars)", len(request.text))
         loop = asyncio.get_event_loop()
@@ -124,8 +116,6 @@ async def analyze(request: AnalyzeRequest):
     except Exception as e:
         logger.error("Analysis failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        _busy = False
 
 
 # Serve the demo frontend as static files (must be last)

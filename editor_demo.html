@@ -392,11 +392,7 @@
                     body: JSON.stringify({ text, max_suggestions: 5 }),
                 })
 
-                if (response.status === 503) {
-                    setStatus('Een andere analyse is bezig. Probeer het over een minuut opnieuw.', 'busy')
-                    return
-                }
-                if (!response.ok) {
+if (!response.ok) {
                     const err = await response.json().catch(() => ({ detail: response.statusText }))
                     throw new Error(err.detail || response.statusText)
                 }
