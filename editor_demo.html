@@ -324,7 +324,7 @@
         <div class="panel" id="input-panel">
             <label class="top" for="text-input">Voer tekst in:</label>
             <textarea id="text-input" placeholder="Plak hier een Nederlandse tekst…" spellcheck="false"></textarea>
-            <p class="hint">Minimaal 10 tekens. De analyse duurt ongeveer 10–30 seconden.</p>
+            <p class="hint">Minimaal 10 tekens. De analyse duurt ongeveer 4–10 minuten.</p>
             <div id="example-buttons">
                 <span>Voorbeeldteksten:</span>
                 <button class="button secondary" data-example="2">Niveau 2 — Wikipedia</button>
@@ -383,7 +383,7 @@
             }
 
             setLoading(true)
-            setStatus('<span class="spinner"></span>Analyse bezig… (10–30 seconden)', 'busy')
+            setStatus('<span class="spinner"></span>Analyse bezig… (4–10 minuten)', 'busy')
 
             try {
                 const response = await fetch('/analyze', {
