@@ -24,7 +24,7 @@ authors = [
 license = {text = "EUPL"}
 keywords = ["readability", "dutch", "nlp"]
 readme = "README.md"
-requires-python = ">=3.11,<3.12"
+requires-python = ">=3.11"
 dependencies = [
     "spacy>=3.7,<3.8",
     "numpy>=1.25.0,<2.0",
