@@ -2,11 +2,17 @@
 LiNT-II demo API.
 
 Accepts Dutch text, runs readability analysis + LLM suggestion generation
-using MLX on Apple Silicon (model loaded once at startup), and returns
-the full visualization payload.
+and returns the full visualization payload.
 
-Usage:
-    /Users/antalb/opt/miniconda3/envs/py311/bin/uvicorn api:app --host 0.0.0.0 --port 8080
+Provider is selected via the LINT_PROVIDER env var (default: mlx).
+  LINT_PROVIDER=mlx       Apple Silicon, model path via LINT_MODEL (default: mlx-community/Qwen2.5-14B-Instruct-4bit)
+  LINT_PROVIDER=ollama    Ollama server, model name via LINT_MODEL (default: qwen2.5:72b)
+
+Usage (Mac):
+    /Users/antalb/opt/miniconda3/envs/py311/bin/uvicorn api:app --host 0.0.0.0 --port 8443 ...
+
+Usage (Linux/Ollama):
+    LINT_PROVIDER=ollama LINT_MODEL=qwen2.5:72b uvicorn api:app --host 0.0.0.0 --port 8443 ...
 """
 
 import sys
@@ -29,16 +35,23 @@ logger = logging.getLogger(__name__)
 
 _executor = ThreadPoolExecutor(max_workers=1)
 _busy = False
-_provider = None  # MLXProvider instance, loaded at startup
+_provider = None
+
+LINT_PROVIDER = os.environ.get("LINT_PROVIDER", "mlx")
+LINT_MODEL = os.environ.get("LINT_MODEL", None)
 
 
 def _load_provider():
-    from lint_ii.llm.providers import MLXProvider
-    provider = MLXProvider()
-    logger.info("Loading MLX model %s …", provider.model_name)
-    t0 = time.perf_counter()
-    provider.load()
-    logger.info("MLX model ready in %.1fs", time.perf_counter() - t0)
+    from lint_ii.llm.providers import create_provider
+    kwargs = {"model": LINT_MODEL} if LINT_MODEL else {}
+    provider = create_provider(LINT_PROVIDER, **kwargs)
+    if hasattr(provider, "load"):
+        logger.info("Loading %s model %s …", LINT_PROVIDER, provider.model_name)
+        t0 = time.perf_counter()
+        provider.load()
+        logger.info("Model ready in %.1fs", time.perf_counter() - t0)
+    else:
+        logger.info("Using %s provider with model %s", LINT_PROVIDER, provider.model_name)
     return provider
 
 
