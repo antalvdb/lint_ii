@@ -271,7 +271,7 @@
                 <h1>LiNT-II Leesbaarheidsanalyse</h1>
                 <p>Plak een Nederlandse tekst om leesbaarheidsuggesties te ontvangen.<br>
                 LiNT-II analyseert de tekst en genereert verbeteringsvoorstellen met uitleg.<br>
-                Deze LiNT-II demo is gebaseerd op T-Scan en Qwen2.5:32B en draait op CPUs om energie te besparen.</p>
+                Deze demo is gebaseerd op <a href="https://lint.hum.uu.nl/home" target="_blank" style="color: inherit;">LiNT</a> en <a href="https://github.com/vanboefer/lint_ii" target="_blank" style="color: inherit;">lint-ii</a>, en maakt gebruik van Qwen2.5-32B-Instruct-4bit.</p>
             </div>
         </div>
 
@@ -324,7 +324,7 @@
         <div class="panel" id="input-panel">
             <label class="top" for="text-input">Voer tekst in:</label>
             <textarea id="text-input" placeholder="Plak hier een Nederlandse tekst…" spellcheck="false"></textarea>
-            <p class="hint">Minimaal 10 tekens. De analyse duurt ongeveer 4–10 minuten.</p>
+            <p class="hint">Minimaal 10 tekens. De analyse duurt ongeveer 20–60 seconden.</p>
             <div id="example-buttons">
                 <span>Voorbeeldteksten:</span>
                 <button class="button secondary" data-example="2">Niveau 2 — Wikipedia</button>
@@ -383,7 +383,7 @@
             }
 
             setLoading(true)
-            setStatus('<span class="spinner"></span>Analyse bezig… (4–10 minuten)', 'busy')
+            setStatus('<span class="spinner"></span>Analyse bezig… (20–60 seconden)', 'busy')
 
             try {
                 const response = await fetch('/analyze', {
