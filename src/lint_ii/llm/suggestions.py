@@ -466,12 +466,22 @@ class SuggestionEngine:
             # Build the corrected sentence by replacing the first occurrence
             suggested_text = sent_text.replace(word, correction, 1)
 
+            # Skip if the replacement had no effect (word not found in text)
+            if suggested_text == sent_text:
+                logger.debug("Spelling suggestion skipped: '%s' not found in sentence", word)
+                continue
+
             # Find the word index in the sentence tokens
             word_index = None
             for wi, wf in enumerate(analysis.sentence_analyses[sent_num].word_features):
                 if wf.text == word:
                     word_index = wi
                     break
+
+            # Skip if word not found in tokens (index mismatch would break highlighting)
+            if word_index is None:
+                logger.debug("Spelling suggestion skipped: '%s' not found in token list", word)
+                continue
 
             suggestions.append(Suggestion(
                 id=str(uuid.uuid4())[:8],
