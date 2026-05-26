@@ -61,7 +61,7 @@ Lange afhankelijkheden tussen woorden maken het moeilijker om de zin te begrijpe
 Geef je antwoord in het volgende formaat:
 PROBLEEM: [korte beschrijving van wat de zin complex maakt]
 HERSCHRIJVING: [de vereenvoudigde zin of zinnen]
-UITLEG: [één korte, eenvoudige zin over wat er veranderd is — geen vakjargon]"""
+UITLEG: [één korte zin die alleen beschrijft wat er structureel gedaan is, zoals herstructureren of opsplitsen — geen uitleg over het waarom, geen vakjargon]"""
     ),
 
     "content_words_per_clause": PromptTemplate(
@@ -80,7 +80,7 @@ Een hoge informatiedichtheid maakt tekst moeilijker te verwerken. Probeer:
 Geef je antwoord in het volgende formaat:
 PROBLEEM: [welke informatie is samengeperst in deze zin]
 HERSCHRIJVING: [de opgesplitste zinnen]
-UITLEG: [één korte, eenvoudige zin over hoe de informatie is verdeeld — geen vakjargon]"""
+UITLEG: [één korte zin die alleen beschrijft wat er structureel gedaan is, zoals opsplitsen of herformuleren — geen uitleg over het waarom, geen vakjargon]"""
     ),
 
     "abstract_nouns": PromptTemplate(
@@ -141,7 +141,7 @@ Veel bijzinnen maken een zin moeilijker te volgen. Probeer:
 Geef je antwoord in het volgende formaat:
 PROBLEEM: [welke bijzinsstructuur de zin complex maakt]
 HERSCHRIJVING: [de vereenvoudigde zin of zinnen]
-UITLEG: [één korte, eenvoudige zin over de verbetering — geen vakjargon]"""
+UITLEG: [één korte zin die alleen beschrijft wat er structureel gedaan is, zoals opsplitsen of herstructureren — geen uitleg over het waarom, geen vakjargon]"""
     ),
 
     "sentence_length": PromptTemplate(
@@ -160,7 +160,7 @@ Lange zinnen zijn moeilijker te verwerken. Probeer:
 Geef je antwoord in het volgende formaat:
 PROBLEEM: [wat de zin lang maakt]
 HERSCHRIJVING: [de kortere zinnen]
-UITLEG: [één korte, eenvoudige zin over de verbetering — geen vakjargon]"""
+UITLEG: [één korte zin die alleen beschrijft wat er structureel gedaan is, zoals opsplitsen — geen uitleg over het waarom, geen vakjargon]"""
     ),
 
     "spelling": PromptTemplate(
