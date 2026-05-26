@@ -417,12 +417,20 @@
             }, 400)
         }
 
+        let _currentAbortController = null
+
         analyzeBtn.addEventListener('click', async () => {
             const text = textInput.value.trim()
             if (text.length < 10) {
                 setStatus('Voer minimaal 10 tekens in.', 'error')
                 return
             }
+
+            if (_currentAbortController) {
+                _currentAbortController.abort()
+            }
+            _currentAbortController = new AbortController()
+            const signal = _currentAbortController.signal
 
             setLoading(true)
             startProgress()
@@ -436,6 +444,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ text, max_suggestions: 5 }),
+                    signal,
                 })
 
                 if (!response.ok) {
@@ -482,6 +491,7 @@
                     }
                 }
             } catch (err) {
+                if (err.name === 'AbortError') return
                 stopProgress(false)
                 viz.hidden = false
                 setStatus(`Fout: ${err.message}`, 'error')
