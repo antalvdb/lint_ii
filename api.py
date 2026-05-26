@@ -17,6 +17,7 @@ Usage (Linux/Ollama):
 
 import sys
 import os
+import json
 import asyncio
 import logging
 import time
@@ -25,6 +26,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -116,6 +118,65 @@ async def analyze(request: AnalyzeRequest):
     except Exception as e:
         logger.error("Analysis failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/analyze-stream")
+async def analyze_stream(request: AnalyzeRequest):
+    loop = asyncio.get_event_loop()
+
+    async def event_stream():
+        try:
+            from lint_ii import ReadabilityAnalysis
+            from lint_ii.llm.suggestions import SuggestionEngine
+
+            t0 = time.perf_counter()
+            analysis = await loop.run_in_executor(
+                _executor, lambda: ReadabilityAnalysis.from_text(request.text)
+            )
+            logger.info("TIMING spacy_analysis=%.2fs", time.perf_counter() - t0)
+
+            # Send initial render payload immediately (empty suggestions)
+            base = analysis.as_dict()
+            base['suggestions'] = {'suggestions': [], 'triggers_found': 0, 'triggers_processed': 0, 'model': ''}
+            yield f"data: {json.dumps({'type': 'init', 'data': base})}\n\n"
+
+            engine = SuggestionEngine(provider=_provider)
+
+            # Spelling pass
+            t1 = time.perf_counter()
+            spelling = await loop.run_in_executor(
+                _executor, lambda: engine.generate_spelling_suggestions(analysis, _provider)
+            )
+            logger.info("TIMING spelling_pass=%.2fs (%d)", time.perf_counter() - t1, len(spelling))
+            for s in spelling:
+                yield f"data: {json.dumps({'type': 'suggestion', 'data': s.as_dict()})}\n\n"
+
+            # Trigger passes
+            triggers = engine.identify_triggers(analysis)
+            triggers_to_process = engine._prioritize_triggers(triggers, request.max_suggestions)
+            document_level = getattr(analysis.lint, "level", None)
+
+            for trigger in triggers_to_process:
+                t_t = time.perf_counter()
+                suggestion = await loop.run_in_executor(
+                    _executor,
+                    lambda t=trigger: engine._generate_suggestion_for_trigger(t, _provider, document_level)
+                )
+                logger.info("TIMING trigger_%s=%.2fs", trigger.type.value, time.perf_counter() - t_t)
+                if suggestion:
+                    yield f"data: {json.dumps({'type': 'suggestion', 'data': suggestion.as_dict()})}\n\n"
+
+            yield f"data: {json.dumps({'type': 'done', 'triggers_found': len(triggers), 'triggers_processed': len(triggers_to_process), 'model': _provider.model_name})}\n\n"
+
+        except Exception as e:
+            logger.error("Stream error: %s", e, exc_info=True)
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # Serve the demo frontend as static files (must be last)

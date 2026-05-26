@@ -428,30 +428,57 @@
             startProgress()
             setStatus('<span class="spinner"></span>Analyse bezig… (20–60 seconden)', 'busy')
 
+            let suggestionCount = 0
+
             try {
-                const response = await fetch('/analyze', {
+                const response = await fetch('/analyze-stream', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ text, max_suggestions: 5 }),
                 })
 
-if (!response.ok) {
+                if (!response.ok) {
                     const err = await response.json().catch(() => ({ detail: response.statusText }))
                     throw new Error(err.detail || response.statusText)
                 }
 
-                stopProgress(true)
-                const data = await response.json()
-                const count = data.suggestions?.suggestions?.length ?? 0
+                const reader = response.body.getReader()
+                const decoder = new TextDecoder()
+                let buffer = ''
 
-                viz.setAttribute('mode', count > 0 ? 'editor' : 'analysis')
-                viz.data = data
-                setStatus(
-                    count > 0
-                        ? `✓ Analyse klaar — ${count} suggesties gevonden.`
-                        : '✓ Analyse klaar — geen suggesties gevonden.',
-                    'success'
-                )
+                while (true) {
+                    const { done, value } = await reader.read()
+                    if (done) break
+                    buffer += decoder.decode(value, { stream: true })
+
+                    const lines = buffer.split('\n')
+                    buffer = lines.pop()
+
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue
+                        const event = JSON.parse(line.slice(6))
+
+                        if (event.type === 'init') {
+                            stopProgress(true)
+                            viz.setAttribute('mode', 'analysis')
+                            viz.data = event.data
+                            setStatus('<span class="spinner"></span>Suggesties ophalen…', 'busy')
+                        } else if (event.type === 'suggestion') {
+                            suggestionCount++
+                            viz.addSuggestion(event.data)
+                            setStatus(`<span class="spinner"></span>${suggestionCount} suggestie${suggestionCount !== 1 ? 's' : ''} gevonden…`, 'busy')
+                        } else if (event.type === 'done') {
+                            setStatus(
+                                suggestionCount > 0
+                                    ? `✓ Analyse klaar — ${suggestionCount} suggesties gevonden.`
+                                    : '✓ Analyse klaar — geen suggesties gevonden.',
+                                'success'
+                            )
+                        } else if (event.type === 'error') {
+                            throw new Error(event.message)
+                        }
+                    }
+                }
             } catch (err) {
                 stopProgress(false)
                 setStatus(`Fout: ${err.message}`, 'error')

@@ -88,6 +88,46 @@ export class LintIIVisualizer extends HTMLElement {
         this.data = await response.json()
     }
 
+    /**
+     * Add one suggestion progressively without a full re-render.
+     * On the first call (switching from analysis→editor mode) a full render
+     * is needed to add the toolbar and wire event listeners; subsequent calls
+     * only re-render the affected sentence.
+     */
+    addSuggestion(suggestion) {
+        if (!this._data.suggestions) {
+            this._data.suggestions = { suggestions: [], triggers_found: 0, triggers_processed: 0, model: '' }
+        }
+        this._data.suggestions.suggestions.push(suggestion)
+
+        const wasEditorMode = this.isEditorMode
+        this._mode = 'editor'
+
+        const scrollTop = this.shadowRoot.querySelector('#content-area')?.scrollTop ?? 0
+
+        if (!wasEditorMode || !this._editorController) {
+            this._editorController = new EditorController(this._data)
+            this.render()
+        } else {
+            this._editorController.addSuggestion(suggestion)
+            this._rerenderSentence(suggestion.sentence_index)
+            this.updateEditorToolbar()
+        }
+
+        const contentArea = this.shadowRoot.querySelector('#content-area')
+        if (contentArea) contentArea.scrollTop = scrollTop
+    }
+
+    _rerenderSentence(sentenceIdx) {
+        const view = this.shadowRoot.querySelector('[data-view="sentences"]')
+        if (!view) return
+        const sentenceEls = view.querySelectorAll(':scope > .sentence')
+        if (!sentenceEls[sentenceIdx]) return
+        const tmp = document.createElement('span')
+        tmp.innerHTML = this.renderSentence(this._data.sentences[sentenceIdx], sentenceIdx)
+        view.replaceChild(tmp.firstElementChild, sentenceEls[sentenceIdx])
+    }
+
     switchView(view) {
         this._currentView = view
         this.updateViewVisibility()

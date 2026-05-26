@@ -454,6 +454,18 @@ export class EditorController {
     }
 
     /**
+     * Add a single suggestion incrementally (for progressive delivery).
+     * The suggestion must already be present in this._data.suggestions.suggestions.
+     */
+    addSuggestion(suggestion) {
+        this._suggestionStates.set(suggestion.id, 'pending')
+        this._clusters.clear()
+        this._suggestionToCluster.clear()
+        this._wordToCluster.clear()
+        this._buildClusters()
+    }
+
+    /**
      * Get suggestion by ID
      */
     getSuggestion(suggestionId) {
