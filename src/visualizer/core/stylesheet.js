@@ -403,6 +403,8 @@ export const css = `
     }
 
     .word[data-suggestion-status="ignored"] {
+        background: transparent !important;
+        outline: none !important;
         opacity: 0.5;
     }
 
