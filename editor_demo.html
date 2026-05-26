@@ -427,6 +427,7 @@
             setLoading(true)
             startProgress()
             setStatus('<span class="spinner"></span>Analyse bezig… (20–60 seconden)', 'busy')
+            viz.hidden = true
 
             let suggestionCount = 0
 
@@ -462,6 +463,7 @@
                             stopProgress(true)
                             viz.setAttribute('mode', 'editor')
                             viz.data = event.data
+                            viz.hidden = false
                             setStatus('<span class="spinner"></span>Suggesties ophalen…', 'busy')
                         } else if (event.type === 'suggestion') {
                             suggestionCount++
@@ -481,6 +483,7 @@
                 }
             } catch (err) {
                 stopProgress(false)
+                viz.hidden = false
                 setStatus(`Fout: ${err.message}`, 'error')
                 console.error(err)
             } finally {
