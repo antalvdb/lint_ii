@@ -2,7 +2,7 @@ import { css } from './core/stylesheet.js'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js'
-import { EditorController } from './core/editor.js'
+import { EditorController } from './core/editor.js?v=2'
 import { SuggestionPopupController } from './core/suggestion-popup.js'
 
 

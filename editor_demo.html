@@ -460,7 +460,7 @@
 
                         if (event.type === 'init') {
                             stopProgress(true)
-                            viz.setAttribute('mode', 'analysis')
+                            viz.setAttribute('mode', 'editor')
                             viz.data = event.data
                             setStatus('<span class="spinner"></span>Suggesties ophalen…', 'busy')
                         } else if (event.type === 'suggestion') {
