@@ -540,11 +540,12 @@ class SuggestionEngine:
         logger.info("TIMING trigger_detection=%.2fs (%d triggers → %d to process)", t2 - t1, len(triggers), len(triggers_to_process))
 
         # Step 3: Generate readability suggestions for each trigger
+        document_level = getattr(analysis.lint, "level", None)
         suggestions: list[Suggestion] = list(spelling_suggestions)
         for trigger in triggers_to_process:
             t_trigger = time.perf_counter()
             try:
-                suggestion = self._generate_suggestion_for_trigger(trigger, provider)
+                suggestion = self._generate_suggestion_for_trigger(trigger, provider, document_level)
             except _AuthenticationError as e:
                 raise RuntimeError(
                     f"LLM authentication failed: {e}. Check your API key."
@@ -597,6 +598,7 @@ class SuggestionEngine:
         self,
         trigger: SuggestionTrigger,
         provider: LLMProvider,
+        document_level: int | None = None,
     ) -> Suggestion | None:
         """Generate a suggestion for a single trigger."""
         try:
@@ -646,6 +648,15 @@ class SuggestionEngine:
                 )
             else:
                 return None
+
+            # Append level constraint so the LLM aims one level lower, not maximally simpler
+            if document_level is not None:
+                target_level = max(1, document_level - 1)
+                system_prompt += (
+                    f"\n\nDe tekst heeft LiNT-niveau {document_level} (schaal 1–4, waarbij 4 het moeilijkst is). "
+                    f"Streef naar een herschrijving die de complexiteit met één niveau verlaagt (naar niveau {target_level}). "
+                    f"Vereenvoudig niet verder dan nodig — behoud de toon, stijl en vakinhoud van de originele tekst zo veel mogelijk."
+                )
 
             # Call LLM
             response = provider.complete(user_prompt, system_prompt)
