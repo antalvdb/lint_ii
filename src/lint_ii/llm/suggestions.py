@@ -670,14 +670,14 @@ class SuggestionEngine:
             logger.debug("Parsed fields: %s", list(parsed.keys()))
 
             # Extract suggestion from parsed response
-            suggested_text = parsed.get(“HERSCHRIJVING”, “”)
-            original = trigger.sentence_text or “”
-            _quotes = '””””\'\'`'
+            suggested_text = parsed.get("HERSCHRIJVING", "")
+            original = trigger.sentence_text or ""
+            _quotes = '"""''\''
             if suggested_text and not original.startswith(tuple(_quotes)):
                 suggested_text = suggested_text.lstrip(_quotes)
             if suggested_text and not original.endswith(tuple(_quotes)):
                 suggested_text = suggested_text.rstrip(_quotes)
-            explanation = parsed.get(“UITLEG”, “”)
+            explanation = parsed.get("UITLEG", "")
             replacement_word = parsed.get("VERVANGING")
 
             if not suggested_text:
