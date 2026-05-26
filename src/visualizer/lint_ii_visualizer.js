@@ -72,8 +72,8 @@ export class LintIIVisualizer extends HTMLElement {
 
     set data(value) {
         this._data = value
+        this._editorController = null
 
-        // Initialize editor controller if we have suggestions
         if (value.suggestions?.suggestions?.length > 0) {
             this._editorController = new EditorController(value)
         }
