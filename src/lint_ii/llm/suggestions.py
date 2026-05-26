@@ -670,7 +670,7 @@ class SuggestionEngine:
             logger.debug("Parsed fields: %s", list(parsed.keys()))
 
             # Extract suggestion from parsed response
-            suggested_text = parsed.get("HERSCHRIJVING", "")
+            suggested_text = parsed.get("HERSCHRIJVING", "").strip('""“”\'')
             explanation = parsed.get("UITLEG", "")
             replacement_word = parsed.get("VERVANGING")
 
