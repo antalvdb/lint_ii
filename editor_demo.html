@@ -327,13 +327,17 @@
             <p class="hint">Minimaal 10 tekens. De analyse duurt ongeveer 20–60 seconden.</p>
             <div id="example-buttons">
                 <span>Voorbeeldteksten:</span>
-                <button class="button secondary" data-example="2">Niveau 2 — Wikipedia</button>
-                <button class="button secondary" data-example="3">Niveau 3 — Biologie</button>
+                <button class="button secondary" data-example="1">Niveau 1 — Eenvoudig</button>
+                <button class="button secondary" data-example="2">Niveau 2 — Voor een breed publiek</button>
+                <button class="button secondary" data-example="3">Niveau 3 — Wetenschappelijk</button>
                 <button class="button secondary" data-example="4">Niveau 4 — Juridisch</button>
             </div>
             <div id="controls">
                 <button id="analyze-btn" class="button">Analyseren</button>
                 <div id="status" class="info">Voer een tekst in en klik op Analyseren.</div>
+            </div>
+            <div id="progress-container" style="display:none; margin-top:0.5rem;">
+                <div id="progress-bar" style="height:4px; background:#9defb6; border-radius:2px; width:0%; transition:width 0.4s ease;"></div>
             </div>
         </div>
 
@@ -345,9 +349,11 @@
     <script type="module" src="./src/visualizer/lint_ii_visualizer.js"></script>
     <script type="module">
         const EXAMPLE_TEXTS = {
+            1: `Elke dag gaan veel mensen met de fiets naar hun werk of school. Nederland heeft veel fietspaden, zodat fietsen veilig is. De fiets is handig in de stad. Je kunt er goed mee door de drukte. Fietsen is ook goed voor je gezondheid. En het is beter voor het milieu dan rijden in een auto. Je gebruikt geen benzine en je stoot geen uitlaatgassen uit. Dat is beter voor de lucht die we inademen.`,
+
             2: `Amsterdam is de hoofdstad van Nederland en de grootste stad van het land. De stad telt ruim 900.000 inwoners en trekt jaarlijks miljoenen bezoekers. Amsterdam staat bekend om zijn grachten, musea en historische binnenstad. De grachtengordel staat op de Werelderfgoedlijst van Unesco. De stad heeft een rijke handelsgeschiedenis die teruggaat tot de Gouden Eeuw in de zeventiende eeuw. In Amsterdam wonen mensen uit meer dan honderd verschillende landen.`,
 
-            3: `Wetenschappers zijn er steeds meer van overtuigd dat de opwarming van de aarde ernstige gevolgen heeft voor de biodiversiteit. Door de stijgende temperaturen verschuiven de leefgebieden van veel dier- en plantensoorten naar hogere breedtegraden of grotere hoogten. Soorten die niet snel genoeg kunnen meebewegen, lopen het risico uit te sterven. De snelheid van de huidige klimaatverandering is zorgwekkend, omdat ecosystemen normaal gesproken duizenden jaren nodig hebben om zich aan nieuwe omstandigheden aan te passen. Onderzoekers waarschuwen dat het verlies aan biodiversiteit onomkeerbaar kan zijn als de uitstoot van broeikasgassen niet drastisch wordt teruggedrongen.`,
+            3: `Klimaatwetenschappers maken zich zorgen over de gevolgen van de stijgende temperaturen voor de natuur. Veel dieren en planten trekken naar koelere gebieden, maar niet alle soorten kunnen snel genoeg meebewegen. Daardoor neemt het risico op uitsterven toe. Ecosystemen hebben normaal gesproken duizenden jaren nodig om te veranderen. Door de snelle opwarming moeten ze dat nu in enkele tientallen jaren doen. Als de uitstoot van schadelijke gassen niet wordt teruggedrongen, kunnen de gevolgen voor de natuur blijvend zijn.`,
 
             4: `De aanbestedende dienst is gehouden de opdracht te gunnen aan de inschrijver die de economisch meest voordelige inschrijving heeft gedaan, beoordeeld op basis van de in de aanbestedingsdocumenten vermelde criteria. Ingevolge artikel 2.114 van de Aanbestedingswet 2012 dienen de gunningscriteria verband te houden met het voorwerp van de opdracht en mogen zij de aanbestedende dienst geen onbeperkte keuzevrijheid verlenen. Bij de vaststelling van de gunningscriteria dient de aanbestedende dienst ervoor zorg te dragen dat een daadwerkelijke mededinging mogelijk blijft en dat de criteria op objectieve en niet-discriminerende wijze worden toegepast.`,
         }
@@ -365,6 +371,10 @@
             })
         })
 
+        const progressContainer = document.getElementById('progress-container')
+        const progressBar = document.getElementById('progress-bar')
+        let _progressTimer = null
+
         function setStatus(html, type = 'info') {
             status.innerHTML = html
             status.className = type
@@ -375,6 +385,34 @@
             textInput.disabled = on
         }
 
+        function startProgress() {
+            progressContainer.style.display = 'block'
+            progressBar.style.transition = 'none'
+            progressBar.style.width = '0%'
+            const start = Date.now()
+            // Phase 1: 0-5s → 0-15% (spelling pass)
+            // Phase 2: 5-35s → 15-90% (up to 5 triggers × ~6s each)
+            _progressTimer = setInterval(() => {
+                const elapsed = (Date.now() - start) / 1000
+                let pct = elapsed < 5
+                    ? (elapsed / 5) * 15
+                    : 15 + ((elapsed - 5) / 30) * 75
+                progressBar.style.transition = 'width 0.4s ease'
+                progressBar.style.width = Math.min(pct, 90) + '%'
+            }, 500)
+        }
+
+        function stopProgress(success) {
+            clearInterval(_progressTimer)
+            _progressTimer = null
+            progressBar.style.transition = 'width 0.3s ease'
+            progressBar.style.width = success ? '100%' : '0%'
+            setTimeout(() => {
+                progressContainer.style.display = 'none'
+                progressBar.style.width = '0%'
+            }, 400)
+        }
+
         analyzeBtn.addEventListener('click', async () => {
             const text = textInput.value.trim()
             if (text.length < 10) {
@@ -383,6 +421,7 @@
             }
 
             setLoading(true)
+            startProgress()
             setStatus('<span class="spinner"></span>Analyse bezig… (20–60 seconden)', 'busy')
 
             try {
@@ -397,6 +436,7 @@ if (!response.ok) {
                     throw new Error(err.detail || response.statusText)
                 }
 
+                stopProgress(true)
                 const data = await response.json()
                 const count = data.suggestions?.suggestions?.length ?? 0
 
@@ -409,6 +449,7 @@ if (!response.ok) {
                     'success'
                 )
             } catch (err) {
+                stopProgress(false)
                 setStatus(`Fout: ${err.message}`, 'error')
                 console.error(err)
             } finally {
