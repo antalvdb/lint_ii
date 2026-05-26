@@ -394,11 +394,15 @@
             // Phase 2: 5-35s → 15-90% (up to 5 triggers × ~6s each)
             _progressTimer = setInterval(() => {
                 const elapsed = (Date.now() - start) / 1000
-                let pct = elapsed < 5
-                    ? (elapsed / 5) * 15
-                    : 15 + ((elapsed - 5) / 30) * 75
+                let pct
+                if (elapsed < 5) {
+                    pct = (elapsed / 5) * 15
+                } else {
+                    // Asymptotic: approaches 95% but never stops moving
+                    pct = 15 + 80 * (1 - Math.exp(-(elapsed - 5) / 30))
+                }
                 progressBar.style.transition = 'width 0.4s ease'
-                progressBar.style.width = Math.min(pct, 90) + '%'
+                progressBar.style.width = Math.min(pct, 95) + '%'
             }, 500)
         }
 
