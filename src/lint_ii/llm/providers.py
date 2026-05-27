@@ -7,7 +7,10 @@ Supports OpenAI, Anthropic, and Ollama providers with a unified interface.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -22,18 +25,23 @@ class LLMProvider(ABC):
     """Abstract base class for LLM providers."""
 
     @abstractmethod
-    def complete(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
-        """
-        Generate a completion for the given prompt.
-
-        Args:
-            prompt: The user prompt to complete
-            system_prompt: Optional system prompt for context
-
-        Returns:
-            LLMResponse with the generated content
-        """
+    def _complete(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
         pass
+
+    def complete(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
+        logger.debug(
+            "LLM PROMPT [%s]\n--- system ---\n%s\n--- user ---\n%s\n--- end ---",
+            self.model_name,
+            system_prompt or "(none)",
+            prompt,
+        )
+        response = self._complete(prompt, system_prompt)
+        logger.debug(
+            "LLM RESPONSE [%s]\n%s\n--- end ---",
+            self.model_name,
+            response.content,
+        )
+        return response
 
     @property
     @abstractmethod
@@ -87,7 +95,7 @@ class OpenAIProvider(LLMProvider):
             self._client = OpenAI(api_key=self._api_key, base_url=self._base_url)
         return self._client
 
-    def complete(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
+    def _complete(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
         """Generate completion using OpenAI API."""
         client = self._get_client()
 
@@ -159,7 +167,7 @@ class AnthropicProvider(LLMProvider):
             self._client = Anthropic(api_key=self._api_key)
         return self._client
 
-    def complete(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
+    def _complete(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
         """Generate completion using Anthropic API."""
         client = self._get_client()
 
@@ -228,7 +236,7 @@ class OllamaProvider(LLMProvider):
             self._client = httpx.Client(base_url=self._base_url, timeout=600.0)
         return self._client
 
-    def complete(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
+    def _complete(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
         """Generate completion using Ollama API."""
         client = self._get_client()
 
@@ -281,7 +289,7 @@ class MLXProvider(LLMProvider):
             )
         self._model, self._tokenizer = load(self._model_path)
 
-    def complete(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
+    def _complete(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
         """Generate completion using MLX on Apple Silicon."""
         from mlx_lm import generate
         self.load()
