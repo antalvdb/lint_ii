@@ -485,6 +485,11 @@ class SuggestionEngine:
                 logger.debug("Spelling suggestion skipped: '%s' not found in sentence", word)
                 continue
 
+            # Skip if the LLM inserted a placeholder marker instead of a real correction
+            if "niet toegepast" in suggested_text.lower():
+                logger.info("Spelling suggestion discarded: placeholder marker in suggested text for '%s'", word)
+                continue
+
             # Find the word index in the sentence tokens
             word_index = None
             for wi, wf in enumerate(analysis.sentence_analyses[sent_num].word_features):
@@ -763,6 +768,13 @@ class SuggestionEngine:
                     "No HERSCHRIJVING found in LLM response for %s trigger. "
                     "Parsed fields: %s. Raw response:\n%s",
                     trigger.type.value, parsed, response.content,
+                )
+                return None
+
+            if "niet toegepast" in suggested_text.lower():
+                logger.info(
+                    "Trigger suggestion discarded: placeholder marker in HERSCHRIJVING for %s trigger",
+                    trigger.type.value,
                 )
                 return None
 
