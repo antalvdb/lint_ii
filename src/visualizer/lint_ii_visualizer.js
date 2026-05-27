@@ -160,13 +160,7 @@ export class LintIIVisualizer extends HTMLElement {
             this.switchView(e.target.dataset.targetView)
         })
 
-        // Linguistic info popup (off by default in editor mode)
         const contentArea = this.shadowRoot.querySelector('#content-area')
-        if (!this.isEditorMode) {
-            const popupController = new PopupController(this.shadowRoot.querySelector('.popup'))
-            contentArea.addEventListener('mouseover', (e) => popupController.show(e.target))
-            contentArea.addEventListener('mouseout', (e) => popupController.hide(e.target))
-        }
     }
 
     render() {
