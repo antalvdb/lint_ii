@@ -79,6 +79,16 @@ class AnalyzeRequest(BaseModel):
     max_suggestions: int = Field(default=5, ge=1, le=10)
 
 
+def _run_lint_only(text: str) -> dict:
+    from lint_ii import ReadabilityAnalysis
+    t0 = time.perf_counter()
+    analysis = ReadabilityAnalysis.from_text(text)
+    logger.info("TIMING spacy_analysis=%.2fs", time.perf_counter() - t0)
+    result = analysis.as_dict()
+    result['suggestions'] = {'suggestions': [], 'triggers_found': 0, 'triggers_processed': 0, 'model': ''}
+    return result
+
+
 def _run_analysis(text: str, max_suggestions: int) -> dict:
     from lint_ii import ReadabilityAnalysis
     from lint_ii.llm.suggestions import SuggestionEngine
@@ -99,6 +109,17 @@ def _run_analysis(text: str, max_suggestions: int) -> dict:
 @app.get("/health")
 def health():
     return {"status": "ok", "model": _provider.model_name if _provider else None}
+
+
+@app.post("/analyze-lint")
+async def analyze_lint(request: AnalyzeRequest):
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(_executor, _run_lint_only, request.text)
+        return result
+    except Exception as e:
+        logger.error("Lint analysis failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/analyze")

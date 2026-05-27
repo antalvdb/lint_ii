@@ -443,6 +443,26 @@
             setStatus('<span class="spinner"></span>Analyse bezig… (20–60 seconden)', 'busy')
             viz.hidden = true
 
+            let fullResultsReceived = false
+
+            // Fire fast lint-only fetch in parallel — show scores as soon as they arrive
+            fetch('/analyze-lint', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text }),
+                signal,
+            }).then(async r => {
+                if (!r.ok || fullResultsReceived) return
+                const data = await r.json()
+                if (fullResultsReceived) return
+                viz.setAttribute('mode', 'analysis')
+                viz.data = data
+                viz.hidden = false
+                setStatus('<span class="spinner"></span>Scores berekend — suggesties worden gegenereerd…', 'busy')
+            }).catch(err => {
+                if (err.name !== 'AbortError') console.warn('Lint fetch failed:', err)
+            })
+
             try {
                 const response = await fetch('/analyze', {
                     method: 'POST',
@@ -458,6 +478,7 @@
 
                 stopProgress(true)
                 const data = await response.json()
+                fullResultsReceived = true
                 const count = data.suggestions?.suggestions?.length ?? 0
 
                 viz.setAttribute('mode', count > 0 ? 'editor' : 'analysis')
