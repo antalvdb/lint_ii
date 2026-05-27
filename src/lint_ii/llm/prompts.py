@@ -89,21 +89,18 @@ UITLEG: [één korte zin die alleen beschrijft wat er structureel gedaan is, zoa
         system=SYSTEM_PROMPT_BASE + """
 
 Je richt je specifiek op het concreter maken van abstracte taal.""",
-        user="""Herschrijf het volgende tekstfragment om het concreter en beeldender te maken. Het fragment bevat veel abstracte zelfstandige naamwoorden.
+        user="""Herschrijf het volgende tekstfragment om het begrijpelijker te maken. Het fragment bevat abstracte zelfstandige naamwoorden.
 
 Tekstfragment: "{context}"
 
 Abstracte woorden in dit fragment: {abstract_nouns}
 
-Abstracte woorden zijn moeilijker te begrijpen omdat lezers zich er geen voorstelling bij kunnen maken. Probeer:
-- Abstracte begrippen te vervangen door concrete voorbeelden
-- Beeldende taal te gebruiken
-- Te laten zien in plaats van te vertellen
+Abstracte woorden zijn moeilijker te begrijpen. Probeer ze te omschrijven of te vervangen door concretere alternatieven — maar uitsluitend op basis van wat er al in de tekst staat. Voeg geen nieuwe informatie, voorbeelden of inhoud toe die niet in het origineel staan.
 
 Geef je antwoord in het volgende formaat:
 ABSTRACTIES: [welke abstracte begrippen je hebt aangepakt]
-HERSCHRIJVING: [het concretere tekstfragment]
-UITLEG: [één korte, eenvoudige zin over hoe de tekst concreter is geworden — geen vakjargon]"""
+HERSCHRIJVING: [het herschreven tekstfragment]
+UITLEG: [één korte, eenvoudige zin over hoe de tekst begrijpelijker is geworden — geen vakjargon]"""
     ),
 
     "passive": PromptTemplate(
