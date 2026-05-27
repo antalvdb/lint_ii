@@ -458,7 +458,7 @@
                 viz.setAttribute('mode', 'analysis')
                 viz.data = data
                 viz.hidden = false
-                setStatus('<span class="spinner"></span>Scores berekend — suggesties worden gegenereerd…', 'busy')
+                setStatus('<span class="spinner"></span>Leesbaarheidsscores berekend — suggesties worden gegenereerd…', 'busy')
             }).catch(err => {
                 if (err.name !== 'AbortError') console.warn('Lint fetch failed:', err)
             })
