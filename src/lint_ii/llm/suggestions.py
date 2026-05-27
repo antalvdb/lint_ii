@@ -543,11 +543,23 @@ class SuggestionEngine:
 
         import time
 
-        # Step 1: Spelling/grammar pass (single call for entire document)
+        # Step 1a: LLM spelling/grammar pass (single call for entire document)
         t0 = time.perf_counter()
         spelling_suggestions = self.generate_spelling_suggestions(analysis, provider)
         t1 = time.perf_counter()
-        logger.info("TIMING spelling_pass=%.2fs (%d suggestions)", t1 - t0, len(spelling_suggestions))
+        logger.info("TIMING spelling_llm=%.2fs (%d suggestions)", t1 - t0, len(spelling_suggestions))
+
+        # Step 1b: Hunspell spelling pass — high-precision rule-based check,
+        # skips words already flagged by the LLM to avoid duplicates
+        from lint_ii.llm.hunspell_spelling import generate_hunspell_suggestions
+        llm_covered = {
+            (s.sentence_index, s.word_index)
+            for s in spelling_suggestions
+            if s.word_index is not None
+        }
+        hunspell_suggestions = generate_hunspell_suggestions(analysis, llm_covered)
+        spelling_suggestions = spelling_suggestions + hunspell_suggestions
+        logger.info("TIMING spelling_hunspell=%.2fs (%d suggestions)", time.perf_counter() - t1, len(hunspell_suggestions))
 
         # Step 2: Find readability triggers
         triggers = self.identify_triggers(analysis)
