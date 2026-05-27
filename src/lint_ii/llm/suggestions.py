@@ -17,6 +17,20 @@ from lint_ii.llm.prompts import format_prompt, parse_llm_response, parse_spellin
 logger = logging.getLogger(__name__)
 
 
+def _levenshtein(a: str, b: str) -> int:
+    if a == b:
+        return 0
+    if len(a) < len(b):
+        a, b = b, a
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a):
+        curr = [i + 1]
+        for j, cb in enumerate(b):
+            curr.append(min(prev[j + 1] + 1, curr[j] + 1, prev[j] + (ca != cb)))
+        prev = curr
+    return prev[-1]
+
+
 class _AuthenticationError(Exception):
     """Raised when LLM authentication fails, to abort early."""
 
@@ -482,6 +496,25 @@ class SuggestionEngine:
             if word_index is None:
                 logger.debug("Spelling suggestion skipped: '%s' not found in token list", word)
                 continue
+
+            # Discard suggestions where both the original and the correction are valid
+            # Dutch words (per Hunspell) and they differ by more than 2 characters.
+            # This catches false positives like "over" → "voor" where the LLM
+            # substitutes one valid word for another rather than fixing a real error.
+            # Edit-distance ≤ 2 is kept to preserve form changes like word/wordt.
+            try:
+                from lint_ii.llm.hunspell_spelling import _get_dictionary as _get_hunspell
+                _hd = _get_hunspell()
+                if _hd.lookup(word) and _hd.lookup(correction):
+                    _dist = _levenshtein(word.lower(), correction.lower())
+                    if _dist > 2:
+                        logger.info(
+                            "Spelling suggestion discarded: both '%s' and '%s' are valid "
+                            "Dutch words (edit distance %d)", word, correction, _dist,
+                        )
+                        continue
+            except Exception:
+                pass
 
             # For spelling (not grammar) suggestions, skip if the correction is not
             # more frequent than the original — this filters LLM hallucinations where
