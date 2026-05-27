@@ -187,7 +187,7 @@ Geef voor elke gevonden fout het volgende gestructureerde formaat (één blok pe
 WOORD: [het foutieve woord]
 ZIN_NUMMER: [het nummer van de zin waarin de fout staat]
 CORRECTIE: [het gecorrigeerde woord]
-CATEGORIE: [spelfout of grammatica]
+CATEGORIE: [spelfout, grammatica of zinsbouw]
 UITLEG: [één korte, eenvoudige zin die uitlegt wat er fout is — schrijf alsof je het aan een leek uitlegt]
 ---
 
