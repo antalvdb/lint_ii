@@ -608,6 +608,10 @@ export class LintIIVisualizer extends HTMLElement {
         const trailing = wf.punctuation?.trailing || ''
         const displayText = leading + wf.text + trailing
 
+        if (!this.isEditorMode) {
+            return `<span class="word">${displayText}</span>`
+        }
+
         const attrs = [
             `data-pos="${wf.pos}"`,
             `data-tag="${wf.tag}"`,
@@ -616,8 +620,7 @@ export class LintIIVisualizer extends HTMLElement {
             wf.dep_length > 0 && `data-dep-length="${wf.dep_length}"`
         ].filter(Boolean)
 
-        // Add cluster-based suggestion attributes in editor mode
-        if (this.isEditorMode && this._editorController && sentenceIdx !== null) {
+        if (this._editorController && sentenceIdx !== null) {
             const cluster = this._editorController.getClusterForWord(sentenceIdx, wordIdx)
             if (cluster) {
                 const clusterState = this._editorController.getClusterState(cluster.id)
