@@ -166,7 +166,7 @@ UITLEG: [één korte zin die alleen beschrijft wat er structureel gedaan is, zoa
     ),
 
     "spelling": PromptTemplate(
-        system="""Je bent een expert Nederlandse taalkundige en corrector. Je taak is om spelfouten en contextuele grammaticafouten te identificeren in Nederlandse tekst.
+        system="""Je bent een expert Nederlandse taalkundige en corrector. Je taak is om suggesties te geven om Nederlandse tekst leesbaarder te maken, door spelfouten en contextuele zinsbouw- en grammaticafouten te identificeren.
 
 Belangrijke richtlijnen:
 - Identificeer echte spelfouten (tikfouten, verkeerd gespelde woorden)
