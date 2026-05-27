@@ -680,6 +680,23 @@ class SuggestionEngine:
             explanation = parsed.get("UITLEG", "")
             replacement_word = parsed.get("VERVANGING")
 
+            # For word_frequency suggestions, verify the replacement is actually
+            # more frequent than the original. If not, the LLM picked an equally
+            # rare word (e.g. "beslistermijnen" → "beslissingstermijnen") and the
+            # suggestion is worthless.
+            if trigger.type == SuggestionType.WORD_FREQUENCY and replacement_word:
+                from lint_ii.linguistic_data.wordlists import FREQ_DATA
+                zero_count_freq = 1.359228547196266
+                replacement_freq = FREQ_DATA.get(replacement_word.lower(), zero_count_freq)
+                original_freq = trigger.feature_value
+                if replacement_freq <= original_freq:
+                    logger.info(
+                        "Dropping word_frequency suggestion: replacement '%s' (%.2f) "
+                        "is not more frequent than original '%s' (%.2f)",
+                        replacement_word, replacement_freq, trigger.word, original_freq,
+                    )
+                    return None
+
             if not suggested_text:
                 logger.warning(
                     "No HERSCHRIJVING found in LLM response for %s trigger. "
