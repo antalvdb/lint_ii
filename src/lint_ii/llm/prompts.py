@@ -170,7 +170,7 @@ UITLEG: [één korte zin die alleen beschrijft wat er structureel gedaan is, zoa
 
 Belangrijke richtlijnen:
 - Identificeer echte spelfouten (tikfouten, verkeerd gespelde woorden)
-- Identificeer contextuele grammaticafouten (bijv. "ik wordt" → "ik word", "hij loop" → "hij loopt", dt-fouten, verkeerd lidwoord de/het)
+- Identificeer contextuele grammatica- en zinsbouwfouten (bijv. "ik wordt" → "ik word", "hij loop" → "hij loopt", dt-fouten, verkeerd lidwoord de/het, onduidelijke of foutieve zinsconstructies)
 - Negeer stilistische keuzes — richt je alleen op objectieve fouten
 - Negeer woorden die correct gespeld zijn, ook als ze technisch, formeel of ongebruikelijk zijn — meld ze niet als fout
 - Geef voor elke fout de categorie aan: "spelfout" of "grammatica"
