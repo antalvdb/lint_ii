@@ -483,6 +483,22 @@ class SuggestionEngine:
                 logger.debug("Spelling suggestion skipped: '%s' not found in token list", word)
                 continue
 
+            # For spelling (not grammar) suggestions, skip if the correction is not
+            # more frequent than the original — this filters LLM hallucinations where
+            # a correctly-spelled but rare word is "corrected" to an equally rare one.
+            if error_category == "spelling":
+                from lint_ii.linguistic_data.wordlists import FREQ_DATA
+                zero_count_freq = 1.359228547196266
+                original_freq = FREQ_DATA.get(word.lower(), zero_count_freq)
+                correction_freq = FREQ_DATA.get(correction.lower(), zero_count_freq)
+                if correction_freq <= original_freq:
+                    logger.info(
+                        "Spelling suggestion skipped: correction '%s' (%.2f) not more "
+                        "frequent than original '%s' (%.2f)",
+                        correction, correction_freq, word, original_freq,
+                    )
+                    continue
+
             suggestions.append(Suggestion(
                 id=str(uuid.uuid4())[:8],
                 type=SuggestionType.SPELLING,
