@@ -409,11 +409,30 @@ export class EditorController {
     }
 
     /**
-     * Accept a suggestion.
+     * Accept a suggestion. If the accepted suggestion is sentence-level
+     * (no specific word — passive, split, restructure), auto-ignore other
+     * pending suggestions for the same sentence, since the rewrite invalidates
+     * their word-position references. Word-level suggestions (spelling, word
+     * frequency, abstract nouns) are left independent.
      */
     accept(suggestionId) {
         if (!this._suggestionStates.has(suggestionId)) return
+
+        const suggestion = this._data.suggestions.suggestions.find(s => s.id === suggestionId)
         this._suggestionStates.set(suggestionId, 'accepted')
+
+        if (suggestion?.word == null) {
+            // Sentence-level rewrite: auto-ignore other pending suggestions for same sentence
+            const sentenceIdx = suggestion.sentence_index
+            for (const s of this._data.suggestions.suggestions) {
+                if (s.id !== suggestionId && s.sentence_index === sentenceIdx) {
+                    if (this._suggestionStates.get(s.id) === 'pending') {
+                        this._suggestionStates.set(s.id, 'ignored')
+                    }
+                }
+            }
+        }
+
         this._dispatchChange(suggestionId, 'accepted')
     }
 
