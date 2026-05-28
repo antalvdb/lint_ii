@@ -80,25 +80,43 @@ class AnalyzeRequest(BaseModel):
 
 
 def _make_analysis(text: str):
-    """Split text by blank lines, analyse each paragraph separately, return combined analysis and per-sentence paragraph indices."""
+    """Process full text normally, then map each sentence to a paragraph index using character offsets."""
     import re
     from lint_ii import ReadabilityAnalysis
-    from lint_ii.core.readability_analysis import ReadabilityAnalysis as RA
+    from lint_ii.core.preprocessor import preprocess_text
 
     raw_paragraphs = [p.strip() for p in re.split(r'\n\n+', text.strip()) if p.strip()]
 
+    analysis = ReadabilityAnalysis.from_text(text)
+
     if len(raw_paragraphs) <= 1:
-        analysis = ReadabilityAnalysis.from_text(text)
         return analysis, [0] * len(analysis.sentences)
 
-    all_sentences = []
-    para_indices = []
-    for para_idx, para_text in enumerate(raw_paragraphs):
-        para_analysis = ReadabilityAnalysis.from_text(para_text)
-        all_sentences.extend(para_analysis.sentences)
-        para_indices.extend([para_idx] * len(para_analysis.sentences))
+    # Find where each paragraph lands in the full clean text via character offsets
+    full_clean = preprocess_text(text)
+    clean_paras = [preprocess_text(p) for p in raw_paragraphs]
 
-    return RA(all_sentences), para_indices
+    para_end_chars = []
+    offset = 0
+    for cp in clean_paras:
+        if cp:
+            pos = full_clean.find(cp, offset)
+            if pos != -1:
+                offset = pos + len(cp)
+        para_end_chars.append(offset)
+
+    # Each sentence's start_char is its offset within the full clean text
+    para_indices = []
+    for sent in analysis.sentences:
+        char = sent.doc.start_char
+        idx = len(para_end_chars) - 1
+        for i, end in enumerate(para_end_chars):
+            if char < end:
+                idx = i
+                break
+        para_indices.append(idx)
+
+    return analysis, para_indices
 
 
 def _add_paragraph_indices(result: dict, para_indices: list[int]) -> dict:
