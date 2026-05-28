@@ -129,6 +129,16 @@ export const css = `
     header .level-badge {
         font-size: 2em;
     }
+    [data-level="null"], [data-level=""] {
+        .level-badge {
+            background-color: hsl(0, 0%, 65%);
+        }
+        .sent-idx,
+        .sent-start::before,
+        .sent-end::after {
+            color: hsl(0, 0%, 65%);
+        }
+    }
     [data-level="1"] {
         .level-badge {
             background-color: var(--color-level-1);

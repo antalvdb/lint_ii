@@ -1,4 +1,4 @@
-import { css } from './core/stylesheet.js?v=2'
+import { css } from './core/stylesheet.js?v=3'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
@@ -591,7 +591,7 @@ export class LintIIVisualizer extends HTMLElement {
                     data-max-sdl="${sentence.max_sdl}"
                     data-mean-freq="${sentence.mean_log_word_frequency}"
                     data-concrete-prop="${sentence.proportion_of_concrete_nouns}">
-                    ${sentence.difficulty_level}
+                    ${sentence.difficulty_level ?? '?'}
                 </span>
             </span>
         </span>`
