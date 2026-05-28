@@ -409,27 +409,11 @@ export class EditorController {
     }
 
     /**
-     * Accept a suggestion. Auto-ignores other pending suggestions for the
-     * same sentence, since they are based on the original text which no
-     * longer applies once a rewrite is accepted.
+     * Accept a suggestion.
      */
     accept(suggestionId) {
         if (!this._suggestionStates.has(suggestionId)) return
-
-        const accepted = this._data.suggestions.suggestions.find(s => s.id === suggestionId)
-        const sentenceIdx = accepted?.sentence_index ?? -1
-
         this._suggestionStates.set(suggestionId, 'accepted')
-
-        // Auto-ignore other pending suggestions for the same sentence
-        for (const s of this._data.suggestions.suggestions) {
-            if (s.id !== suggestionId && s.sentence_index === sentenceIdx) {
-                if (this._suggestionStates.get(s.id) === 'pending') {
-                    this._suggestionStates.set(s.id, 'ignored')
-                }
-            }
-        }
-
         this._dispatchChange(suggestionId, 'accepted')
     }
 
