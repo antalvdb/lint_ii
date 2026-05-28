@@ -2,7 +2,7 @@ import { css } from './core/stylesheet.js?v=3'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
-import { EditorController } from './core/editor.js?v=5'
+import { EditorController } from './core/editor.js?v=6'
 import { SuggestionPopupController } from './core/suggestion-popup.js?v=1'
 
 
@@ -265,6 +265,16 @@ export class LintIIVisualizer extends HTMLElement {
         if (levelContainer && level != null) levelContainer.dataset.level = level
     }
 
+    updateSentenceScore(sentenceIndex) {
+        if (!this._editorController) return
+        const { level } = this._editorController.getEffectiveSentenceLevel(sentenceIndex)
+        const sentenceEl = this.shadowRoot.querySelectorAll('.sentence')[sentenceIndex]
+        if (!sentenceEl) return
+        sentenceEl.dataset.level = level ?? ''
+        const badge = sentenceEl.querySelector('.level-badge')
+        if (badge && level != null) badge.textContent = level
+    }
+
     setupEditorEventListeners() {
         // Semantic type toggle
         const semToggle = this.shadowRoot.querySelector('.sem-type-toggle')
@@ -313,6 +323,8 @@ export class LintIIVisualizer extends HTMLElement {
             this.updateSuggestionStatus(suggestionId, status)
             this.updateEditorToolbar()
             this.updateDocumentScore()
+            const suggestion = this._editorController.getSuggestion(suggestionId)
+            if (suggestion) this.updateSentenceScore(suggestion.sentence_index)
         })
 
         // Suggestion hover handling (cluster-aware)

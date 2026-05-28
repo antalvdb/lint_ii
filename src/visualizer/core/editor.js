@@ -346,6 +346,37 @@ export class EditorController {
     }
 
     /**
+     * Compute the LiNT score and difficulty level for a single sentence using
+     * its effective metrics (accepted suggestion metrics when available).
+     */
+    getEffectiveSentenceLevel(sentenceIndex) {
+        const metrics = this._getEffectiveMetrics(sentenceIndex)
+        const meanFreq = metrics.word_freq_count > 0
+            ? metrics.word_freq_sum / metrics.word_freq_count : null
+        const meanSdl = metrics.sdl_values.length > 0
+            ? metrics.sdl_values.reduce((a, b) => a + b, 0) / metrics.sdl_values.length : null
+        const meanCwpc = metrics.cwpc_values.length > 0
+            ? metrics.cwpc_values.reduce((a, b) => a + b, 0) / metrics.cwpc_values.length : null
+        const totalNouns = metrics.n_concrete + metrics.n_abstract + metrics.n_undefined
+        const propConcrete = totalNouns > 0 ? metrics.n_concrete / totalNouns : null
+
+        if (meanFreq == null || meanSdl == null || meanCwpc == null || propConcrete == null) {
+            const sentence = this._data.sentences[sentenceIndex]
+            return { score: sentence?.lint_score ?? null, level: sentence?.difficulty_level ?? null }
+        }
+
+        const C = EditorController.COEFFICIENTS
+        const raw = C.constant
+            + C.freq_log * meanFreq
+            + C.max_sdl * meanSdl
+            + C.content_words_per_clause * meanCwpc
+            + C.proportion_concrete * propConcrete
+        const score = Math.min(100, Math.max(0, 100 - raw))
+        const level = score < 34 ? 1 : score < 46 ? 2 : score < 58 ? 3 : 4
+        return { score, level }
+    }
+
+    /**
      * Get effective metrics for a sentence, using accepted suggestion metrics
      * when available, otherwise original.
      */
