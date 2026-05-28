@@ -141,6 +141,9 @@ export class SuggestionPopupController {
         const typeLabel = this._typeLabel(suggestion.type)
         const categoryLabel = suggestion.error_category ? this._errorCategoryLabel(suggestion.error_category) : null
         const { statusHTML, buttonsHTML } = this._statusAndButtons(suggestion.id, status)
+        const currentOriginal = this._editor.getCurrentOriginalForSuggestion(suggestion.id)
+        const origLabel = currentOriginal !== suggestion.original_text ? 'Huidig:' : 'Origineel:'
+        const { origHtml, sugHtml } = this._renderDiff(currentOriginal, suggestion.suggested_text)
 
         return `
             <div class="suggestion-popup-content">
@@ -152,12 +155,12 @@ export class SuggestionPopupController {
 
                 <div class="suggestion-comparison">
                     <div class="original">
-                        <span class="label">Origineel:</span>
-                        <span class="text">${this._renderDiff(suggestion.original_text, suggestion.suggested_text).origHtml}</span>
+                        <span class="label">${origLabel}</span>
+                        <span class="text">${origHtml}</span>
                     </div>
                     <div class="suggested">
                         <span class="label">Suggestie:</span>
-                        <span class="text">${this._renderDiff(suggestion.original_text, suggestion.suggested_text).sugHtml}</span>
+                        <span class="text">${sugHtml}</span>
                     </div>
                 </div>
 
@@ -183,6 +186,9 @@ export class SuggestionPopupController {
         const typeLabel = this._typeLabel(suggestion.type)
         const categoryLabel = suggestion.error_category ? this._errorCategoryLabel(suggestion.error_category) : null
         const { statusHTML, buttonsHTML } = this._statusAndButtons(suggestion.id, status)
+        const currentOriginal = this._editor.getCurrentOriginalForSuggestion(suggestion.id)
+        const origLabel = currentOriginal !== suggestion.original_text ? 'Huidig:' : 'Origineel:'
+        const { origHtml, sugHtml } = this._renderDiff(currentOriginal, suggestion.suggested_text)
 
         return `
             <div class="suggestion-section">
@@ -194,12 +200,12 @@ export class SuggestionPopupController {
 
                 <div class="suggestion-comparison">
                     <div class="original">
-                        <span class="label">Origineel:</span>
-                        <span class="text">${this._renderDiff(suggestion.original_text, suggestion.suggested_text).origHtml}</span>
+                        <span class="label">${origLabel}</span>
+                        <span class="text">${origHtml}</span>
                     </div>
                     <div class="suggested">
                         <span class="label">Suggestie:</span>
-                        <span class="text">${this._renderDiff(suggestion.original_text, suggestion.suggested_text).sugHtml}</span>
+                        <span class="text">${sugHtml}</span>
                     </div>
                 </div>
 

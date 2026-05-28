@@ -409,30 +409,11 @@ export class EditorController {
     }
 
     /**
-     * Accept a suggestion. If the accepted suggestion is sentence-level
-     * (no specific word — passive, split, restructure), auto-ignore other
-     * pending suggestions for the same sentence, since the rewrite invalidates
-     * their word-position references. Word-level suggestions (spelling, word
-     * frequency, abstract nouns) are left independent.
+     * Accept a suggestion.
      */
     accept(suggestionId) {
         if (!this._suggestionStates.has(suggestionId)) return
-
-        const suggestion = this._data.suggestions.suggestions.find(s => s.id === suggestionId)
         this._suggestionStates.set(suggestionId, 'accepted')
-
-        if (suggestion?.word == null) {
-            // Sentence-level rewrite: auto-ignore other pending suggestions for same sentence
-            const sentenceIdx = suggestion.sentence_index
-            for (const s of this._data.suggestions.suggestions) {
-                if (s.id !== suggestionId && s.sentence_index === sentenceIdx) {
-                    if (this._suggestionStates.get(s.id) === 'pending') {
-                        this._suggestionStates.set(s.id, 'ignored')
-                    }
-                }
-            }
-        }
-
         this._dispatchChange(suggestionId, 'accepted')
     }
 
@@ -480,6 +461,158 @@ export class EditorController {
      */
     getSuggestionsForSentence(sentenceIndex) {
         return this.suggestions.filter(s => s.sentence_index === sentenceIndex)
+    }
+
+    /**
+     * Return the current text of a sentence after applying all accepted
+     * suggestion diffs. Used by the popup to show an up-to-date "Origineel".
+     */
+    getCurrentSentenceText(sentenceIndex) {
+        const sentence = this._data.sentences[sentenceIndex]
+        if (!sentence) return ''
+
+        const accepted = this.getSuggestionsForSentence(sentenceIndex)
+            .filter(s => this._suggestionStates.get(s.id) === 'accepted')
+
+        const filtered = sentence.word_features.filter(
+            t => t.pos !== 'PUNCT' || 'punctuation' in t
+        )
+        const words = filtered.map(
+            t => (t.punctuation?.leading || '') + t.text + (t.punctuation?.trailing || '')
+        )
+
+        if (accepted.length === 0) return words.join(' ')
+
+        const strip = t => t.replace(/[.,;:!?()"'“”]/g, '').toLowerCase()
+        const origBare = filtered.map(t => strip(t.text))
+
+        const allRegions = []
+        for (const s of accepted) {
+            const sugText = s.suggested_text.replace(/^[""“]+|[""”]+$/g, '').trim()
+            const sugTokens = sugText.split(/\s+/).filter(Boolean)
+            const sugBare = sugTokens.map(strip)
+            for (const region of this._computeWordDiff(origBare, sugBare, sugTokens)) {
+                allRegions.push(region)
+            }
+        }
+        allRegions.sort((a, b) => b.insertBeforeIdx - a.insertBeforeIdx)
+
+        for (const region of allRegions) {
+            if (region.origIndices.length > 0) {
+                words.splice(region.origIndices[0], region.origIndices.length, ...region.newTexts)
+            } else {
+                words.splice(region.insertBeforeIdx, 0, ...region.newTexts)
+            }
+        }
+
+        return words.join(' ')
+    }
+
+    /**
+     * Compute the current text of just the span a suggestion covers, after all
+     * OTHER accepted suggestions for the same sentence are applied. Returns
+     * suggestion.original_text unchanged when no other suggestion affects that span.
+     */
+    getCurrentOriginalForSuggestion(suggestionId) {
+        const suggestion = this.getSuggestion(suggestionId)
+        if (!suggestion) return ''
+
+        const sentence = this._data.sentences[suggestion.sentence_index]
+        if (!sentence) return suggestion.original_text
+
+        const otherAccepted = this.getSuggestionsForSentence(suggestion.sentence_index)
+            .filter(s => s.id !== suggestionId && this._suggestionStates.get(s.id) === 'accepted')
+
+        if (otherAccepted.length === 0) return suggestion.original_text
+
+        const strip = t => t.replace(/[.,;:!?()"'“”]/g, '').toLowerCase()
+        const filtered = sentence.word_features.filter(
+            t => t.pos !== 'PUNCT' || 'punctuation' in t
+        )
+        const origBare = filtered.map(t => strip(t.text))
+
+        // Locate suggestion.original_text tokens in the original filtered list via LCS
+        const thisTokens = suggestion.original_text.trim().split(/\s+/).filter(Boolean)
+        const thisBare = thisTokens.map(strip)
+        const m = thisTokens.length, n = origBare.length
+        const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0))
+        for (let i = 1; i <= m; i++)
+            for (let j = 1; j <= n; j++)
+                dp[i][j] = thisBare[i - 1] === origBare[j - 1]
+                    ? dp[i - 1][j - 1] + 1
+                    : Math.max(dp[i - 1][j], dp[i][j - 1])
+
+        const matchedOrig = []
+        {
+            let i = m, j = n
+            while (i > 0 || j > 0) {
+                if (i > 0 && j > 0 && thisBare[i - 1] === origBare[j - 1]) {
+                    matchedOrig.push(j - 1); i--; j--
+                } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+                    j--
+                } else {
+                    i--
+                }
+            }
+            matchedOrig.reverse()
+        }
+
+        if (matchedOrig.length === 0) return suggestion.original_text
+        const origStart = matchedOrig[0]
+        const origEnd = matchedOrig[matchedOrig.length - 1]
+
+        // Build trackedWords carrying original filtered indices so we can map
+        // the span through splices made by other accepted suggestions.
+        const trackedWords = filtered.map((t, idx) => ({
+            text: (t.punctuation?.leading || '') + t.text + (t.punctuation?.trailing || ''),
+            origIdx: idx
+        }))
+
+        const allRegions = []
+        for (const s of otherAccepted) {
+            const sugText = s.suggested_text.replace(/^["""]+|["""]+$/g, '').trim()
+            const sugTokens = sugText.split(/\s+/).filter(Boolean)
+            const sugBare = sugTokens.map(strip)
+            for (const region of this._computeWordDiff(origBare, sugBare, sugTokens)) {
+                allRegions.push(region)
+            }
+        }
+        allRegions.sort((a, b) => b.insertBeforeIdx - a.insertBeforeIdx)
+
+        for (const region of allRegions) {
+            const insertPos = region.origIndices.length > 0
+                ? region.origIndices[0]
+                : region.insertBeforeIdx
+            trackedWords.splice(insertPos, region.origIndices.length,
+                ...region.newTexts.map(text => ({ text, origIdx: -1 })))
+        }
+
+        // Find the current range [currentStart..currentEnd] in trackedWords.
+        // Range starts just after the last element with origIdx < origStart,
+        // and ends just before the first element with origIdx > origEnd.
+        let lastBefore = -1
+        for (let k = trackedWords.length - 1; k >= 0; k--) {
+            if (trackedWords[k].origIdx !== -1 && trackedWords[k].origIdx < origStart) {
+                lastBefore = k; break
+            }
+        }
+        const currentStart = lastBefore + 1
+
+        const boundaryAfterIdx = trackedWords.findIndex(
+            w => w.origIdx !== -1 && w.origIdx > origEnd
+        )
+        const currentEnd = boundaryAfterIdx === -1 ? trackedWords.length - 1 : boundaryAfterIdx - 1
+
+        if (currentStart > currentEnd) return suggestion.original_text
+
+        // Compare with the baseline (unmodified) span to detect actual changes
+        const baselineSpan = filtered
+            .slice(origStart, origEnd + 1)
+            .map(t => (t.punctuation?.leading || '') + t.text + (t.punctuation?.trailing || ''))
+            .join(' ')
+        const currentSpan = trackedWords.slice(currentStart, currentEnd + 1).map(w => w.text).join(' ')
+
+        return baselineSpan === currentSpan ? suggestion.original_text : currentSpan
     }
 
     /**
