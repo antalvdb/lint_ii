@@ -79,22 +79,48 @@ class AnalyzeRequest(BaseModel):
     max_suggestions: int = Field(default=5, ge=1, le=10)
 
 
-def _run_lint_only(text: str) -> dict:
+def _make_analysis(text: str):
+    """Split text by blank lines, analyse each paragraph separately, return combined analysis and per-sentence paragraph indices."""
+    import re
     from lint_ii import ReadabilityAnalysis
-    t0 = time.perf_counter()
-    analysis = ReadabilityAnalysis.from_text(text)
-    logger.info("TIMING spacy_analysis=%.2fs", time.perf_counter() - t0)
-    result = analysis.as_dict()
-    result['suggestions'] = {'suggestions': [], 'triggers_found': 0, 'triggers_processed': 0, 'model': ''}
+    from lint_ii.core.readability_analysis import ReadabilityAnalysis as RA
+
+    raw_paragraphs = [p.strip() for p in re.split(r'\n\n+', text.strip()) if p.strip()]
+
+    if len(raw_paragraphs) <= 1:
+        analysis = ReadabilityAnalysis.from_text(text)
+        return analysis, [0] * len(analysis.sentences)
+
+    all_sentences = []
+    para_indices = []
+    for para_idx, para_text in enumerate(raw_paragraphs):
+        para_analysis = ReadabilityAnalysis.from_text(para_text)
+        all_sentences.extend(para_analysis.sentences)
+        para_indices.extend([para_idx] * len(para_analysis.sentences))
+
+    return RA(all_sentences), para_indices
+
+
+def _add_paragraph_indices(result: dict, para_indices: list[int]) -> dict:
+    for i, sent in enumerate(result['sentences']):
+        sent['paragraph_index'] = para_indices[i]
     return result
 
 
+def _run_lint_only(text: str) -> dict:
+    t0 = time.perf_counter()
+    analysis, para_indices = _make_analysis(text)
+    logger.info("TIMING spacy_analysis=%.2fs", time.perf_counter() - t0)
+    result = analysis.as_dict()
+    result['suggestions'] = {'suggestions': [], 'triggers_found': 0, 'triggers_processed': 0, 'model': ''}
+    return _add_paragraph_indices(result, para_indices)
+
+
 def _run_analysis(text: str, max_suggestions: int) -> dict:
-    from lint_ii import ReadabilityAnalysis
     from lint_ii.llm.suggestions import SuggestionEngine
 
     t0 = time.perf_counter()
-    analysis = ReadabilityAnalysis.from_text(text)
+    analysis, para_indices = _make_analysis(text)
     t1 = time.perf_counter()
     logger.info("TIMING spacy_analysis=%.2fs", t1 - t0)
 
@@ -103,7 +129,7 @@ def _run_analysis(text: str, max_suggestions: int) -> dict:
     t2 = time.perf_counter()
     logger.info("TIMING llm_suggestions=%.2fs total=%.2fs", t2 - t1, t2 - t0)
 
-    return analysis.with_suggestions(suggestions).as_dict()
+    return _add_paragraph_indices(analysis.with_suggestions(suggestions).as_dict(), para_indices)
 
 
 @app.get("/health")
