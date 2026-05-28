@@ -14,8 +14,7 @@ export const css = `
         --color-level-4: hsl(348, 100%, 70%);
 
         display: grid;
-        grid-template-rows: auto 1fr;
-        max-height: 500px;
+        grid-template-rows: auto auto;
         border-top: 1px solid currentColor;
         border-bottom: 1px solid currentColor;
     }
@@ -29,6 +28,7 @@ export const css = `
         gap: var(--gap);
 
         h1 {
+            display: none;
             user-select: none;
             line-height: 1.5em;
             padding-left: .35em;
@@ -87,7 +87,7 @@ export const css = `
         border-bottom-left-radius: .25em;
         cursor: pointer;
         transition: filter 0.2s ease;
-        z-index: 9999;
+        z-index: 100;
 
         &:hover {
             background-color: color-mix(in oklch, currentColor 10%, transparent);
@@ -95,8 +95,7 @@ export const css = `
     }
 
     #content-area {
-        overflow-y: auto;
-        overscroll-behavior: contain;
+        overflow-y: visible;
         }
 
     [data-view][hidden] {
@@ -129,6 +128,16 @@ export const css = `
     }
     header .level-badge {
         font-size: 2em;
+    }
+    [data-level="null"], [data-level=""] {
+        .level-badge {
+            background-color: hsl(0, 0%, 65%);
+        }
+        .sent-idx,
+        .sent-start::before,
+        .sent-end::after {
+            color: hsl(0, 0%, 65%);
+        }
     }
     [data-level="1"] {
         .level-badge {
@@ -246,9 +255,6 @@ export const css = `
             background-color: var(--color-unknown);
         }
 
-        &[data-freq-tier="uncommon"] {
-            font-style: italic;
-        }
     }
     .popup {
         display: none;
@@ -273,5 +279,329 @@ export const css = `
             grid-template-columns: auto 1fr;
             align-items: center;
         }
+    }
+
+    /* Editor mode styles */
+    :host([mode="editor"]) {
+        --color-suggestion-pending: rgba(255, 176, 176, 0.75);
+        --color-suggestion-accepted: rgba(157, 239, 182, 0.75);
+        --color-suggestion-ignored: hsla(0, 0%, 50%, 0.1);
+    }
+
+    /* Hide semantic type colors in editor mode by default */
+    :host([mode="editor"]) .word[data-sem-type] {
+        background-color: transparent;
+        color: inherit;
+    }
+
+    /* Show them when toggled on */
+    :host([mode="editor"][data-show-sem-types]) .word[data-sem-type="concrete"] {
+        background-color: var(--color-concrete);
+        color: black;
+    }
+    :host([mode="editor"][data-show-sem-types]) .word[data-sem-type="abstract"] {
+        background-color: var(--color-abstract);
+        color: black;
+    }
+    :host([mode="editor"][data-show-sem-types]) .word[data-sem-type="undefined"] {
+        background-color: var(--color-undefined);
+        color: black;
+    }
+    :host([mode="editor"][data-show-sem-types]) .word[data-sem-type="unknown"] {
+        background-color: var(--color-unknown);
+        color: black;
+    }
+
+    .editor-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.5rem 1rem;
+        border-bottom: 1px solid currentColor;
+        background: color-mix(in oklch, currentColor 5%, transparent);
+
+        .suggestion-counts {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.875em;
+
+            .count-item {
+                display: flex;
+                align-items: center;
+                gap: 0.25rem;
+
+                &.pending .count-badge { background: var(--color-suggestion-pending); }
+                &.accepted .count-badge { background: var(--color-suggestion-accepted); }
+                &.ignored .count-badge { opacity: 0.5; }
+            }
+
+            .count-badge {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 1.5em;
+                height: 1.5em;
+                padding: 0 0.25em;
+                border-radius: 0.75em;
+                font-family: monospace;
+                font-size: 0.875em;
+            }
+        }
+
+        .sem-type-toggle {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.875em;
+            color: currentColor;
+            background: transparent;
+            border: 1px solid currentColor;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            opacity: 0.5;
+            transition: all 0.2s;
+
+            &:hover {
+                opacity: 0.8;
+            }
+
+            &.active {
+                opacity: 1;
+                background: color-mix(in oklch, currentColor 10%, transparent);
+            }
+        }
+
+        .copy-result-btn {
+            margin-left: auto;
+            padding: 0.375rem 0.75rem;
+            font-size: 0.875em;
+            color: currentColor;
+            background: transparent;
+            border: 1px solid currentColor;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+
+            &:hover {
+                background: color-mix(in oklch, currentColor 10%, transparent);
+            }
+
+            &.copied {
+                background: var(--color-suggestion-accepted);
+            }
+        }
+    }
+
+    /* Suggestion highlights */
+    .word[data-suggestion-id] {
+        position: relative;
+        cursor: pointer;
+    }
+
+    .word[data-suggestion-status="pending"] {
+        background: var(--color-suggestion-pending) !important;
+        outline: 2px solid hsla(50, 100%, 50%, 0.5);
+        outline-offset: 1px;
+    }
+
+    .word[data-suggestion-status="accepted"] {
+        background: var(--color-suggestion-accepted) !important;
+    }
+
+    .word.suggestion-changed {
+        background: var(--color-suggestion-accepted) !important;
+        border-bottom: 2px solid hsl(120, 60%, 40%);
+        color: inherit;
+    }
+
+    .word[data-suggestion-status="ignored"] {
+        background: transparent !important;
+        outline: none !important;
+        opacity: 0.5;
+    }
+
+    /* Sentence-level suggestion highlights are applied per-word
+       via data-suggestion-id on each .word element, using the
+       same .word[data-suggestion-status] rules above. */
+
+    /* Suggestion popup */
+    .suggestion-popup {
+        display: none;
+        pointer-events: auto;
+        position: fixed;
+        max-width: 500px;
+        padding: 1rem;
+        border: 2px solid #b3b3ab;
+        border-radius: 10px;
+        background: white;
+        color: #525347;
+        font-family: Verdana, sans-serif;
+        font-size: 12px;
+        box-shadow: 5px 5px 8px rgba(0,0,0,0.2);
+        z-index: 1001;
+
+        &.visible {
+            display: block;
+        }
+    }
+
+    .suggestion-popup-content {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .suggestion-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+
+        .suggestion-type {
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        .suggestion-category {
+            font-size: 0.75em;
+            padding: 0.125rem 0.5rem;
+            border-radius: 1rem;
+            background: color-mix(in oklch, currentColor 10%, transparent);
+            opacity: 0.8;
+        }
+    }
+
+    .status-badge {
+        display: inline-block;
+        padding: 0.125rem 0.5rem;
+        border-radius: 1rem;
+        font-size: 0.75em;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+
+        &.pending {
+            background: var(--color-suggestion-pending);
+        }
+        &.accepted {
+            background: var(--color-suggestion-accepted);
+        }
+        &.ignored {
+            background: var(--color-suggestion-ignored);
+        }
+    }
+
+    .suggestion-comparison {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 0.75rem;
+        background: color-mix(in oklch, currentColor 5%, transparent);
+        border-radius: 0.25rem;
+
+        .original, .suggested {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .label {
+            font-size: 0.75em;
+            opacity: 0.7;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .text {
+            line-height: 1.5;
+
+            del {
+                text-decoration: line-through;
+                opacity: 0.6;
+                text-decoration-color: currentColor;
+            }
+
+            ins {
+                text-decoration: none;
+                font-style: normal;
+                background: color-mix(in oklch, oklch(0.7 0.18 145) 30%, transparent);
+                border-radius: 0.2em;
+                padding: 0.05em 0.15em;
+            }
+        }
+    }
+
+    .suggestion-explanation {
+        font-size: 0.9em;
+        line-height: 1.5;
+        padding: 0.5rem;
+        background: color-mix(in oklch, currentColor 3%, transparent);
+        border-radius: 0.25rem;
+        border-left: 3px solid currentColor;
+
+        .label {
+            font-size: 0.75em;
+            opacity: 0.7;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+    }
+
+    .suggestion-actions {
+        display: flex;
+        gap: 0.5rem;
+        padding-top: 0.5rem;
+        border-top: 1px solid color-mix(in oklch, currentColor 20%, transparent);
+
+        button {
+            flex: 1;
+            padding: 0.5rem 1rem;
+            font-size: 0.875em;
+            color: currentColor;
+            background: transparent;
+            border: 1px solid currentColor;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            transition: all 0.2s;
+
+            &:hover {
+                background: color-mix(in oklch, currentColor 10%, transparent);
+            }
+        }
+
+        .accept-btn {
+            background: #9defb6;
+            border-color: #5cb87a;
+            color: #2a5c38;
+
+            &:hover {
+                background: #7de0a0;
+            }
+        }
+
+        .ignore-btn {
+            opacity: 0.7;
+
+            &:hover {
+                opacity: 1;
+            }
+        }
+
+        .reset-btn {
+            font-size: 0.8em;
+        }
+    }
+
+    .suggestion-section {
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid color-mix(in oklch, currentColor 15%, transparent);
+
+        &:last-child {
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+    }
+
+    .suggestion-section + .suggestion-section {
+        padding-top: 0.75rem;
     }
 `

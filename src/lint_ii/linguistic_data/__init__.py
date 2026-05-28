@@ -1,7 +1,7 @@
-from enum import StrEnum
+from enum import Enum
 
 
-class SuperSemTypes(StrEnum):
+class SuperSemTypes(str, Enum):
     CONCRETE = 'concrete'
     ABSTRACT = 'abstract'
     UNDEFINED = 'undefined'

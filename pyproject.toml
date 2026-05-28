@@ -24,7 +24,7 @@ authors = [
 license = {text = "EUPL"}
 keywords = ["readability", "dutch", "nlp"]
 readme = "README.md"
-requires-python = ">=3.11,<3.12"
+requires-python = ">=3.11"
 dependencies = [
     "spacy>=3.7,<3.8",
     "numpy>=1.25.0,<2.0",
@@ -34,6 +34,7 @@ dependencies = [
 
 [project.optional-dependencies]
 notebook = ["ipykernel", "jupyter"]
+llm = ["openai>=1.0", "anthropic>=0.18", "httpx>=0.24", "spylls>=0.1"]
 
 [project.urls]
 homepage = "https://vanboefer.github.io/lint_ii/"

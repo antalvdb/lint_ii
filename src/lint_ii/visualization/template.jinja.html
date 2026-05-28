@@ -15,6 +15,7 @@ if (!window.LintIIVisualizer) {
 
 // Create this specific viewer instance
 const visualizer = new window.LintIIVisualizer()
+visualizer.setAttribute('mode', '{{ mode }}')
 visualizer.data = {{ data | safe }}
 document.getElementById("{{ visualizer_id }}").replaceWith(visualizer)
 </script>

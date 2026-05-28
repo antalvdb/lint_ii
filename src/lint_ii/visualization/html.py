@@ -8,6 +8,11 @@ class LintIIVisualizer:
     template_dir = Path(__file__).parent
     env = Environment(loader=FileSystemLoader(template_dir))
 
+    @property
+    def mode(self) -> str:
+        """Return the visualizer mode ('analysis' or 'editor')."""
+        return "analysis"
+
     def _repr_html_(self) -> str:
         """Render as HTML for Jupyter display"""
         try:
@@ -17,6 +22,7 @@ class LintIIVisualizer:
             return template.render(
                 visualizer_id=visualizer_id,
                 data=json.dumps(self.as_dict()),
+                mode=self.mode,
             )
         except Exception as e:
             return f"<div style='color: red;'>Error rendering LiNT-II visualizer: {e}</div>"

@@ -43,14 +43,14 @@ export class StatsData {
 export class StatsSpecs {
     static createScoreBoxPlot(sentScores) {
         return {
-            title: "Sentence Score",
+            title: "Zinsscore",
             data: { values: sentScores.map(value => ({ value })) },
             mark: { type: "boxplot", extent: "min-max" },
             encoding: {
                 y: {
                     field: "value",
                     type: "quantitative",
-                    title: "Readability Score",
+                    title: "Leesbaarheid",
                     scale: { domain: [0, 100] }
                 }
             },
@@ -60,14 +60,14 @@ export class StatsSpecs {
 
     static createFrequencyBoxPlot(wordFreqs) {
         return {
-            title: "Word Frequency",
+            title: "Woordfrequentie",
             data: { values: wordFreqs.map(value => ({ value })) },
             mark: { type: "boxplot", extent: "min-max" },
             encoding: {
                 y: {
                     field: "value",
                     type: "quantitative",
-                    title: "Zipf Frequency",
+                    title: "Zipf-frequentie",
                     scale: { zero: false }
                 }
             },
@@ -77,14 +77,14 @@ export class StatsSpecs {
 
     static createContentWordsPerClauseBoxPlot(values) {
         return {
-            title: "Content Words per Clause",
+            title: "Inhoudswoorden per deelzin",
             data: { values: values.map(value => ({ value })) },
             mark: { type: "boxplot", extent: "min-max" },
             encoding: {
                 y: {
                     field: "value",
                     type: "quantitative",
-                    title: "Words/Clause",
+                    title: "Woorden/deelzin",
                     scale: { zero: false }
                 }
             },
@@ -93,26 +93,29 @@ export class StatsSpecs {
     }
 
     static createNounTypesBarChart(nounCounts, colors) {
+        const labelMap = { concrete: 'concreet', abstract: 'abstract', undefined: 'onbepaald', unknown: 'onbekend' }
         const data = Object.entries(nounCounts).map(([type, count]) => ({
             type,
+            label: labelMap[type] || type,
             count
         }))
 
         return {
-            title: "Noun Types",
+            title: "Typen zelfstandige naamwoorden",
             data: { values: data },
             mark: "bar",
             encoding: {
                 x: {
-                    field: "type",
+                    field: "label",
                     type: "nominal",
                     title: null,
-                    axis: { labelAngle: 0 }
+                    axis: { labelAngle: 0 },
+                    sort: ["concreet", "abstract", "onbepaald", "onbekend"]
                 },
                 y: {
                     field: "count",
                     type: "quantitative",
-                    title: "Count"
+                    title: "Aantal"
                 },
                 color: {
                     field: "type",
@@ -129,8 +132,8 @@ export class StatsSpecs {
                     legend: null
                 },
                 tooltip: [
-                    { field: "type", type: "nominal", title: "Type" },
-                    { field: "count", type: "quantitative", title: "Count" }
+                    { field: "label", type: "nominal", title: "Type" },
+                    { field: "count", type: "quantitative", title: "Aantal" }
                 ]
             },
             width: 250
@@ -138,7 +141,6 @@ export class StatsSpecs {
     }
 
     static createDependencyLengthHistogram(depLengths) {
-        // Count frequency of each dependency length
         const counts = depLengths.reduce((acc, dl) => {
             acc[dl] = (acc[dl] || 0) + 1
             return acc
@@ -150,7 +152,7 @@ export class StatsSpecs {
         }))
 
         return {
-            title: "Dependency Length",
+            title: "Afhankelijkheidslengte",
             data: { values: data },
             mark: "bar",
             encoding: {
@@ -162,10 +164,10 @@ export class StatsSpecs {
                 y: {
                     field: "count",
                     type: "quantitative",
-                    title: "Count"
+                    title: "Aantal"
                 },
                 tooltip: [
-                    { field: "count", type: "quantitative", title: "Count" }
+                    { field: "count", type: "quantitative", title: "Aantal" }
                 ]
             },
             width: 200
@@ -175,12 +177,20 @@ export class StatsSpecs {
     static createStatsVisualization({wordFreqs, sentScores, nounCounts, depLengths, contentWordsPerClause}, colors) {
         return {
             $schema: "https://vega.github.io/schema/vega-lite/v5.json",
-            hconcat: [
-                this.createScoreBoxPlot(sentScores),
-                this.createFrequencyBoxPlot(wordFreqs),
-                this.createContentWordsPerClauseBoxPlot(contentWordsPerClause),
-                this.createNounTypesBarChart(nounCounts, colors),
-                this.createDependencyLengthHistogram(depLengths)
+            vconcat: [
+                {
+                    hconcat: [
+                        this.createScoreBoxPlot(sentScores),
+                        this.createFrequencyBoxPlot(wordFreqs),
+                        this.createContentWordsPerClauseBoxPlot(contentWordsPerClause),
+                    ]
+                },
+                {
+                    hconcat: [
+                        this.createNounTypesBarChart(nounCounts, colors),
+                        this.createDependencyLengthHistogram(depLengths)
+                    ]
+                }
             ],
             config: {
                 view: { stroke: null },

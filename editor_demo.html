@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LiNT-II | Leesbaarheidsanalyse</title>
+    <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: #cecfb1;
+            font-family: Verdana, sans-serif;
+            font-size: 13px;
+            color: #525347;
+            padding: 2rem;
+        }
+
+        #stage {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        #header {
+            display: flex;
+            align-items: flex-end;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+#header-text h1 {
+            font-size: 18px;
+            font-weight: bold;
+            color: #525347;
+            margin-bottom: 0.25rem;
+        }
+
+        #header-text p {
+            font-size: 11px;
+            color: #676758;
+            line-height: 1.5;
+        }
+
+        #ruler {
+            height: 2px;
+            background: #b3b3ab;
+            margin-bottom: 1.5rem;
+        }
+
+        .panel {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        label.top {
+            display: block;
+            font-weight: bold;
+            color: #525347;
+            margin-bottom: 0.75rem;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 160px;
+            padding: 1rem;
+            font-family: Verdana, sans-serif;
+            font-size: 13px;
+            line-height: 1.6;
+            border: none;
+            border-radius: 10px;
+            background: #f7f7f2;
+            color: #525347;
+            resize: vertical;
+            outline: none;
+        }
+
+        textarea:focus {
+            background: white;
+            box-shadow: 0 0 0 2px #b3b3ab;
+        }
+
+        .hint {
+            font-size: 11px;
+            color: #888;
+            margin-top: 0.5rem;
+        }
+
+        #controls {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+
+        button.button {
+            background: #676758;
+            border-radius: 10px;
+            color: white;
+            font-family: Verdana, sans-serif;
+            font-size: 12px;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            padding: 6px 18px;
+            transition: background 0.1s;
+        }
+
+        button.button:hover:not(:disabled) {
+            background: black;
+        }
+
+        button.button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button.button.secondary {
+            background: #b3b3ab;
+            font-weight: normal;
+        }
+
+        button.button.secondary:hover:not(:disabled) {
+            background: #8a8a83;
+        }
+
+        #status {
+            flex: 1;
+            padding: 5px 12px;
+            border-radius: 10px;
+            font-size: 11px;
+            min-height: 28px;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        #status.info    { background: #f0f0e8; color: #525347; }
+        #status.success { background: #DCFFE7; color: #2a5c38; }
+        #status.error   { background: #ffdfdf; color: #f74d4d; font-weight: bold; }
+        #status.busy    { background: #f0f0e8; color: #525347; }
+
+        .spinner {
+            display: inline-block;
+            width: 1em;
+            height: 1em;
+            border: 2px solid #676758;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            flex-shrink: 0;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Instructions panel */
+        #instructions-panel summary {
+            font-weight: bold;
+            cursor: pointer;
+            user-select: none;
+            color: #525347;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        #instructions-panel summary::before {
+            content: '▶';
+            font-size: 0.7em;
+            transition: transform 0.2s;
+            display: inline-block;
+        }
+
+        #instructions-panel[open] summary::before {
+            transform: rotate(90deg);
+        }
+
+        #instructions-panel summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .instructions-body {
+            margin-top: 1rem;
+            line-height: 1.7;
+            font-size: 12px;
+            color: #525347;
+        }
+
+        .instructions-body h3 {
+            font-size: 12px;
+            font-weight: bold;
+            margin-top: 1rem;
+            margin-bottom: 0.4rem;
+            color: #525347;
+        }
+
+        .instructions-body h3:first-child {
+            margin-top: 0;
+        }
+
+        .instructions-body p {
+            margin-bottom: 0.5rem;
+        }
+
+        .instructions-body ul {
+            padding-left: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .instructions-body li {
+            margin-bottom: 0.25rem;
+        }
+
+        .level-badge-inline {
+            display: inline-block;
+            width: 1.4em;
+            height: 1.4em;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 1.4em;
+            font-size: 0.85em;
+            font-family: monospace;
+            font-weight: bold;
+            color: white;
+            vertical-align: middle;
+            margin-right: 0.2em;
+        }
+
+        .lvl1 { background: hsl(153, 53%, 53%); }
+        .lvl2 { background: hsl(198, 100%, 70%); }
+        .lvl3 { background: hsl(42, 100%, 53%); }
+        .lvl4 { background: hsl(348, 100%, 70%); }
+
+        .color-swatch {
+            display: inline-block;
+            width: 1em;
+            height: 1em;
+            border-radius: 3px;
+            vertical-align: middle;
+            margin-right: 0.2em;
+        }
+
+        /* Example texts */
+        #example-buttons {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-top: 0.75rem;
+        }
+
+        #example-buttons span {
+            font-size: 11px;
+            color: #888;
+            display: flex;
+            align-items: center;
+        }
+
+        lint-ii-visualizer {
+            display: block;
+        }
+
+        lint-ii-visualizer[hidden] {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="stage">
+        <div id="header">
+<div id="header-text">
+                <h1>LiNT-II Leesbaarheidsanalyse</h1>
+                <p>Voer een Nederlandse tekst in om suggesties te krijgen om de tekst leesbaarder te maken.<br>
+                LiNT-II analyseert de tekst en genereert verbeteringsvoorstellen met uitleg.<br>
+                Deze demo is gebaseerd op <a href="https://lint.hum.uu.nl/home" target="_blank" style="color: inherit;">LiNT</a> en <a href="https://github.com/vanboefer/lint_ii" target="_blank" style="color: inherit;">lint-ii</a>, en maakt gebruik van Qwen2.5-32B-Instruct-4bit.</p>
+            </div>
+        </div>
+
+        <div id="ruler"></div>
+
+        <!-- Instructions panel -->
+        <div class="panel">
+            <details id="instructions-panel">
+                <summary>Uitleg — hoe werkt LiNT-II?</summary>
+                <div class="instructions-body">
+                    <p>LiNT-II geeft een inschatting van hoe gemakkelijk Nederlandse teksten te lezen zijn, en legt uit welke veranderingen mogelijk zijn om de leesbaarheid te verbeteren. Het is gebaseerd op onderzoek en software-ontwikkeling aan de Universiteit Utrecht en de Hogeschool Utrecht.</p>
+                    <p>In het onderzoeksproject LIN (Leesbaarheidsindex voor het Nederlands), geleid door Henk Pander Maat met onder meer promotieonderzoek van Suzanne Kleijn, werd ruim tien jaar geleden een grootschalig lezersonderzoek gehouden. De uitkomsten vormden de basis voor LiNT, een automatische tool die een leesbaarheidsscore berekent. Een groep software-ontwikkelaars van de universiteiten van Tilburg, Nijmegen en Utrecht maakten van LiNT een gebruikersvriendelijke softwaretool. Recent ontwikkelde Jenia Kim van de Hogeschool Utrecht LiNT-II, een snelle herimplementatie met nieuwere componenten.</p>
+                    <p>De UU en de HU werken nu samen aan een uitbreiding van LiNT-II met generatieve AI. Elke suggestie in deze demo is een combinatie van een taalkundig onderbouwde signalering van een leesbaarheidsknelpunt (door LiNT) en een voorstel voor verbetering (door een LLM). <strong>Deze demo kan offline zijn en kan incorrecte uitvoer genereren.</strong> Vragen over deze demo kunnen gesteld worden aan Antal van den Bosch, <a href="mailto:a.p.j.vandenbosch@uu.nl" style="color: inherit;">a.p.j.vandenbosch@uu.nl</a>.</p>
+
+                    <h3>Wat meet LiNT-II?</h3>
+                    <p>LiNT-II schat de leesbaarheid van Nederlandse teksten in op basis van vier kernmaten:</p>
+                    <ul>
+                        <li><strong>Woordfrequentie</strong> — hoe bekend zijn de gebruikte woorden? Zeldzame woorden maken een tekst moeilijker.</li>
+                        <li><strong>Grammaticale afstand</strong> — hoe ver staan woorden die bij elkaar horen, van elkaar?</li>
+                        <li><strong>Inhoudswoorden per deelzin</strong> — hoeveel betekenisvolle woorden staan er per hoofd- of bijzin?</li>
+                        <li><strong>Abstracte zelfstandige naamwoorden</strong> — abstracte begrippen zijn moeilijker te verwerken dan concrete.</li>
+                    </ul>
+                    <p>LiNT-II let ook op lange zinnen, passieve zinnen en het gebruik van veel bijzinnen. LiNT-II detecteert ook grammaticale fouten en spelfouten.</p>
+
+                    <h3>Moeilijkheidsniveaus</h3>
+                    <p>De analyse kent <a href="https://lint.hum.uu.nl/uitleg/moeilijkheidsniveaus" target="_blank" style="color: inherit;">vier niveaus</a>, van makkelijk naar moeilijk:</p>
+                    <ul>
+                        <li><span class="level-badge-inline lvl1">1</span> Makkelijk - kinderboeken, eenvoudig te begrijpen teksten. 14,9% van alle volwassenen kan dit niveau niet goed aan.</li>
+                        <li><span class="level-badge-inline lvl2">2</span> Gemiddeld - toegankelijke teksten voor een breed publiek. 30,7% van alle volwassenen kan dit niveau niet goed aan.</li>
+                        <li><span class="level-badge-inline lvl3">3</span> Moeilijk - teksten voor een meer gespecialiseerd publiek. 55,0% van alle volwassenen kan dit niveau niet goed aan.</li>
+                        <li><span class="level-badge-inline lvl4">4</span> Zeer moeilijk - wetenschappelijke, formele teksten. 82,1% van alle volwassenen kan dit niveau niet goed aan.</li>
+                    </ul>
+
+                    <h3>Markeringen in de tekst</h3>
+                    <p>Na de analyse worden suggesties getoond als gekleurde markeringen:</p>
+                    <ul>
+                        <li><span class="color-swatch" style="background: rgba(255,176,176,0.75); border: 1px solid #ccc;"></span> <strong>Rood</strong> — openstaande suggestie (klik voor details)</li>
+                        <li><span class="color-swatch" style="background: rgba(157,239,182,0.75); border: 1px solid #ccc;"></span> <strong>Groen</strong> — geaccepteerde suggestie</li>
+                        <li><span class="color-swatch" style="background: hsla(0,0%,50%,0.2); border: 1px solid #ccc;"></span> <strong>Grijs</strong> — genegeerde suggestie</li>
+                    </ul>
+                    <p>Klik op een gemarkeerd woord of zin om het suggestievenster te openen. Daar staat uitgelegd waarom de suggestie is gedaan, wat het origineel is, en welke verbetering wordt voorgesteld. U kunt de suggestie <em>accepteren</em> of <em>negeren</em>. Met de knop "Kopieer resultaat" exporteert u de bijgewerkte tekst.</p>
+
+                    <h3>Tips</h3>
+                    <ul>
+                        <li>De analyse werkt het beste op alinea's van minimaal drie zinnen.</li>
+                        <li>LiNT-II is geoptimaliseerd voor informatieve Nederlandse proza; poëzie en dialoog kunnen afwijkende resultaten geven.</li>
+                        <li>De analyse duurt 20–60 seconden door de taalmodelverwerking.</li>
+                    </ul>
+                </div>
+            </details>
+        </div>
+
+        <!-- Input panel -->
+        <div class="panel" id="input-panel">
+            <label class="top" for="text-input">Voer tekst in:</label>
+            <textarea id="text-input" placeholder="Plak hier een Nederlandse tekst…" spellcheck="false"></textarea>
+            <p class="hint">Minimaal 10 tekens. De analyse duurt ongeveer 20–60 seconden.</p>
+            <div id="example-buttons">
+                <span>Voorbeeldteksten:</span>
+                <button class="button secondary" data-example="1">Niveau 1 — Makkelijk</button>
+                <button class="button secondary" data-example="2">Niveau 2 — Breed publiek</button>
+                <button class="button secondary" data-example="3">Niveau 3 — Nieuws</button>
+                <button class="button secondary" data-example="4">Niveau 4 — Formeel</button>
+            </div>
+            <div id="controls">
+                <button id="analyze-btn" class="button">Analyseren</button>
+                <div id="status" class="info">Voer een tekst in en klik op Analyseren.</div>
+            </div>
+            <div id="progress-container" style="display:none; margin-top:0.5rem;">
+                <div id="progress-bar" style="height:4px; background:#9defb6; border-radius:2px; width:0%; transition:width 0.4s ease;"></div>
+            </div>
+        </div>
+
+        <div class="panel" id="viz-panel">
+            <lint-ii-visualizer id="viz" mode="editor"></lint-ii-visualizer>
+        </div>
+    </div>
+
+    <script type="module" src="./src/visualizer/lint_ii_visualizer.js?v=7"></script>
+    <script type="module">
+        const EXAMPLE_TEXTS = {
+            1: `Jan gaat elke zaterdag naar de markt. Hij koopt er groenten en fruit. De markt is groot en druk. Er staan veel kraampjes met eten en drinken. Jan houdt van de kaasmarkt. De man achter de kraam geeft hem een stukje om te proeven. De kaas smaakt lekker. Jan koopt een groot stuk. Daarna drinkt hij een kop koffie bij het café op het plein. Hij fietst blij naar huis met zijn tas vol eten.`,
+
+            2: `Amsterdam is de hoofdstad van Nederland en tegelijk de grootste stad van het land, met ruim 900.000 inwoners. De stad trekt jaarlijks miljoenen bezoekers van over de hele wereld, die komen voor de grachten, musea en historische binnenstad. De grachtengordel, die in de zeventiende eeuw werd aangelegd, staat op de Werelderfgoedlijst van Unesco. Amsterdam heeft een rijke handelsgeschiedenis die teruggaat tot de zeventiende eeuw, toen de stad een van de belangrijkste handelssteden ter wereld was. Tegenwoordig wonen er mensen uit meer dan honderd verschillende landen.`,
+
+            3: `Klimaatwetenschappers maken zich zorgen over de gevolgen van de stijgende temperaturen voor de natuur. Veel dieren en planten trekken naar koelere gebieden, maar niet alle soorten kunnen snel genoeg meebewegen. Daardoor neemt het risico op uitsterven toe. Ecosystemen hebben normaal gesproken duizenden jaren nodig om te veranderen. Door de snelle opwarming moeten ze dat nu in enkele tientallen jaren doen. Als de uitstoot van schadelijke gassen niet wordt teruggedrongen, kunnen de gevolgen voor de natuur blijvend zijn.`,
+
+            4: `De aanbestedende dienst is gehouden de opdracht te gunnen aan de inschrijver die de economisch meest voordelige inschrijving heeft gedaan, beoordeeld op basis van de in de aanbestedingsdocumenten vermelde criteria. Ingevolge artikel 2.114 van de Aanbestedingswet 2012 dienen de gunningscriteria verband te houden met het voorwerp van de opdracht en mogen zij de aanbestedende dienst geen onbeperkte keuzevrijheid verlenen. Bij de vaststelling van de gunningscriteria dient de aanbestedende dienst ervoor zorg te dragen dat een daadwerkelijke mededinging mogelijk blijft en dat de criteria op objectieve en niet-discriminerende wijze worden toegepast.`,
+        }
+
+        const textInput = document.getElementById('text-input')
+        const analyzeBtn = document.getElementById('analyze-btn')
+        const status = document.getElementById('status')
+        const viz = document.getElementById('viz')
+
+        document.querySelectorAll('[data-example]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const level = btn.dataset.example
+                textInput.value = EXAMPLE_TEXTS[level]
+                textInput.focus()
+            })
+        })
+
+        const progressContainer = document.getElementById('progress-container')
+        const progressBar = document.getElementById('progress-bar')
+        let _progressTimer = null
+
+        function setStatus(html, type = 'info') {
+            status.innerHTML = html
+            status.className = type
+        }
+
+        function setLoading(on) {
+            analyzeBtn.disabled = on
+            textInput.disabled = on
+        }
+
+        function startProgress() {
+            progressContainer.style.display = 'block'
+            progressBar.style.transition = 'none'
+            progressBar.style.width = '0%'
+            const start = Date.now()
+            // Phase 1: 0-5s → 0-15% (spelling pass)
+            // Phase 2: 5-35s → 15-90% (up to 5 triggers × ~6s each)
+            _progressTimer = setInterval(() => {
+                const elapsed = (Date.now() - start) / 1000
+                let pct
+                if (elapsed < 5) {
+                    pct = (elapsed / 5) * 15
+                } else {
+                    // Asymptotic: approaches 95% but never stops moving
+                    pct = 15 + 80 * (1 - Math.exp(-(elapsed - 5) / 30))
+                }
+                progressBar.style.transition = 'width 0.4s ease'
+                progressBar.style.width = Math.min(pct, 95) + '%'
+            }, 500)
+        }
+
+        function stopProgress(success) {
+            clearInterval(_progressTimer)
+            _progressTimer = null
+            progressBar.style.transition = 'width 0.3s ease'
+            progressBar.style.width = success ? '100%' : '0%'
+            setTimeout(() => {
+                progressContainer.style.display = 'none'
+                progressBar.style.width = '0%'
+            }, 400)
+        }
+
+        let _currentAbortController = null
+
+        analyzeBtn.addEventListener('click', async () => {
+            const text = textInput.value.trim()
+            if (text.length < 10) {
+                setStatus('Voer minimaal 10 tekens in.', 'error')
+                return
+            }
+
+            if (_currentAbortController) {
+                _currentAbortController.abort()
+            }
+            _currentAbortController = new AbortController()
+            const signal = _currentAbortController.signal
+
+            setLoading(true)
+            startProgress()
+            setStatus('<span class="spinner"></span>Analyse bezig… (20–60 seconden)', 'busy')
+            viz.hidden = true
+
+            let fullResultsReceived = false
+
+            // Fire fast lint-only fetch in parallel — show scores as soon as they arrive
+            fetch('/analyze-lint', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text }),
+                signal,
+            }).then(async r => {
+                if (!r.ok || fullResultsReceived) return
+                const data = await r.json()
+                if (fullResultsReceived) return
+                viz.setAttribute('mode', 'analysis')
+                viz.data = data
+                viz.hidden = false
+                setStatus('<span class="spinner"></span>Leesbaarheidsscores berekend — suggesties worden gegenereerd…', 'busy')
+            }).catch(err => {
+                if (err.name !== 'AbortError') console.warn('Lint fetch failed:', err)
+            })
+
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, max_suggestions: 5 }),
+                    signal,
+                })
+
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({ detail: response.statusText }))
+                    throw new Error(err.detail || response.statusText)
+                }
+
+                stopProgress(true)
+                const data = await response.json()
+                fullResultsReceived = true
+                const count = data.suggestions?.suggestions?.length ?? 0
+
+                viz.setAttribute('mode', count > 0 ? 'editor' : 'analysis')
+                viz.data = data
+                viz.hidden = false
+                setStatus(
+                    count > 0
+                        ? `✓ Analyse klaar — ${count} suggesties gevonden.`
+                        : '✓ Analyse klaar — geen suggesties gevonden.',
+                    'success'
+                )
+            } catch (err) {
+                if (err.name === 'AbortError') return
+                stopProgress(false)
+                viz.hidden = false
+                setStatus(`Fout: ${err.message}`, 'error')
+                console.error(err)
+            } finally {
+                setLoading(false)
+            }
+        })
+    </script>
+</body>
+</html>
