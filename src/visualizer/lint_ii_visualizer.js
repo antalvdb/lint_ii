@@ -180,13 +180,7 @@ export class LintIIVisualizer extends HTMLElement {
             ${this.isEditorMode ? this.renderEditorToolbar() : ''}
             <div id="content-area">
                 <div data-view="sentences">
-                    ${this._data.sentences.map((s, idx) => {
-                        const prev = this._data.sentences[idx - 1]
-                        const paraBreak = (prev && s.paragraph_index !== undefined && s.paragraph_index !== prev.paragraph_index)
-                            ? '<div class="paragraph-break"></div>'
-                            : ''
-                        return paraBreak + this.renderSentence(s, idx)
-                    }).join('')}
+                    ${this._data.sentences.map((s, idx) => this.renderSentence(s, idx)).join('')}
                 </div>
                 <div data-view="stats"></div>
             </div>
@@ -547,13 +541,7 @@ export class LintIIVisualizer extends HTMLElement {
         if (this._currentView === 'sentences') {
             contentArea.innerHTML = `
                 <div data-view="sentences">
-                    ${this._data.sentences.map((s, idx) => {
-                        const prev = this._data.sentences[idx - 1]
-                        const paraBreak = (prev && s.paragraph_index !== undefined && s.paragraph_index !== prev.paragraph_index)
-                            ? '<div class="paragraph-break"></div>'
-                            : ''
-                        return paraBreak + this.renderSentence(s, idx)
-                    }).join('')}
+                    ${this._data.sentences.map((s, idx) => this.renderSentence(s, idx)).join('')}
                 </div>
             `
             this.applyWheelHandling()

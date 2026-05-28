@@ -110,10 +110,6 @@ export const css = `
         padding-bottom: 1em;
         line-height: 1.5;
     }
-    .paragraph-break {
-        flex-basis: 100%;
-        height: 0.75em;
-    }
     [data-view="stats"] {
         margin-block: .5em;
     }
