@@ -194,14 +194,16 @@ class SuggestionEngine:
             consolidate_sentence_rewrites: when True, merge all sentence-level
                 triggers for a sentence into a single rewrite (design #1). When
                 None (default), read the LINT_CONSOLIDATE_REWRITES env var,
-                falling back to False. Not yet wired into generation (phase 2).
+                defaulting to True if unset. Set the env var to a falsy value
+                (0/false/no/off) to fall back to the per-trigger path for A/B.
         """
         self._provider = provider
         self._thresholds = {**DEFAULT_THRESHOLDS, **(thresholds or {})}
         if consolidate_sentence_rewrites is None:
+            env = os.environ.get("LINT_CONSOLIDATE_REWRITES")
+            # Consolidation is the default; an explicit env value can turn it off.
             consolidate_sentence_rewrites = (
-                os.environ.get("LINT_CONSOLIDATE_REWRITES", "").lower()
-                in ("1", "true", "yes", "on")
+                True if env is None else env.lower() in ("1", "true", "yes", "on")
             )
         self._consolidate_sentence_rewrites = consolidate_sentence_rewrites
 
