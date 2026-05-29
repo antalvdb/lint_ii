@@ -162,6 +162,24 @@ HERSCHRIJVING: [de kortere zinnen]
 UITLEG: [één korte zin die alleen beschrijft wat er structureel gedaan is, zoals opsplitsen — geen uitleg over het waarom, geen vakjargon]"""
     ),
 
+    "sentence_rewrite": PromptTemplate(
+        system=SYSTEM_PROMPT_BASE + """
+
+Je richt je op zinnen die om meerdere redenen tegelijk moeilijk leesbaar zijn. Pak alle genoemde knelpunten in één samenhangende herschrijving aan: splits lange of informatiedichte zinnen op, zet passieve constructies actief, vereenvoudig bijzinsstructuren en maak abstracte taal concreter — maar uitsluitend waar nodig, en zonder meer te veranderen dan de genoemde knelpunten vragen.""",
+        user="""Herschrijf de volgende zin zodat deze beter leesbaar wordt. Pak daarbij alle onderstaande knelpunten in één keer aan.
+
+Zin: "{sentence}"
+
+Knelpunten:
+{issues}
+
+Houd je aan de richtlijnen: behoud de betekenis, de toon en de vakinhoud, voeg niets nieuws toe, en verander niet meer dan nodig is om de genoemde knelpunten op te lossen.
+
+Geef je antwoord in het volgende formaat:
+HERSCHRIJVING: [de verbeterde zin of zinnen]
+UITLEG: [één korte, eenvoudige zin die beschrijft wat er veranderd is — geen vakjargon]"""
+    ),
+
     "spelling": PromptTemplate(
         system="""Je bent een expert Nederlandse taalkundige en corrector. Je taak is om suggesties te geven om Nederlandse tekst leesbaarder te maken, door spelfouten en contextuele zinsbouw- en grammaticafouten te identificeren.
 
@@ -247,6 +265,7 @@ def parse_llm_response(response: str, template_name: str) -> dict[str, str]:
         "passive": ["PROBLEEM", "HERSCHRIJVING", "UITLEG"],
         "subordinate_clause": ["PROBLEEM", "HERSCHRIJVING", "UITLEG"],
         "sentence_length": ["PROBLEEM", "HERSCHRIJVING", "UITLEG"],
+        "sentence_rewrite": ["HERSCHRIJVING", "UITLEG"],
     }
 
     fields = expected_fields.get(template_name, [])

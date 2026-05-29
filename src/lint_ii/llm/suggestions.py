@@ -50,6 +50,9 @@ class SuggestionType(str, Enum):
     PASSIVE = "passive"
     SUBORDINATE_CLAUSE = "subordinate_clause"
     SENTENCE_LENGTH = "sentence_length"
+    # Consolidated per-sentence rewrite addressing several sentence-level issues
+    # at once (see _plan_jobs / sentence_rewrite prompt). Phase 1 scaffolding.
+    SENTENCE_REWRITE = "sentence_rewrite"
 
 
 # Default thresholds for triggering suggestions

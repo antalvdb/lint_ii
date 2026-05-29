@@ -3,7 +3,7 @@ import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
 import { EditorController } from './core/editor.js?v=8'
-import { SuggestionPopupController } from './core/suggestion-popup.js?v=1'
+import { SuggestionPopupController } from './core/suggestion-popup.js?v=2'
 
 
 export class LintIIVisualizer extends HTMLElement {

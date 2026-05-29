@@ -233,6 +233,7 @@ export class SuggestionPopupController {
             'passive': 'Passieve zin',
             'subordinate_clause': 'Bijzinsstructuur',
             'sentence_length': 'Lange zin',
+            'sentence_rewrite': 'Zinsverbetering',
         }
         return typeLabels[type] || type
     }
