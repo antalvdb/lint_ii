@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, TYPE_CHECKING
 import logging
+import os
 import uuid
 
 from lint_ii.llm.providers import LLMProvider, create_provider
@@ -142,6 +143,34 @@ class SuggestionsResult:
         }
 
 
+# Trigger types that rewrite a whole sentence. When consolidation is enabled,
+# all of these for one sentence are merged into a single sentence_rewrite job.
+# word_frequency is excluded — it stays a precise word-level suggestion.
+SENTENCE_LEVEL_TRIGGER_TYPES = frozenset({
+    SuggestionType.MAX_SDL,
+    SuggestionType.CONTENT_WORDS_PER_CLAUSE,
+    SuggestionType.ABSTRACT_NOUNS,
+    SuggestionType.PASSIVE,
+    SuggestionType.SUBORDINATE_CLAUSE,
+    SuggestionType.SENTENCE_LENGTH,
+})
+
+
+@dataclass
+class SuggestionJob:
+    """One planned LLM call that produces (at most) one suggestion.
+
+    kind == "single":       one trigger, generated with that trigger's own
+                            type-specific prompt (legacy per-trigger behaviour;
+                            also used for word_frequency under consolidation).
+    kind == "consolidated": several sentence-level triggers for one sentence,
+                            addressed together via the sentence_rewrite prompt.
+    """
+    kind: str
+    sentence_index: int
+    triggers: list[SuggestionTrigger]
+
+
 class SuggestionEngine:
     """
     Engine for identifying triggers and generating suggestions.
@@ -154,6 +183,7 @@ class SuggestionEngine:
         self,
         provider: LLMProvider | None = None,
         thresholds: dict[str, float] | None = None,
+        consolidate_sentence_rewrites: bool | None = None,
     ):
         """
         Initialize the suggestion engine.
@@ -161,9 +191,19 @@ class SuggestionEngine:
         Args:
             provider: LLM provider for generating suggestions
             thresholds: Custom thresholds for triggers (uses defaults if not specified)
+            consolidate_sentence_rewrites: when True, merge all sentence-level
+                triggers for a sentence into a single rewrite (design #1). When
+                None (default), read the LINT_CONSOLIDATE_REWRITES env var,
+                falling back to False. Not yet wired into generation (phase 2).
         """
         self._provider = provider
         self._thresholds = {**DEFAULT_THRESHOLDS, **(thresholds or {})}
+        if consolidate_sentence_rewrites is None:
+            consolidate_sentence_rewrites = (
+                os.environ.get("LINT_CONSOLIDATE_REWRITES", "").lower()
+                in ("1", "true", "yes", "on")
+            )
+        self._consolidate_sentence_rewrites = consolidate_sentence_rewrites
 
     def identify_triggers(
         self,
@@ -430,6 +470,93 @@ class SuggestionEngine:
                 break
 
         return result
+
+    @staticmethod
+    def _plan_jobs(
+        triggers: list[SuggestionTrigger],
+        max_suggestions: int | None,
+        consolidate: bool,
+    ) -> list["SuggestionJob"]:
+        """
+        Plan the set of LLM calls (jobs) to run, capped at max_suggestions jobs.
+
+        consolidate=False (legacy): every selected trigger becomes its own
+        "single" job, using the same round-robin selection as
+        _prioritize_triggers, so behaviour is unchanged.
+
+        consolidate=True: all sentence-level triggers for a sentence merge into
+        one "consolidated" job; word_frequency triggers stay individual "single"
+        jobs. Consolidated rewrites are scheduled first (one per sentence, in
+        document order), then word_frequency jobs fill the remaining budget
+        round-robin across sentences.
+
+        max_suggestions caps the number of jobs (= LLM calls); None means no cap.
+        """
+        type_priority = [
+            SuggestionType.SENTENCE_LENGTH,
+            SuggestionType.PASSIVE,
+            SuggestionType.SUBORDINATE_CLAUSE,
+            SuggestionType.MAX_SDL,
+            SuggestionType.CONTENT_WORDS_PER_CLAUSE,
+            SuggestionType.ABSTRACT_NOUNS,
+            SuggestionType.WORD_FREQUENCY,
+        ]
+        type_rank = {typ: i for i, typ in enumerate(type_priority)}
+
+        if not consolidate:
+            selected = SuggestionEngine._prioritize_triggers(triggers, max_suggestions)
+            return [
+                SuggestionJob(kind="single", sentence_index=t.sentence_index, triggers=[t])
+                for t in selected
+            ]
+
+        # Consolidated mode: separate sentence-level rewrites from word_frequency
+        rewrite_by_sentence: dict[int, list[SuggestionTrigger]] = {}
+        wordfreq_by_sentence: dict[int, list[SuggestionTrigger]] = {}
+        for trigger in triggers:
+            if trigger.type in SENTENCE_LEVEL_TRIGGER_TYPES:
+                rewrite_by_sentence.setdefault(trigger.sentence_index, []).append(trigger)
+            elif trigger.type == SuggestionType.WORD_FREQUENCY:
+                wordfreq_by_sentence.setdefault(trigger.sentence_index, []).append(trigger)
+            # other types (e.g. spelling) are handled outside this planner
+
+        # Order each sentence's rewrite triggers by type priority — this only
+        # affects the order issues are presented to the model, not the outcome.
+        for sent_triggers in rewrite_by_sentence.values():
+            sent_triggers.sort(key=lambda t: type_rank.get(t.type, len(type_priority)))
+
+        jobs: list[SuggestionJob] = []
+        cap = max_suggestions if max_suggestions is not None else float("inf")
+
+        # Round 1: one consolidated rewrite per sentence, in document order
+        for sent_idx in sorted(rewrite_by_sentence.keys()):
+            if len(jobs) >= cap:
+                break
+            jobs.append(SuggestionJob(
+                kind="consolidated",
+                sentence_index=sent_idx,
+                triggers=rewrite_by_sentence[sent_idx],
+            ))
+
+        # Round 2+: word_frequency jobs, round-robin across sentences
+        wf_order = sorted(wordfreq_by_sentence.keys())
+        while len(jobs) < cap:
+            progressed = False
+            for sent_idx in wf_order:
+                if len(jobs) >= cap:
+                    break
+                bucket = wordfreq_by_sentence[sent_idx]
+                if bucket:
+                    jobs.append(SuggestionJob(
+                        kind="single",
+                        sentence_index=sent_idx,
+                        triggers=[bucket.pop(0)],
+                    ))
+                    progressed = True
+            if not progressed:
+                break
+
+        return jobs
 
     def generate_spelling_suggestions(
         self,
