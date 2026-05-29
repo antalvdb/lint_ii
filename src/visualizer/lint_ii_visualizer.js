@@ -408,6 +408,23 @@ export class LintIIVisualizer extends HTMLElement {
                 this._suggestionPopupController.hide()
             }
         })
+
+        // Show popup on tap (touch devices) — click also fires on desktop so this
+        // complements hover without breaking it.
+        contentArea.addEventListener('click', (e) => {
+            const wordEl = e.target.closest('[data-cluster-id]')
+            if (wordEl && this._suggestionPopupController) {
+                this._suggestionPopupController.showCluster(wordEl.dataset.clusterId, wordEl)
+            }
+        })
+
+        // Dismiss popup when tapping anywhere that is not a suggestion word or the popup itself.
+        this.shadowRoot.addEventListener('click', (e) => {
+            if (!this._suggestionPopupController) return
+            if (!e.target.closest('[data-cluster-id]') && !e.target.closest('.suggestion-popup')) {
+                this._suggestionPopupController._hideNow()
+            }
+        })
     }
 
     updateSuggestionStatus(suggestionId, status) {
@@ -417,8 +434,9 @@ export class LintIIVisualizer extends HTMLElement {
         const cluster = this._editorController.getClusterForSuggestion(suggestionId)
         if (!cluster) return
 
-        const sentenceEls = this.shadowRoot.querySelectorAll('.sentence')
-        const sentenceEl = sentenceEls[cluster.sentenceIdx]
+        const sentenceEl = this.shadowRoot.querySelector(
+            `[data-sentence-index="${cluster.sentenceIdx}"]:not([data-split-part])`
+        )
         if (!sentenceEl) return
 
         // Store original HTML on first modification
