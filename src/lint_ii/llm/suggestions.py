@@ -528,15 +528,27 @@ class SuggestionEngine:
         jobs: list[SuggestionJob] = []
         cap = max_suggestions if max_suggestions is not None else float("inf")
 
-        # Round 1: one consolidated rewrite per sentence, in document order
+        # Round 1: one rewrite job per sentence with sentence-level issues, in
+        # document order. A sentence with only ONE such issue keeps its targeted
+        # per-type "single" job — a multi-fix rewrite over-rewrites simple
+        # sentences into ungrammatical/meaning-shifted Dutch (observed on the
+        # level-3 text). Only sentences with >=2 issues get a consolidated rewrite.
         for sent_idx in sorted(rewrite_by_sentence.keys()):
             if len(jobs) >= cap:
                 break
-            jobs.append(SuggestionJob(
-                kind="consolidated",
-                sentence_index=sent_idx,
-                triggers=rewrite_by_sentence[sent_idx],
-            ))
+            sent_triggers = rewrite_by_sentence[sent_idx]
+            if len(sent_triggers) >= 2:
+                jobs.append(SuggestionJob(
+                    kind="consolidated",
+                    sentence_index=sent_idx,
+                    triggers=sent_triggers,
+                ))
+            else:
+                jobs.append(SuggestionJob(
+                    kind="single",
+                    sentence_index=sent_idx,
+                    triggers=[sent_triggers[0]],
+                ))
 
         # Round 2+: word_frequency jobs, round-robin across sentences
         wf_order = sorted(wordfreq_by_sentence.keys())
@@ -664,6 +676,8 @@ class SuggestionEngine:
             # For spelling (not grammar) suggestions, skip if the correction is not
             # more frequent than the original — this filters LLM hallucinations where
             # a correctly-spelled but rare word is "corrected" to an equally rare one.
+            # (Kept as a strict > rather than a frequency-band test: a real spelling
+            # fix between same-band words is still worth applying.)
             if error_category == "spelling":
                 from lint_ii.linguistic_data.wordlists import FREQ_DATA
                 zero_count_freq = 1.359228547196266
@@ -817,6 +831,18 @@ class SuggestionEngine:
             f"Streef naar een herschrijving die de complexiteit met één niveau verlaagt (naar niveau {target_level}). "
             f"Vereenvoudig niet verder dan nodig — behoud de toon, stijl en vakinhoud van de originele tekst zo veel mogelijk."
         )
+
+    @staticmethod
+    def _in_higher_freq_band(candidate_freq: float, original_freq: float) -> bool:
+        """True if candidate sits in a higher Zipf frequency band than original.
+
+        Zipf scores are rounded to the nearest integer band, so words that
+        differ only marginally count as "equally frequent" and do not warrant a
+        substitution. This guards against swaps that are barely more common but
+        semantically wrong (e.g. "uitstoot" 2.86 → "uitlaat" 3.38, both band 3),
+        while still allowing genuine jumps (e.g. band 2 → band 3).
+        """
+        return round(candidate_freq) > round(original_freq)
 
     @staticmethod
     def _format_issue(trigger: SuggestionTrigger) -> str | None:
@@ -1016,20 +1042,23 @@ class SuggestionEngine:
             explanation = parsed.get("UITLEG", "")
             replacement_word = parsed.get("VERVANGING")
 
-            # For word_frequency suggestions, verify the replacement is actually
-            # more frequent than the original. If not, the LLM picked an equally
-            # rare word (e.g. "beslistermijnen" → "beslissingstermijnen") and the
-            # suggestion is worthless.
+            # For word_frequency suggestions, require the replacement to sit in a
+            # higher Zipf frequency band than the original. A merely marginal gain
+            # (same band) is not worth the risk of a semantically wrong but
+            # slightly-more-common swap (e.g. "uitstoot" → "uitlaat"), and an
+            # equally-rare swap (e.g. "beslistermijnen" → "beslissingstermijnen")
+            # is worthless.
             if trigger.type == SuggestionType.WORD_FREQUENCY and replacement_word:
                 from lint_ii.linguistic_data.wordlists import FREQ_DATA
                 zero_count_freq = 1.359228547196266
                 replacement_freq = FREQ_DATA.get(replacement_word.lower(), zero_count_freq)
                 original_freq = trigger.feature_value
-                if replacement_freq <= original_freq:
+                if not self._in_higher_freq_band(replacement_freq, original_freq):
                     logger.info(
-                        "Dropping word_frequency suggestion: replacement '%s' (%.2f) "
-                        "is not more frequent than original '%s' (%.2f)",
-                        replacement_word, replacement_freq, trigger.word, original_freq,
+                        "Dropping word_frequency suggestion: replacement '%s' (%.2f, band %d) "
+                        "not in a higher frequency band than original '%s' (%.2f, band %d)",
+                        replacement_word, replacement_freq, round(replacement_freq),
+                        trigger.word, original_freq, round(original_freq),
                     )
                     return None
 
