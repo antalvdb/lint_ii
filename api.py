@@ -100,12 +100,20 @@ def _run_analysis(text: str, max_suggestions: int | None) -> dict:
     t1 = time.perf_counter()
     logger.info("TIMING spacy_analysis=%.2fs", t1 - t0)
 
-    # Default to one readability suggestion per sentence. Combined with the
-    # round-robin in _prioritize_triggers, this spreads coverage so every
-    # sentence with a trigger gets one before any sentence gets a second.
+    # Default to roughly one readability suggestion per 10 words. Combined with
+    # the round-robin in _prioritize_triggers, this spreads length-proportional
+    # coverage across sentences (at least one suggestion for any non-trivial text).
     if max_suggestions is None:
-        max_suggestions = len(analysis.sentence_analyses)
-        logger.info("max_suggestions defaulted to sentence count: %d", max_suggestions)
+        word_count = sum(
+            1 for sent in analysis.sentences
+            for tok in sent.word_features
+            if not tok.is_punctuation
+        )
+        max_suggestions = max(1, round(word_count / 10))
+        logger.info(
+            "max_suggestions defaulted to %d (word_count=%d, ~1 per 10 words)",
+            max_suggestions, word_count,
+        )
 
     engine = SuggestionEngine(provider=_provider)
     suggestions = engine.generate_suggestions(analysis, max_suggestions=max_suggestions)
