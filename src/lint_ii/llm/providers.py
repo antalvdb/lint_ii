@@ -24,18 +24,27 @@ class LLMResponse:
 class LLMProvider(ABC):
     """Abstract base class for LLM providers."""
 
+    # Default output ceiling. A single rewritten sentence plus a short
+    # explanation fits comfortably; the whole-document spelling pass overrides
+    # this with a larger value since it enumerates every error in one call.
+    DEFAULT_MAX_TOKENS = 512
+
     @abstractmethod
-    def _complete(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
+    def _complete(
+        self, prompt: str, system_prompt: str | None = None, max_tokens: int | None = None
+    ) -> LLMResponse:
         pass
 
-    def complete(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
+    def complete(
+        self, prompt: str, system_prompt: str | None = None, max_tokens: int | None = None
+    ) -> LLMResponse:
         logger.debug(
             "LLM PROMPT [%s]\n--- system ---\n%s\n--- user ---\n%s\n--- end ---",
             self.model_name,
             system_prompt or "(none)",
             prompt,
         )
-        response = self._complete(prompt, system_prompt)
+        response = self._complete(prompt, system_prompt, max_tokens)
         logger.debug(
             "LLM RESPONSE [%s]\n%s\n--- end ---",
             self.model_name,
@@ -95,7 +104,9 @@ class OpenAIProvider(LLMProvider):
             self._client = OpenAI(api_key=self._api_key, base_url=self._base_url)
         return self._client
 
-    def _complete(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
+    def _complete(
+        self, prompt: str, system_prompt: str | None = None, max_tokens: int | None = None
+    ) -> LLMResponse:
         """Generate completion using OpenAI API."""
         client = self._get_client()
 
@@ -108,6 +119,7 @@ class OpenAIProvider(LLMProvider):
             model=self._model,
             messages=messages,
             temperature=0.7,
+            max_tokens=max_tokens or self.DEFAULT_MAX_TOKENS,
         )
 
         usage = None
@@ -167,13 +179,15 @@ class AnthropicProvider(LLMProvider):
             self._client = Anthropic(api_key=self._api_key)
         return self._client
 
-    def _complete(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
+    def _complete(
+        self, prompt: str, system_prompt: str | None = None, max_tokens: int | None = None
+    ) -> LLMResponse:
         """Generate completion using Anthropic API."""
         client = self._get_client()
 
         kwargs: dict[str, Any] = {
             "model": self._model,
-            "max_tokens": 1024,
+            "max_tokens": max_tokens or self.DEFAULT_MAX_TOKENS,
             "messages": [{"role": "user", "content": prompt}],
         }
         if system_prompt:
@@ -236,7 +250,9 @@ class OllamaProvider(LLMProvider):
             self._client = httpx.Client(base_url=self._base_url, timeout=600.0)
         return self._client
 
-    def _complete(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
+    def _complete(
+        self, prompt: str, system_prompt: str | None = None, max_tokens: int | None = None
+    ) -> LLMResponse:
         """Generate completion using Ollama API."""
         client = self._get_client()
 
@@ -251,6 +267,7 @@ class OllamaProvider(LLMProvider):
                 "model": self._model,
                 "messages": messages,
                 "stream": False,
+                "options": {"num_predict": max_tokens or self.DEFAULT_MAX_TOKENS},
             },
         )
         response.raise_for_status()
@@ -289,7 +306,9 @@ class MLXProvider(LLMProvider):
             )
         self._model, self._tokenizer = load(self._model_path)
 
-    def _complete(self, prompt: str, system_prompt: str | None = None) -> LLMResponse:
+    def _complete(
+        self, prompt: str, system_prompt: str | None = None, max_tokens: int | None = None
+    ) -> LLMResponse:
         """Generate completion using MLX on Apple Silicon."""
         from mlx_lm import generate
         self.load()
@@ -305,11 +324,14 @@ class MLXProvider(LLMProvider):
             add_generation_prompt=True,
         )
 
+        # Per-trigger rewrites fit in the 512-token default; the spelling pass
+        # passes a larger ceiling. The model stops at EOS in the common case, so
+        # this only caps runaway generation rather than slowing normal calls.
         content = generate(
             self._model,
             self._tokenizer,
             prompt=formatted,
-            max_tokens=1024,
+            max_tokens=max_tokens or self.DEFAULT_MAX_TOKENS,
             verbose=False,
         )
 

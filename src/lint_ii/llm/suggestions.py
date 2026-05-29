@@ -449,7 +449,9 @@ class SuggestionEngine:
         system_prompt, user_prompt = format_prompt("spelling", text=full_text)
 
         try:
-            response = provider.complete(user_prompt, system_prompt)
+            # Whole-document pass: enumerates every error in one call, so it
+            # needs more headroom than a single-sentence rewrite.
+            response = provider.complete(user_prompt, system_prompt, max_tokens=1024)
         except Exception as e:
             err_str = str(e).lower()
             if "authentication" in err_str or "401" in err_str or "api_key" in err_str:
