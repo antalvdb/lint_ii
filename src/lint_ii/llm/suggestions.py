@@ -381,10 +381,14 @@ class SuggestionEngine:
         max_suggestions: int | None,
     ) -> list[SuggestionTrigger]:
         """
-        Prioritize triggers to ensure variety across suggestion types.
+        Prioritize triggers to ensure coverage across sentences and variety
+        across suggestion types.
 
-        Takes one of each type first (sentence-level before word-level),
-        then fills remaining slots with additional triggers.
+        Round-robins across sentences so every sentence with a trigger gets
+        a suggestion before any sentence gets a second one. Within a sentence,
+        higher-priority (sentence-level) types are chosen first. This prevents
+        a single dense sentence from consuming the whole max_suggestions quota
+        and starving later sentences.
         """
         if max_suggestions is None:
             return triggers
@@ -399,24 +403,28 @@ class SuggestionEngine:
             SuggestionType.ABSTRACT_NOUNS,
             SuggestionType.WORD_FREQUENCY,
         ]
+        type_rank = {typ: i for i, typ in enumerate(type_priority)}
 
-        by_type: dict[SuggestionType, list[SuggestionTrigger]] = {}
+        # Group triggers by sentence; within each sentence, order by type priority
+        by_sentence: dict[int, list[SuggestionTrigger]] = {}
         for trigger in triggers:
-            by_type.setdefault(trigger.type, []).append(trigger)
+            by_sentence.setdefault(trigger.sentence_index, []).append(trigger)
+        for sent_triggers in by_sentence.values():
+            sent_triggers.sort(key=lambda t: type_rank.get(t.type, len(type_priority)))
 
+        # Round-robin across sentences in document order
         result: list[SuggestionTrigger] = []
-
-        # Round 1: one of each type
-        for typ in type_priority:
-            if len(result) >= max_suggestions:
+        sentence_order = sorted(by_sentence.keys())
+        while len(result) < max_suggestions:
+            progressed = False
+            for sent_idx in sentence_order:
+                if len(result) >= max_suggestions:
+                    break
+                if by_sentence[sent_idx]:
+                    result.append(by_sentence[sent_idx].pop(0))
+                    progressed = True
+            if not progressed:
                 break
-            if typ in by_type and by_type[typ]:
-                result.append(by_type[typ].pop(0))
-
-        # Round 2+: fill remaining slots
-        for typ in type_priority:
-            while len(result) < max_suggestions and by_type.get(typ):
-                result.append(by_type[typ].pop(0))
 
         return result
 
