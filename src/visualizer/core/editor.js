@@ -475,10 +475,26 @@ export class EditorController {
 
     /**
      * Accept a suggestion.
+     *
+     * Auto-ignores other pending suggestions in the SAME cluster: clustered
+     * suggestions share affected word spans, so they are competing alternative
+     * rewrites of the same text — once one is accepted the others no longer
+     * apply. Suggestions elsewhere in the sentence (in other clusters) are
+     * left untouched, so independent fixes remain available.
      */
     accept(suggestionId) {
         if (!this._suggestionStates.has(suggestionId)) return
         this._suggestionStates.set(suggestionId, 'accepted')
+
+        const cluster = this.getClusterForSuggestion(suggestionId)
+        if (cluster) {
+            for (const sid of cluster.suggestionIds) {
+                if (sid !== suggestionId && this._suggestionStates.get(sid) === 'pending') {
+                    this._suggestionStates.set(sid, 'ignored')
+                }
+            }
+        }
+
         this._dispatchChange(suggestionId, 'accepted')
     }
 

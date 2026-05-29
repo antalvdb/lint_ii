@@ -76,7 +76,9 @@ app.add_middleware(
 
 class AnalyzeRequest(BaseModel):
     text: str = Field(..., min_length=10, max_length=10_000)
-    max_suggestions: int = Field(default=5, ge=1, le=10)
+    # None means "one readability suggestion per sentence" — resolved at
+    # runtime from the analysed sentence count (see _run_analysis).
+    max_suggestions: int | None = Field(default=None, ge=1, le=50)
 
 
 def _run_lint_only(text: str) -> dict:
@@ -89,7 +91,7 @@ def _run_lint_only(text: str) -> dict:
     return result
 
 
-def _run_analysis(text: str, max_suggestions: int) -> dict:
+def _run_analysis(text: str, max_suggestions: int | None) -> dict:
     from lint_ii import ReadabilityAnalysis
     from lint_ii.llm.suggestions import SuggestionEngine
 
@@ -97,6 +99,13 @@ def _run_analysis(text: str, max_suggestions: int) -> dict:
     analysis = ReadabilityAnalysis.from_text(text)
     t1 = time.perf_counter()
     logger.info("TIMING spacy_analysis=%.2fs", t1 - t0)
+
+    # Default to one readability suggestion per sentence. Combined with the
+    # round-robin in _prioritize_triggers, this spreads coverage so every
+    # sentence with a trigger gets one before any sentence gets a second.
+    if max_suggestions is None:
+        max_suggestions = len(analysis.sentence_analyses)
+        logger.info("max_suggestions defaulted to sentence count: %d", max_suggestions)
 
     engine = SuggestionEngine(provider=_provider)
     suggestions = engine.generate_suggestions(analysis, max_suggestions=max_suggestions)
