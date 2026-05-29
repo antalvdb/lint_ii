@@ -739,31 +739,37 @@ class SuggestionEngine:
         spelling_suggestions = spelling_suggestions + hunspell_suggestions
         logger.info("TIMING spelling_hunspell=%.2fs (%d suggestions)", time.perf_counter() - t1, len(hunspell_suggestions))
 
-        # Step 2: Find readability triggers
+        # Step 2: Find readability triggers and plan the LLM calls (jobs).
+        # When consolidation is on, sentence-level triggers for a sentence are
+        # merged into one rewrite job; otherwise each trigger is its own job.
         triggers = self.identify_triggers(analysis)
-        triggers_to_process = self._prioritize_triggers(triggers, max_suggestions)
+        jobs = self._plan_jobs(triggers, max_suggestions, self._consolidate_sentence_rewrites)
         t2 = time.perf_counter()
-        logger.info("TIMING trigger_detection=%.2fs (%d triggers → %d to process)", t2 - t1, len(triggers), len(triggers_to_process))
+        logger.info(
+            "TIMING trigger_detection=%.2fs (%d triggers → %d jobs, consolidate=%s)",
+            t2 - t1, len(triggers), len(jobs), self._consolidate_sentence_rewrites,
+        )
 
-        # Step 3: Generate readability suggestions for each trigger
+        # Step 3: Generate a readability suggestion for each planned job
         document_level = getattr(analysis.lint, "level", None)
         suggestions: list[Suggestion] = list(spelling_suggestions)
-        for trigger in triggers_to_process:
-            t_trigger = time.perf_counter()
+        for job in jobs:
+            t_job = time.perf_counter()
             try:
-                suggestion = self._generate_suggestion_for_trigger(trigger, provider, document_level)
+                suggestion = self._generate_suggestion_for_job(job, provider, document_level)
             except _AuthenticationError as e:
                 raise RuntimeError(
                     f"LLM authentication failed: {e}. Check your API key."
                 ) from e
-            logger.info("TIMING trigger_%s=%.2fs", trigger.type.value, time.perf_counter() - t_trigger)
+            label = "consolidated" if job.kind == "consolidated" else job.triggers[0].type.value
+            logger.info("TIMING job_%s=%.2fs", label, time.perf_counter() - t_job)
             if suggestion:
                 suggestions.append(suggestion)
 
         return SuggestionsResult(
             suggestions=suggestions,
             triggers_found=len(triggers),
-            triggers_processed=len(triggers_to_process),
+            triggers_processed=len(jobs),
             model=provider.model_name,
         )
 
@@ -798,6 +804,136 @@ class SuggestionEngine:
             }
         except Exception as e:
             logger.warning("Failed to analyze suggested text for metrics: %s", e)
+            return None
+
+    @staticmethod
+    def _append_level_constraint(system_prompt: str, document_level: int | None) -> str:
+        """Append the 'aim one level lower, don't over-simplify' instruction."""
+        if document_level is None:
+            return system_prompt
+        target_level = max(1, document_level - 1)
+        return system_prompt + (
+            f"\n\nDe tekst heeft LiNT-niveau {document_level} (schaal 1–4, waarbij 4 het moeilijkst is). "
+            f"Streef naar een herschrijving die de complexiteit met één niveau verlaagt (naar niveau {target_level}). "
+            f"Vereenvoudig niet verder dan nodig — behoud de toon, stijl en vakinhoud van de originele tekst zo veel mogelijk."
+        )
+
+    @staticmethod
+    def _format_issue(trigger: SuggestionTrigger) -> str | None:
+        """Render one sentence-level trigger as a Dutch bullet for the rewrite prompt."""
+        t = trigger.type
+        if t == SuggestionType.SENTENCE_LENGTH:
+            return f"De zin is lang ({int(trigger.feature_value)} woorden)."
+        if t == SuggestionType.PASSIVE:
+            if trigger.passives:
+                joined = ", ".join(f'"{p}"' for p in trigger.passives)
+                return f"De zin bevat passieve constructie(s): {joined}."
+            return "De zin bevat een passieve constructie."
+        if t == SuggestionType.SUBORDINATE_CLAUSE:
+            return f"De zin bevat {int(trigger.feature_value)} bijzin(nen)."
+        if t == SuggestionType.MAX_SDL:
+            return (
+                f"De zin heeft een complexe structuur met lange afhankelijkheden tussen woorden "
+                f"(maximale afhankelijkheidslengte {int(trigger.feature_value)})."
+            )
+        if t == SuggestionType.CONTENT_WORDS_PER_CLAUSE:
+            return (
+                f"De zin heeft een hoge informatiedichtheid "
+                f"({trigger.feature_value:.1f} inhoudswoorden per deelzin)."
+            )
+        if t == SuggestionType.ABSTRACT_NOUNS:
+            if trigger.abstract_nouns:
+                return f"De zin bevat abstracte woorden: {', '.join(trigger.abstract_nouns)}."
+            return "De zin bevat abstracte taal."
+        return None
+
+    def _generate_suggestion_for_job(
+        self,
+        job: "SuggestionJob",
+        provider: LLMProvider,
+        document_level: int | None = None,
+    ) -> Suggestion | None:
+        """Dispatch a planned job to the right generation path."""
+        if job.kind == "consolidated":
+            return self._generate_consolidated_suggestion(job, provider, document_level)
+        return self._generate_suggestion_for_trigger(job.triggers[0], provider, document_level)
+
+    def _generate_consolidated_suggestion(
+        self,
+        job: "SuggestionJob",
+        provider: LLMProvider,
+        document_level: int | None = None,
+    ) -> Suggestion | None:
+        """Generate one rewrite for a sentence addressing all its bundled issues."""
+        if not job.triggers:
+            return None
+        sentence_text = job.triggers[0].sentence_text
+
+        issue_lines = [
+            line for trigger in job.triggers
+            if (line := self._format_issue(trigger)) is not None
+        ]
+        if not issue_lines:
+            return None
+        issues = "\n".join(f"- {line}" for line in issue_lines)
+
+        try:
+            system_prompt, user_prompt = format_prompt(
+                "sentence_rewrite", sentence=sentence_text, issues=issues,
+            )
+            system_prompt = self._append_level_constraint(system_prompt, document_level)
+
+            response = provider.complete(user_prompt, system_prompt)
+            logger.debug(
+                "LLM response for consolidated rewrite (sentence %d):\n%s",
+                job.sentence_index, response.content,
+            )
+            parsed = parse_llm_response(response.content, "sentence_rewrite")
+
+            suggested_text = parsed.get("HERSCHRIJVING", "")
+            original = sentence_text or ""
+            _quotes = '"""''\''
+            if suggested_text and not original.startswith(tuple(_quotes)):
+                suggested_text = suggested_text.lstrip(_quotes)
+            if suggested_text and not original.endswith(tuple(_quotes)):
+                suggested_text = suggested_text.rstrip(_quotes)
+            explanation = parsed.get("UITLEG", "")
+
+            if not suggested_text:
+                logger.warning(
+                    "No HERSCHRIJVING in consolidated rewrite for sentence %d. Raw:\n%s",
+                    job.sentence_index, response.content,
+                )
+                return None
+
+            if "niet toegepast" in suggested_text.lower():
+                logger.info(
+                    "Consolidated rewrite discarded: placeholder marker for sentence %d",
+                    job.sentence_index,
+                )
+                return None
+
+            new_metrics = self._analyze_suggested_text(suggested_text)
+
+            return Suggestion(
+                id=str(uuid.uuid4())[:8],
+                type=SuggestionType.SENTENCE_REWRITE,
+                sentence_index=job.sentence_index,
+                original_text=sentence_text,
+                suggested_text=suggested_text,
+                explanation=explanation,
+                model=response.model,
+                new_sentence_metrics=new_metrics,
+            )
+
+        except Exception as e:
+            err_str = str(e).lower()
+            if "authentication" in err_str or "401" in err_str or "api_key" in err_str:
+                raise _AuthenticationError(e) from e
+            logger.error(
+                "Failed to generate consolidated rewrite for sentence %d: %s",
+                job.sentence_index, e, exc_info=True,
+            )
             return None
 
     def _generate_suggestion_for_trigger(
@@ -856,13 +992,7 @@ class SuggestionEngine:
                 return None
 
             # Append level constraint so the LLM aims one level lower, not maximally simpler
-            if document_level is not None:
-                target_level = max(1, document_level - 1)
-                system_prompt += (
-                    f"\n\nDe tekst heeft LiNT-niveau {document_level} (schaal 1–4, waarbij 4 het moeilijkst is). "
-                    f"Streef naar een herschrijving die de complexiteit met één niveau verlaagt (naar niveau {target_level}). "
-                    f"Vereenvoudig niet verder dan nodig — behoud de toon, stijl en vakinhoud van de originele tekst zo veel mogelijk."
-                )
+            system_prompt = self._append_level_constraint(system_prompt, document_level)
 
             # Call LLM
             response = provider.complete(user_prompt, system_prompt)
