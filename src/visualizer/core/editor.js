@@ -377,6 +377,40 @@ export class EditorController {
     }
 
     /**
+     * Like getEffectiveSentenceLevel but returns one {score, level} per
+     * resulting sentence. Length > 1 means the accepted suggestion splits
+     * the sentence (sdl_values/cwpc_values have multiple entries).
+     */
+    getEffectiveSentenceLevels(sentenceIndex) {
+        const metrics = this._getEffectiveMetrics(sentenceIndex)
+        const meanFreq = metrics.word_freq_count > 0
+            ? metrics.word_freq_sum / metrics.word_freq_count : null
+        const totalNouns = metrics.n_concrete + metrics.n_abstract + metrics.n_undefined
+        const propConcrete = totalNouns > 0 ? metrics.n_concrete / totalNouns : null
+        const count = Math.max(metrics.sdl_values.length, metrics.cwpc_values.length, 1)
+        const sentence = this._data.sentences[sentenceIndex]
+
+        return Array.from({ length: count }, (_, i) => {
+            const sdl = metrics.sdl_values[i] ?? null
+            const cwpc = metrics.cwpc_values[i] ?? null
+
+            if (meanFreq == null || sdl == null || cwpc == null || propConcrete == null) {
+                return { score: sentence?.lint_score ?? null, level: sentence?.difficulty_level ?? null }
+            }
+
+            const C = EditorController.COEFFICIENTS
+            const raw = C.constant
+                + C.freq_log * meanFreq
+                + C.max_sdl * sdl
+                + C.content_words_per_clause * cwpc
+                + C.proportion_concrete * propConcrete
+            const score = Math.min(100, Math.max(0, 100 - raw))
+            const level = score < 34 ? 1 : score < 46 ? 2 : score < 58 ? 3 : 4
+            return { score, level }
+        })
+    }
+
+    /**
      * Get effective metrics for a sentence, using accepted suggestion metrics
      * when available, otherwise original.
      */

@@ -2,7 +2,7 @@ import { css } from './core/stylesheet.js?v=3'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
-import { EditorController } from './core/editor.js?v=6'
+import { EditorController } from './core/editor.js?v=7'
 import { SuggestionPopupController } from './core/suggestion-popup.js?v=1'
 
 
@@ -267,12 +267,77 @@ export class LintIIVisualizer extends HTMLElement {
 
     updateSentenceScore(sentenceIndex) {
         if (!this._editorController) return
-        const { level } = this._editorController.getEffectiveSentenceLevel(sentenceIndex)
-        const sentenceEl = this.shadowRoot.querySelectorAll('.sentence')[sentenceIndex]
+
+        // Remove split-sentence elements from a previous accept of this sentence
+        this.shadowRoot.querySelectorAll(
+            `[data-sentence-index="${sentenceIndex}"][data-split-part]`
+        ).forEach(el => el.remove())
+
+        const levels = this._editorController.getEffectiveSentenceLevels(sentenceIndex)
+        const sentenceEl = this.shadowRoot.querySelector(
+            `[data-sentence-index="${sentenceIndex}"]:not([data-split-part])`
+        )
         if (!sentenceEl) return
-        sentenceEl.dataset.level = level ?? ''
-        const badge = sentenceEl.querySelector('.level-badge')
+
+        const { level } = levels[0]
+        sentenceEl.dataset.level = level != null ? String(level) : ""
+        const badge = sentenceEl.querySelector(".level-badge")
         if (badge && level != null) badge.textContent = level
+
+        if (levels.length > 1) {
+            this._applySentenceSplit(sentenceEl, sentenceIndex, levels)
+        }
+    }
+
+    _applySentenceSplit(primaryEl, sentenceIndex, levels) {
+        const wordEls = Array.from(primaryEl.querySelectorAll(".word"))
+        if (wordEls.length < 2) return
+
+        // Find split boundaries: word ending .!? followed by uppercase-initial word
+        const splitPoints = []
+        for (let i = 0; i < wordEls.length - 1; i++) {
+            const text = wordEls[i].textContent.trim()
+            const nextText = wordEls[i + 1].textContent.trim()
+            if (/[.!?]$/.test(text) && /^[A-Z\u00C0-\u00D6\u00D8-\u00DE]/.test(nextText)) {
+                splitPoints.push(i)
+                if (splitPoints.length >= levels.length - 1) break
+            }
+        }
+        if (splitPoints.length === 0) return
+
+        let insertAfter = primaryEl
+        for (let p = 0; p < splitPoints.length; p++) {
+            const partLevel = levels[p + 1] != null ? levels[p + 1].level : null
+            const nextSplit = splitPoints[p + 1] != null ? splitPoints[p + 1] : wordEls.length - 1
+            const partWords = wordEls.slice(splitPoints[p] + 1, nextSplit + 1)
+
+            const newSentence = document.createElement("span")
+            newSentence.className = "sentence"
+            newSentence.dataset.level = partLevel != null ? String(partLevel) : ""
+            newSentence.dataset.sentenceIndex = sentenceIndex
+            newSentence.dataset.splitPart = p + 2
+
+            const startGroup = document.createElement("span")
+            startGroup.className = "sent-start-group"
+            startGroup.innerHTML = "<span class=\"sent-start\"></span>"
+            newSentence.appendChild(startGroup)
+
+            for (const wordEl of partWords) {
+                newSentence.appendChild(wordEl)
+            }
+
+            const endGroup = document.createElement("span")
+            endGroup.className = "sent-end-group"
+            endGroup.innerHTML = "<span class=\"sent-end\"></span>"
+            const lvBadge = document.createElement("span")
+            lvBadge.className = "level-badge"
+            lvBadge.textContent = partLevel != null ? String(partLevel) : "?"
+            endGroup.appendChild(lvBadge)
+            newSentence.appendChild(endGroup)
+
+            insertAfter.after(newSentence)
+            insertAfter = newSentence
+        }
     }
 
     setupEditorEventListeners() {
@@ -399,7 +464,7 @@ export class LintIIVisualizer extends HTMLElement {
      */
     _applyAcceptedDiffs(sentenceEl, acceptedSuggestions) {
         const wordEls = Array.from(sentenceEl.querySelectorAll('.word'))
-        const strip = t => t.replace(/[.,;:!?()"'\u201c\u201d]/g, '').toLowerCase()
+        const strip = t => t.replace(/[,;:()"'\u201c\u201d]/g, "").toLowerCase()
         const origBare = wordEls.map(el => strip(el.textContent))
 
         // Collect all change regions from all accepted suggestions
@@ -589,7 +654,7 @@ export class LintIIVisualizer extends HTMLElement {
             return 'punctuation' in token
         })
 
-        return `<span class="sentence" data-level="${sentence.difficulty_level}">
+        return `<span class="sentence" data-level="${sentence.difficulty_level}" data-sentence-index="${idx}">
             <span class="sent-start-group">
                 <span class="sent-idx">${idx + 1}</span>
                 <span class="sent-start"></span>
