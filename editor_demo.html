@@ -277,7 +277,10 @@
             #controls { flex-direction: column; align-items: stretch; }
             #controls #analyze-btn { width: 100%; padding: 10px 18px; font-size: 13px; }
             #status { width: 100%; }
-            textarea { min-height: 120px; }
+            /* 16px avoids iOS auto-zooming the page when the textarea is
+               focused (e.g. after tapping a sample-text button), which
+               otherwise scales everything past the right edge. */
+            textarea { min-height: 120px; font-size: 16px; }
             #example-buttons button { font-size: 11px; padding: 5px 10px; }
         }
     </style>
