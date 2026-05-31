@@ -834,6 +834,30 @@ class SuggestionEngine:
             f"Vereenvoudig niet verder dan nodig — behoud de toon, stijl en vakinhoud van de originele tekst zo veel mogelijk."
         )
 
+    # Clause-coordinating conjunctions whose mid-sentence join should not be
+    # broken: they encode an argumentative relation (contrast/reason/consequence)
+    # that is lost when the clauses are split into separate sentences. en/of are
+    # excluded — they are often phrase-level ("koffie en thee"), so guarding them
+    # would reject too many legitimate edits.
+    _CLAUSE_CONJUNCTIONS = ("maar", "want", "dus")
+
+    @classmethod
+    def _breaks_clause_conjunction(cls, original: str, suggested: str) -> str | None:
+        """Return the conjunction whose ', <conj> ' join the rewrite broke, else None.
+
+        Deterministic backstop for the prompt guideline: if the original joins
+        two clauses with ', maar ' (or want/dus) and the suggestion no longer
+        contains that exact join, the rewrite split the clauses or swapped the
+        conjunction (e.g. maar -> echter), which we reject.
+        """
+        orig_l = original.lower()
+        sug_l = suggested.lower()
+        for conj in cls._CLAUSE_CONJUNCTIONS:
+            join = f", {conj} "
+            if join in orig_l and join not in sug_l:
+                return conj
+        return None
+
     @staticmethod
     def _in_higher_freq_band(candidate_freq: float, original_freq: float) -> bool:
         """True if candidate sits in a higher Zipf frequency band than original.
@@ -938,6 +962,14 @@ class SuggestionEngine:
                 logger.info(
                     "Consolidated rewrite discarded: placeholder marker for sentence %d",
                     job.sentence_index,
+                )
+                return None
+
+            broken_conj = self._breaks_clause_conjunction(sentence_text, suggested_text)
+            if broken_conj:
+                logger.info(
+                    "Consolidated rewrite discarded: broke ', %s ' clause join for sentence %d",
+                    broken_conj, job.sentence_index,
                 )
                 return None
 
@@ -1076,6 +1108,14 @@ class SuggestionEngine:
                 logger.info(
                     "Trigger suggestion discarded: placeholder marker in HERSCHRIJVING for %s trigger",
                     trigger.type.value,
+                )
+                return None
+
+            broken_conj = self._breaks_clause_conjunction(trigger.sentence_text or "", suggested_text)
+            if broken_conj:
+                logger.info(
+                    "Trigger suggestion discarded: %s rewrite broke ', %s ' clause join",
+                    trigger.type.value, broken_conj,
                 )
                 return None
 
