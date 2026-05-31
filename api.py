@@ -76,6 +76,18 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def no_cache_html(request, call_next):
+    """Force browsers to revalidate HTML so a cached editor_demo.html doesn't
+    keep loading stale ?v= asset references (notably on iOS WebKit). Static
+    JS/CSS keep their own caching — they are versioned via ?v= query strings."""
+    response = await call_next(request)
+    path = request.url.path
+    if path.endswith(".html") or path in ("/", ""):
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
+
+
 class AnalyzeRequest(BaseModel):
     text: str = Field(..., min_length=10, max_length=10_000)
     # None means "one readability suggestion per sentence" — resolved at

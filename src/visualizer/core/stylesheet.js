@@ -211,8 +211,11 @@ export const css = `
         .sent-start::before,
         .sent-end::after {
             font-family: monospace;
-            font-size: 3em;
+            font-size: 2.4em;
             vertical-align: middle;
+            /* Keep the tall bracket glyph from inflating the line box, so line
+               spacing follows the text rather than the brackets. */
+            line-height: 0;
         }
         .sent-start::before {
             content: '[';
