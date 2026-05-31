@@ -121,7 +121,7 @@ export const css = `
         width: 1.5em;
         height: 1.5em;
         border-radius: 50%;
-        margin-right: 1em;
+        margin-right: .5em;
         font-family: monospace;
         line-height: 1em;
         color: white;
@@ -622,10 +622,13 @@ export const css = `
         header .level-badge { font-size: 1.4em; }
         .editor-toolbar { flex-wrap: wrap; gap: 0.5rem; }
         .suggestion-counts { gap: 0.6rem; }
-        [data-view="sentences"] { font-size: 0.95em; padding-inline: 0; }
+        [data-view="sentences"] { font-size: 0.95em; padding-inline: .25em; }
         .word { padding-inline: .4em; }
-        /* The brackets are 3em on desktop; shrink them so a sentence fits. */
-        .sent-start::before, .sent-end::after { font-size: 2em; }
+        /* The closing bracket + level badge are the widest trailing unit and
+           poked past the right edge; shrink the brackets and the badge's
+           trailing margin so the sentence-end group stays inside the viewport. */
+        .sent-start::before, .sent-end::after { font-size: 1.7em; }
+        .level-badge { margin-right: .25em; }
         .suggestion-popup { max-width: calc(100vw - 1rem); }
     }
 `

@@ -1,4 +1,4 @@
-import { css } from './core/stylesheet.js?v=5'
+import { css } from './core/stylesheet.js?v=6'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
