@@ -604,4 +604,23 @@ export const css = `
     .suggestion-section + .suggestion-section {
         padding-top: 0.75rem;
     }
+
+    /* Narrow screens: the header, document scores and toolbar are flex rows
+       with a large gap and no wrap, which overflow horizontally on a phone.
+       Shrink the gap and let them wrap so everything stays within the viewport. */
+    @media (max-width: 600px) {
+        :host { --gap: 1em; }
+        header {
+            flex-wrap: wrap;
+            gap: 0.75em;
+            padding-right: 1.75em; /* room for the absolute view-toggle */
+        }
+        .document-scores { flex-wrap: wrap; gap: 1em; }
+        .document-scores .doc-stat { gap: 0.5em; }
+        header .level-badge { font-size: 1.4em; }
+        .editor-toolbar { flex-wrap: wrap; gap: 0.5rem; }
+        .suggestion-counts { gap: 0.6rem; }
+        [data-view="sentences"] { font-size: 0.95em; }
+        .suggestion-popup { max-width: calc(100vw - 1rem); }
+    }
 `

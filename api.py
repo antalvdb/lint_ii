@@ -20,7 +20,9 @@ import os
 import json
 import asyncio
 import logging
+import threading
 import time
+import uuid
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 
@@ -139,41 +141,63 @@ async def analyze_lint(request: AnalyzeRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Job store for the async analyze flow. A single long /analyze request was
+# aborted by iOS WebKit mid-run (idle connection), so the client kicks off a
+# job and then polls a fast status endpoint instead — no long-lived request.
+_jobs: dict[str, dict] = {}
+_jobs_lock = threading.Lock()
+_JOB_MAX_AGE = 600  # seconds; prune finished/stale jobs after this
+
+
+def _store_job_result(job_id: str, fut) -> None:
+    try:
+        result = fut.result()
+        n = len(result.get("suggestions", {}).get("suggestions", []))
+        logger.info("Analysis job %s complete: %d suggestions", job_id, n)
+        with _jobs_lock:
+            _jobs[job_id] = {"status": "done", "result": result, "ts": time.time()}
+    except Exception as e:
+        logger.error("Analysis job %s failed: %s", job_id, e, exc_info=True)
+        with _jobs_lock:
+            _jobs[job_id] = {"status": "error", "error": str(e), "ts": time.time()}
+
+
+def _prune_jobs() -> None:
+    now = time.time()
+    with _jobs_lock:
+        stale = [jid for jid, j in _jobs.items() if now - j.get("ts", now) > _JOB_MAX_AGE]
+        for jid in stale:
+            _jobs.pop(jid, None)
+
+
 @app.post("/analyze")
 async def analyze(request: AnalyzeRequest):
-    logger.info("Starting analysis (%d chars)", len(request.text))
-    loop = asyncio.get_event_loop()
+    """Start an analysis job and return its id immediately (poll /analyze-result)."""
+    _prune_jobs()
+    job_id = uuid.uuid4().hex[:12]
+    with _jobs_lock:
+        _jobs[job_id] = {"status": "pending", "ts": time.time()}
+    fut = _executor.submit(_run_analysis, request.text, request.max_suggestions)
+    fut.add_done_callback(lambda f: _store_job_result(job_id, f))
+    logger.info("Analysis job %s started (%d chars)", job_id, len(request.text))
+    return {"job_id": job_id}
 
-    async def stream_with_heartbeat():
-        # The analysis runs ~30-55s sending nothing, which iOS WebKit (and some
-        # mobile proxies) abort as an idle connection. Emit whitespace heartbeats
-        # while it runs so the response is never idle, then send the full JSON.
-        # All heartbeats are spaces that precede the JSON, so the complete body
-        # is still valid JSON (leading whitespace is ignored by JSON.parse).
-        future = loop.run_in_executor(
-            _executor, _run_analysis, request.text, request.max_suggestions
-        )
-        yield b" "  # flush headers + start the response immediately
-        while True:
-            try:
-                result = await asyncio.wait_for(asyncio.shield(future), timeout=10)
-                break
-            except asyncio.TimeoutError:
-                yield b" "  # heartbeat; keep the connection active
-            except Exception as e:
-                logger.error("Analysis failed: %s", e, exc_info=True)
-                yield json.dumps({"error": str(e)}).encode()
-                return
-        n = len(result.get("suggestions", {}).get("suggestions", []))
-        logger.info("Analysis complete: %d suggestions", n)
-        yield json.dumps(result).encode()
 
-    return StreamingResponse(
-        stream_with_heartbeat(),
-        media_type="application/json",
-        # Disable proxy/nginx buffering so heartbeats reach the client live.
-        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
-    )
+@app.get("/analyze-result/{job_id}")
+async def analyze_result(job_id: str):
+    """Return the status of an analysis job; delivers the result once when done."""
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Onbekende of verlopen analyse.")
+    if job["status"] == "pending":
+        return {"status": "pending"}
+    # Terminal state — hand it over once and drop it from the store.
+    with _jobs_lock:
+        _jobs.pop(job_id, None)
+    if job["status"] == "error":
+        return {"status": "error", "error": job["error"]}
+    return {"status": "done", "result": job["result"]}
 
 
 @app.post("/analyze-stream")
