@@ -141,21 +141,39 @@ async def analyze_lint(request: AnalyzeRequest):
 
 @app.post("/analyze")
 async def analyze(request: AnalyzeRequest):
-    try:
-        logger.info("Starting analysis (%d chars)", len(request.text))
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            _executor,
-            _run_analysis,
-            request.text,
-            request.max_suggestions,
+    logger.info("Starting analysis (%d chars)", len(request.text))
+    loop = asyncio.get_event_loop()
+
+    async def stream_with_heartbeat():
+        # The analysis runs ~30-55s sending nothing, which iOS WebKit (and some
+        # mobile proxies) abort as an idle connection. Emit whitespace heartbeats
+        # while it runs so the response is never idle, then send the full JSON.
+        # All heartbeats are spaces that precede the JSON, so the complete body
+        # is still valid JSON (leading whitespace is ignored by JSON.parse).
+        future = loop.run_in_executor(
+            _executor, _run_analysis, request.text, request.max_suggestions
         )
+        yield b" "  # flush headers + start the response immediately
+        while True:
+            try:
+                result = await asyncio.wait_for(asyncio.shield(future), timeout=10)
+                break
+            except asyncio.TimeoutError:
+                yield b" "  # heartbeat; keep the connection active
+            except Exception as e:
+                logger.error("Analysis failed: %s", e, exc_info=True)
+                yield json.dumps({"error": str(e)}).encode()
+                return
         n = len(result.get("suggestions", {}).get("suggestions", []))
         logger.info("Analysis complete: %d suggestions", n)
-        return result
-    except Exception as e:
-        logger.error("Analysis failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        yield json.dumps(result).encode()
+
+    return StreamingResponse(
+        stream_with_heartbeat(),
+        media_type="application/json",
+        # Disable proxy/nginx buffering so heartbeats reach the client live.
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )
 
 
 @app.post("/analyze-stream")

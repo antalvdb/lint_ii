@@ -490,7 +490,11 @@
                 }
 
                 stopProgress(true)
+                // /analyze streams whitespace heartbeats then the final JSON
+                // (keeps mobile connections alive); leading whitespace parses
+                // fine, and a server-side failure arrives as { error }.
                 const data = await response.json()
+                if (data.error) throw new Error(data.error)
                 fullResultsReceived = true
                 const count = data.suggestions?.suggestions?.length ?? 0
 
