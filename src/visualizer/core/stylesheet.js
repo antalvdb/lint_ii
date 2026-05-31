@@ -104,11 +104,12 @@ export const css = `
     [data-view="sentences"] {
         display: flex;
         flex-wrap: wrap;
-        row-gap: 0.5em;
+        row-gap: 0.25em;
         align-items: center;
         padding-inline: .5em;
         padding-bottom: 1em;
-        line-height: 1.5;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
     }
     [data-view="stats"] {
         margin-block: .5em;
@@ -223,9 +224,9 @@ export const css = `
         }
     }
     .word {
-        padding-inline: 1em;
-        padding-block: .5em;
-        margin-inline: .125em;
+        padding-inline: .55em;
+        padding-block: .3em;
+        margin-inline: .1em;
         border-radius: .25em;
         cursor: default;
 
@@ -609,7 +610,8 @@ export const css = `
        with a large gap and no wrap, which overflow horizontally on a phone.
        Shrink the gap and let them wrap so everything stays within the viewport. */
     @media (max-width: 600px) {
-        :host { --gap: 1em; }
+        :host { --gap: 1em; max-width: 100%; }
+        #content-area { max-width: 100%; overflow-x: hidden; }
         header {
             flex-wrap: wrap;
             gap: 0.75em;
@@ -620,7 +622,10 @@ export const css = `
         header .level-badge { font-size: 1.4em; }
         .editor-toolbar { flex-wrap: wrap; gap: 0.5rem; }
         .suggestion-counts { gap: 0.6rem; }
-        [data-view="sentences"] { font-size: 0.95em; }
+        [data-view="sentences"] { font-size: 0.95em; padding-inline: 0; }
+        .word { padding-inline: .4em; }
+        /* The brackets are 3em on desktop; shrink them so a sentence fits. */
+        .sent-start::before, .sent-end::after { font-size: 2em; }
         .suggestion-popup { max-width: calc(100vw - 1rem); }
     }
 `
