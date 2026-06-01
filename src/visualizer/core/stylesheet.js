@@ -107,6 +107,10 @@ export const css = `
         row-gap: 0.25em;
         align-items: center;
         padding-inline: .5em;
+        /* Top padding clears the header separator: the brackets use
+           line-height:0 and extend above the first line, so without this the
+           opening bracket of line 1 touches the separator. */
+        padding-top: 0.8em;
         padding-bottom: 1em;
         line-height: 1.35;
         overflow-wrap: anywhere;
