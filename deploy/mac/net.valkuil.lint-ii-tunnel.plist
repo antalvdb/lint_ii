@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LiNT-II reverse tunnel: home Mac Studio  ->  Strato (85.215.105.128).
+
+  Establishes an OUTBOUND SSH connection and asks Strato to forward its
+  127.0.0.1:8000 back to this Mac's 127.0.0.1:8000 (where the uvicorn server,
+  the net.valkuil.lint-ii job, listens). Strato's nginx then proxies 443 to
+  that loopback port. Because the Mac dials out, no inbound reachability, router
+  port-forward, or dynamic DNS is needed.
+
+  Keepalive: ServerAliveInterval/CountMax make ssh exit within ~90s of a dead
+  link; ExitOnForwardFailure makes it exit immediately if the remote port is
+  still held by a stale forward; launchd's KeepAlive then relaunches it. The
+  remote side binds to 127.0.0.1 (sshd GatewayPorts may stay 'no'); add
+  'ClientAliveInterval 30' to Strato's sshd_config so the server reaps a dead
+  tunnel and frees port 8000 promptly for the reconnect.
+
+  Prereq — a dedicated passphraseless key so the job can connect unattended:
+    ssh-keygen -t ed25519 -N "" -f ~/.ssh/lint-tunnel_ed25519 -C lint-ii-tunnel
+  then authorize it on Strato, restricted to ONLY this reverse tunnel, by
+  adding to antalb@85.215.105.128:~/.ssh/authorized_keys:
+    restrict,port-forwarding,permitlisten="127.0.0.1:8000" ssh-ed25519 AAAA... lint-ii-tunnel
+
+  Install (as the antalb user):
+    cp deploy/mac/net.valkuil.lint-ii-tunnel.plist ~/Library/LaunchAgents/
+    launchctl load -w ~/Library/LaunchAgents/net.valkuil.lint-ii-tunnel.plist
+  Logs: ~/Library/Logs/lint-ii-tunnel.{out,err}.log
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>net.valkuil.lint-ii-tunnel</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/ssh</string>
+        <string>-N</string>
+        <string>-i</string>
+        <string>/Users/antalb/.ssh/lint-tunnel_ed25519</string>
+        <string>-o</string><string>IdentitiesOnly=yes</string>
+        <string>-o</string><string>BatchMode=yes</string>
+        <string>-o</string><string>ExitOnForwardFailure=yes</string>
+        <string>-o</string><string>ServerAliveInterval=30</string>
+        <string>-o</string><string>ServerAliveCountMax=3</string>
+        <string>-o</string><string>StrictHostKeyChecking=accept-new</string>
+        <string>-R</string>
+        <string>127.0.0.1:8000:127.0.0.1:8000</string>
+        <string>antalb@85.215.105.128</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>15</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/antalb/Library/Logs/lint-ii-tunnel.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/antalb/Library/Logs/lint-ii-tunnel.err.log</string>
+</dict>
+</plist>

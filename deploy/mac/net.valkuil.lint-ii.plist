@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LiNT-II demo server (home Mac Studio).
+
+  Runs uvicorn as PLAIN HTTP bound to loopback only (127.0.0.1:8000). It is not
+  exposed on the LAN or the internet; the SSH reverse tunnel (the companion
+  net.valkuil.lint-ii-tunnel job) publishes it on the Strato box, which fronts
+  it with public TLS on 443. No sudo and no local cert are needed.
+
+  Install (as the antalb user, NOT root):
+    cp deploy/mac/net.valkuil.lint-ii.plist ~/Library/LaunchAgents/
+    launchctl load -w ~/Library/LaunchAgents/net.valkuil.lint-ii.plist
+  Reload after editing:
+    launchctl unload ~/Library/LaunchAgents/net.valkuil.lint-ii.plist
+    launchctl load   ~/Library/LaunchAgents/net.valkuil.lint-ii.plist
+  Logs: ~/Library/Logs/lint-ii.{out,err}.log
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>net.valkuil.lint-ii</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/antalb/opt/miniconda3/envs/py311/bin/uvicorn</string>
+        <string>api:app</string>
+        <string>--host</string>
+        <string>127.0.0.1</string>
+        <string>--port</string>
+        <string>8000</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/antalb/Software/lint_ii</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>LINT_MODEL</key>
+        <string>mlx-community/Qwen2.5-32B-Instruct-4bit</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>15</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/antalb/Library/Logs/lint-ii.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/antalb/Library/Logs/lint-ii.err.log</string>
+</dict>
+</plist>
