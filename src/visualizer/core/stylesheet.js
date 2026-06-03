@@ -93,6 +93,37 @@ export const css = `
             background-color: color-mix(in oklch, currentColor 10%, transparent);
         }
     }
+    /* 2x2 legend of the LiNT levels, placed in the header whitespace next to
+       the document scores. Hidden on narrow screens (see media query). */
+    .level-legend {
+        display: grid;
+        grid-template-columns: auto auto;
+        gap: 0.25em 1.2em;
+        align-items: center;
+        margin-right: 2.4em;
+        font-size: 0.8em;
+    }
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 0.4em;
+        white-space: nowrap;
+    }
+    .legend-badge {
+        display: grid;
+        place-items: center;
+        width: 1.4em;
+        height: 1.4em;
+        border-radius: 50%;
+        color: #fff;
+        font-family: monospace;
+        font-size: 0.95em;
+        line-height: 1;
+        user-select: none;
+    }
+    .legend-label {
+        opacity: 0.8;
+    }
 
     #content-area {
         overflow-y: visible;
@@ -676,6 +707,7 @@ export const css = `
         }
         .document-scores { flex-wrap: wrap; gap: 1em; }
         .document-scores .doc-stat { gap: 0.5em; }
+        .level-legend { display: none; } /* full legend lives in the uitleg panel */
         header .level-badge { font-size: 1.4em; }
         .editor-toolbar { flex-wrap: wrap; gap: 0.5rem; }
         .suggestion-counts { gap: 0.6rem; }

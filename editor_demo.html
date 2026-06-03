@@ -259,6 +259,25 @@
             align-items: center;
         }
 
+        #upload-row {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            align-items: center;
+            margin-top: 0.5rem;
+        }
+        #upload-row > span:first-child {
+            font-size: 11px;
+            color: #888;
+            display: flex;
+            align-items: center;
+        }
+        #upload-row .upload-info {
+            font-size: 12px;
+            color: #1a7a4b;
+            font-weight: 600;
+        }
+
         lint-ii-visualizer {
             display: block;
         }
@@ -361,6 +380,12 @@
                 <button class="button secondary" data-example="3">Niveau 3 — Nieuws</button>
                 <button class="button secondary" data-example="4">Niveau 4 — Formeel</button>
             </div>
+            <div id="upload-row">
+                <span>Of upload een document:</span>
+                <button id="upload-btn" class="button secondary" type="button">Bestand kiezen…</button>
+                <input id="file-input" type="file" accept=".docx,.odt,.rtf,.html,.htm,.epub,.md,.markdown,.txt" hidden>
+                <span id="upload-info" class="upload-info" hidden></span>
+            </div>
             <div id="controls">
                 <button id="analyze-btn" class="button">Analyseren</button>
                 <div id="status" class="info">Voer een tekst in en klik op Analyseren.</div>
@@ -375,7 +400,7 @@
         </div>
     </div>
 
-    <script type="module" src="./src/visualizer/lint_ii_visualizer.js?v=24"></script>
+    <script type="module" src="./src/visualizer/lint_ii_visualizer.js?v=25"></script>
     <script type="module">
         const EXAMPLE_TEXTS = {
             1: `Jan gaat elke zaterdag naar de markt. Hij koopt er groenten en fruit. De markt is groot en druk. Er staan veel kraampjes met eten en drinken. Jan houdt van de kaasmarkt. De man achter de kraam geeft hem een stukje om te proeven. De kaas smaakt lekker. Jan koopt een groot stuk. Daarna drinkt hij een kop koffie bij het café op het plein. Hij fietst blij naar huis met zijn tas vol eten.`,
@@ -392,12 +417,59 @@
         const status = document.getElementById('status')
         const viz = document.getElementById('viz')
 
-        document.querySelectorAll('[data-example]').forEach(btn => {
-            btn.addEventListener('click', () => {
+        const fileInput = document.getElementById("file-input")
+        const uploadBtn = document.getElementById("upload-btn")
+        const uploadInfo = document.getElementById("upload-info")
+        // "text" = line-heuristic structure; "markdown" = AST structure from an
+        // uploaded document (set after a successful /convert).
+        let currentFormat = "text"
+
+        function resetToTextInput() {
+            currentFormat = "text"
+            uploadInfo.hidden = true
+        }
+
+        document.querySelectorAll("[data-example]").forEach(btn => {
+            btn.addEventListener("click", () => {
                 const level = btn.dataset.example
                 textInput.value = EXAMPLE_TEXTS[level]
+                resetToTextInput()
                 textInput.focus()
             })
+        })
+
+        // Clearing the textarea reverts to plain-text analysis; editing kept
+        // markdown (e.g. tweaking an uploaded document) stays in markdown mode.
+        textInput.addEventListener("input", () => {
+            if (!textInput.value.trim()) resetToTextInput()
+        })
+
+        uploadBtn.addEventListener("click", () => fileInput.click())
+        fileInput.addEventListener("change", async () => {
+            const file = fileInput.files[0]
+            if (!file) return
+            setStatus("<span class=\"spinner\"></span>Document wordt geconverteerd…", "busy")
+            try {
+                const resp = await fetch("/convert?filename=" + encodeURIComponent(file.name), {
+                    method: "POST",
+                    headers: { "Content-Type": "application/octet-stream" },
+                    body: file,
+                })
+                if (!resp.ok) {
+                    const e = await resp.json().catch(() => ({ detail: resp.statusText }))
+                    throw new Error(e.detail || resp.statusText)
+                }
+                const data = await resp.json()
+                textInput.value = data.markdown
+                currentFormat = data.format || "markdown"
+                uploadInfo.textContent = "📄 " + file.name + " — Markdown"
+                uploadInfo.hidden = false
+                setStatus("Document geladen. Klik op Analyseren.", "info")
+            } catch (err) {
+                setStatus("Conversie mislukt: " + err.message, "error")
+            } finally {
+                fileInput.value = ""
+            }
         })
 
         const progressContainer = document.getElementById('progress-container')
@@ -472,7 +544,7 @@
             fetch('/analyze-lint', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text }),
+                body: JSON.stringify({ text, format: currentFormat }),
                 signal,
             }).then(async r => {
                 if (!r.ok || fullResultsReceived) return
@@ -493,7 +565,7 @@
                 const startResp = await fetch('/analyze', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text }),
+                    body: JSON.stringify({ text, format: currentFormat }),
                     signal,
                 })
                 if (!startResp.ok) {

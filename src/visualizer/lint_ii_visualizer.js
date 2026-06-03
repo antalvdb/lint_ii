@@ -1,4 +1,4 @@
-import { css } from './core/stylesheet.js?v=11'
+import { css } from './core/stylesheet.js?v=12'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
@@ -173,6 +173,7 @@ export class LintIIVisualizer extends HTMLElement {
                     <span style="--index: 0">i</span><span style="--index: 1">N</span><span style="--index: 2">T</span>-<span style="--index: 0">I</span><span style="--index: 2">I</span>
                 </h1>
                 ${this.renderDocumentScores()}
+                ${this.renderLevelLegend()}
                 <button class="view-toggle" data-target-view="${this._currentView === 'sentences' ? 'stats' : 'sentences'}">
                     ${this._currentView === 'sentences' ? 'Σ' : '¶'}
                 </button>
@@ -664,6 +665,17 @@ export class LintIIVisualizer extends HTMLElement {
 
     renderDocumentLevel() {
         return `<div data-level="${this._data.document_difficulty_level}"><span class="level-badge">${this._data.document_difficulty_level}</span></div>`
+    }
+
+    /** 2x2 legend of the four LiNT levels with their colours and a short label. */
+    renderLevelLegend() {
+        const levels = [[1, "Makkelijk"], [2, "Gemiddeld"], [3, "Moeilijk"], [4, "Zeer moeilijk"]]
+        return `<div class="level-legend" aria-label="LiNT-niveaus">
+            ${levels.map(([n, label]) => `<div class="legend-item">
+                <span class="legend-badge" style="background-color: var(--color-level-${n})">${n}</span>
+                <span class="legend-label">${label}</span>
+            </div>`).join("")}
+        </div>`
     }
 
     renderSentence(sentence, idx) {
