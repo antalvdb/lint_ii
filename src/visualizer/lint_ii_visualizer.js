@@ -1,8 +1,8 @@
-import { css } from './core/stylesheet.js?v=8'
+import { css } from './core/stylesheet.js?v=9'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
-import { EditorController } from './core/editor.js?v=9'
+import { EditorController } from './core/editor.js?v=10'
 import { SuggestionPopupController } from './core/suggestion-popup.js?v=2'
 
 
@@ -180,7 +180,7 @@ export class LintIIVisualizer extends HTMLElement {
             ${this.isEditorMode ? this.renderEditorToolbar() : ''}
             <div id="content-area">
                 <div data-view="sentences">
-                    ${this._data.sentences.map((s, idx) => this.renderSentence(s, idx)).join('')}
+                    ${this.renderBlocks()}
                 </div>
                 <div data-view="stats"></div>
             </div>
@@ -636,7 +636,7 @@ export class LintIIVisualizer extends HTMLElement {
         if (this._currentView === 'sentences') {
             contentArea.innerHTML = `
                 <div data-view="sentences">
-                    ${this._data.sentences.map((s, idx) => this.renderSentence(s, idx)).join('')}
+                    ${this.renderBlocks()}
                 </div>
             `
             this.applyWheelHandling()
@@ -690,6 +690,35 @@ export class LintIIVisualizer extends HTMLElement {
                 </span>
             </span>
         </span>`
+    }
+
+    /**
+     * Render the document in block order (H3): prose sentences interleaved
+     * with non-prose headings and blank-line separators. Falls back to the
+     * old sentences-only rendering if the payload carries no block layout.
+     */
+    renderBlocks() {
+        const blocks = this._data.blocks
+        if (!Array.isArray(blocks) || blocks.length === 0) {
+            return this._data.sentences.map((s, idx) => this.renderSentence(s, idx)).join("")
+        }
+        return blocks.map(block => {
+            if (block.type === "sentence") {
+                const idx = block.sentence_index
+                return this.renderSentence(this._data.sentences[idx], idx)
+            }
+            if (block.type === "heading") {
+                return `<div class="doc-heading">${this._escapeHtml(block.text)}</div>`
+            }
+            if (block.type === "blank") {
+                return `<div class="doc-blank"></div>`
+            }
+            return ""
+        }).join("")
+    }
+
+    _escapeHtml(s) {
+        return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[c]))
     }
 
     renderWord(wf, sentenceIdx = null, wordIdx = null) {

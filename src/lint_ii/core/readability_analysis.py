@@ -1,9 +1,10 @@
 from operator import itemgetter
 from functools import cached_property
 from typing import Any, TypedDict, TYPE_CHECKING
+import re
 import statistics
 
-from lint_ii.core.preprocessor import preprocess_text
+from lint_ii.core.preprocessor import preprocess_text, fix_quotemarks
 from lint_ii.core.word_features import WordFeatures
 from lint_ii.core.sentence_analysis import SentenceAnalysis
 from lint_ii.core.lint_scorer import LintScorer
@@ -25,11 +26,51 @@ class DocumentStatsDict(TypedDict):
 
 class ReadabilityAnalysisDict(TypedDict):
     sentences: list[SentenceAnalysisDict]
+    blocks: list[dict[str, Any]]
     document_lint_score: float | None
     document_difficulty_level: int | None
     sentence_count: int
     min_lint_score: float | None
     max_lint_score: float | None
+
+
+# --- Structure-aware segmentation (H3: preserve document structure) ----------
+# A block is treated as prose only if it ends like a sentence (final
+# punctuation, ignoring trailing quotes/brackets). Headings, salutations,
+# labels and captions usually lack sentence-final punctuation; they are kept
+# verbatim as non-prose so they are neither merged into a neighbouring
+# sentence, rewritten, nor split. Blank lines are preserved as separators.
+# Quote chars below are written as escapes to avoid editor quote mangling:
+# "=double quote, '=apostrophe, ”/’=curly closers.
+_SENTENCE_FINAL = (".", "!", "?", "…")
+_CLOSERS = "\u0022\u0027)]\u201d\u2019 "
+
+
+def _ends_like_sentence(line: str) -> bool:
+    stripped = line.rstrip(_CLOSERS)
+    return bool(stripped) and stripped[-1] in _SENTENCE_FINAL
+
+
+def _segment_blocks(text: str) -> list[dict[str, Any]]:
+    """Split raw text into ordered structural blocks without flattening it.
+
+    Each block is one of: {"type": "prose", "text": ...} (fed to spaCy),
+    {"type": "heading", "text": ...} (non-prose, kept verbatim), or
+    {"type": "blank"} (a paragraph separator). Runs of blank lines collapse to
+    a single separator; leading/trailing blanks are dropped.
+    """
+    blocks: list[dict[str, Any]] = []
+    for raw_line in text.split("\n"):
+        if not raw_line.strip():
+            if blocks and blocks[-1]["type"] != "blank":
+                blocks.append({"type": "blank"})
+            continue
+        norm = fix_quotemarks(re.sub(r"[ \t]+", " ", raw_line.strip()))
+        kind = "prose" if _ends_like_sentence(norm) else "heading"
+        blocks.append({"type": kind, "text": norm})
+    while blocks and blocks[-1]["type"] == "blank":
+        blocks.pop()
+    return blocks
 
 
 class ReadabilityAnalysis(LintIIVisualizer):
@@ -119,8 +160,20 @@ class ReadabilityAnalysis(LintIIVisualizer):
     LintScorer : LiNT scoring algorithms
     """
 
-    def __init__(self, sentences: list[SentenceAnalysis]) -> None:
+    def __init__(
+        self,
+        sentences: list[SentenceAnalysis],
+        layout: list[dict[str, Any]] | None = None,
+    ) -> None:
         self.sentences = sentences
+        # Ordered document layout interleaving prose sentences (referenced by
+        # index) with non-prose headings and blank-line separators. Defaults to
+        # the sentences in order when not supplied (e.g. tests constructing the
+        # object directly), keeping old callers working.
+        self.layout = layout if layout is not None else [
+            {"type": "sentence", "sentence_index": i}
+            for i in range(len(sentences))
+        ]
         for sent in self.sentences:
             sent.readability_analysis = self
 
@@ -139,23 +192,44 @@ class ReadabilityAnalysis(LintIIVisualizer):
         (c) Apply sentence-level readability analysis on each sentence in the Doc
         """
         from lint_ii.linguistic_data.nlp_model import NLP_MODEL
-        clean_text = preprocess_text(text)
-        doc = NLP_MODEL(clean_text)
-        raw_sents = list(doc.sents)
-        sentence_final = {'.', '!', '?'}
-        merged = []
-        i = 0
-        while i < len(raw_sents):
-            sent = raw_sents[i]
-            real_toks = [t for t in sent if not t.is_punct and not t.is_space]
-            if len(real_toks) <= 2 and sent[-1].text not in sentence_final and i + 1 < len(raw_sents):
-                merged.append(doc[sent.start:raw_sents[i + 1].end])
-                i += 2
-            else:
-                merged.append(sent)
-                i += 1
-        sentences = [SentenceAnalysis(span) for span in merged]
-        return cls(sentences)
+
+        sentence_final = {".", "!", "?"}
+        sentences: list[SentenceAnalysis] = []
+        layout: list[dict[str, Any]] = []
+
+        for block in _segment_blocks(text):
+            if block["type"] != "prose":
+                # Headings and blank separators are kept verbatim and never
+                # analysed, so they cannot be merged into a sentence, rewritten
+                # or split (H3). Non-prose carries no sentence_index.
+                layout.append(
+                    {"type": "blank"} if block["type"] == "blank"
+                    else {"type": "heading", "text": block["text"]}
+                )
+                continue
+
+            # Prose block: segment into sentences with spaCy. The short-line
+            # merge runs only WITHIN a block, so it can never glue a heading
+            # onto a following sentence the way the old whole-document pass did.
+            doc = NLP_MODEL(block["text"])
+            raw_sents = list(doc.sents)
+            merged = []
+            i = 0
+            while i < len(raw_sents):
+                sent = raw_sents[i]
+                real_toks = [t for t in sent if not t.is_punct and not t.is_space]
+                if len(real_toks) <= 2 and sent[-1].text not in sentence_final and i + 1 < len(raw_sents):
+                    merged.append(doc[sent.start:raw_sents[i + 1].end])
+                    i += 2
+                else:
+                    merged.append(sent)
+                    i += 1
+
+            for span in merged:
+                layout.append({"type": "sentence", "sentence_index": len(sentences)})
+                sentences.append(SentenceAnalysis(span))
+
+        return cls(sentences, layout=layout)
 
     @property
     def word_features(self) -> list[WordFeatures]:
@@ -330,6 +404,7 @@ class ReadabilityAnalysis(LintIIVisualizer):
         doc_stats = self.calculate_document_stats()
         return {
             'sentences': [sent.as_dict() for sent in self.sentences],
+            "blocks": self.layout,
             'document_lint_score': doc_stats['document_lint_score'],
             'document_difficulty_level': doc_stats['document_difficulty_level'],
             'sentence_count': doc_stats['sentence_count'],

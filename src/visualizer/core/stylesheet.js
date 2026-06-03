@@ -115,6 +115,25 @@ export const css = `
         line-height: 1.35;
         overflow-wrap: anywhere;
     }
+    /* Non-prose document structure (H3): headings/labels and blank-line
+       separators. flex-basis:100% forces them onto their own row in the
+       wrapping sentence flow. They are static text, no brackets or badges. */
+    .doc-heading {
+        flex-basis: 100%;
+        width: 100%;
+        font-weight: 600;
+        margin-top: 0.6em;
+        line-height: 1.35;
+        user-select: text;
+    }
+    .doc-heading:first-child {
+        margin-top: 0;
+    }
+    .doc-blank {
+        flex-basis: 100%;
+        width: 100%;
+        height: 0.5em;
+    }
     [data-view="stats"] {
         margin-block: .5em;
     }

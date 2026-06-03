@@ -725,30 +725,53 @@ export class EditorController {
      * Compute the edited text with accepted suggestions applied
      */
     getEditedText() {
-        const sentences = this._data.sentences
-        const result = []
+        const blocks = this._data.blocks
 
-        for (let i = 0; i < sentences.length; i++) {
-            const sentence = sentences[i]
-            const sentenceSuggestions = this.getSuggestionsForSentence(i)
-
-            // Get accepted suggestions for this sentence
-            const acceptedSuggestions = sentenceSuggestions.filter(
-                s => this._suggestionStates.get(s.id) === 'accepted'
-            )
-
-            if (acceptedSuggestions.length === 0) {
-                // No accepted suggestions, use original text
-                result.push(this._reconstructSentenceText(sentence))
-            } else {
-                // Apply the first accepted suggestion's text
-                // (for simplicity, we use the whole sentence replacement)
-                const suggestion = acceptedSuggestions[0]
-                result.push(suggestion.suggested_text)
+        // Fallback (no block layout): original behaviour, sentences space-joined.
+        if (!Array.isArray(blocks) || blocks.length === 0) {
+            const out = []
+            for (let i = 0; i < this._data.sentences.length; i++) {
+                out.push(this._sentenceOutputText(i))
             }
+            return out.join(" ")
         }
 
-        return result.join(' ')
+        // Reconstruct the document preserving structure (H3): headings and
+        // blank lines each on their own line; consecutive sentences (one prose
+        // paragraph) space-joined on a single line.
+        const lines = []
+        let paragraph = []
+        const flush = () => {
+            if (paragraph.length) { lines.push(paragraph.join(" ")); paragraph = [] }
+        }
+        for (const block of blocks) {
+            if (block.type === "sentence") {
+                paragraph.push(this._sentenceOutputText(block.sentence_index))
+            } else if (block.type === "heading") {
+                flush()
+                lines.push(block.text)
+            } else if (block.type === "blank") {
+                flush()
+                lines.push("")
+            }
+        }
+        flush()
+        return lines.join("\n")
+    }
+
+    /**
+     * Output text for one prose sentence: the first accepted suggestion's
+     * rewrite if any, otherwise the reconstructed original.
+     */
+    _sentenceOutputText(idx) {
+        const sentence = this._data.sentences[idx]
+        const accepted = this.getSuggestionsForSentence(idx).filter(
+            s => this._suggestionStates.get(s.id) === "accepted"
+        )
+        if (accepted.length === 0) {
+            return this._reconstructSentenceText(sentence)
+        }
+        return accepted[0].suggested_text
     }
 
     /**
