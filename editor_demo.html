@@ -292,6 +292,7 @@
                 <h1>LiNT-II Leesbaarheidsanalyse</h1>
                 <p>Voer een Nederlandse tekst in om suggesties te krijgen om de tekst leesbaarder te maken.<br>
                 LiNT-II analyseert de tekst en genereert verbeteringsvoorstellen met uitleg.<br>
+                <strong>LiNT-II beperkt zich tot stilistische verbeteringen per zin: de tool verandert niets aan de inhoud of de volgorde van uw tekst en vult geen ontbrekende informatie aan.</strong><br>
                 Deze demo is gebaseerd op <a href="https://lint.hum.uu.nl/home" target="_blank" style="color: inherit;">LiNT</a> en <a href="https://github.com/vanboefer/lint_ii" target="_blank" style="color: inherit;">lint-ii</a>, en maakt gebruik van Qwen2.5-32B-Instruct-4bit.</p>
             </div>
         </div>
@@ -306,6 +307,9 @@
                     <p>LiNT-II geeft een inschatting van hoe gemakkelijk Nederlandse teksten te lezen zijn, en legt uit welke veranderingen mogelijk zijn om de leesbaarheid te verbeteren. Het is gebaseerd op onderzoek en software-ontwikkeling aan de Universiteit Utrecht en de Hogeschool Utrecht.</p>
                     <p>In het onderzoeksproject LIN (Leesbaarheidsindex voor het Nederlands), geleid door Henk Pander Maat met onder meer promotieonderzoek van Suzanne Kleijn, werd ruim tien jaar geleden een grootschalig lezersonderzoek gehouden. De uitkomsten vormden de basis voor LiNT, een automatische tool die een leesbaarheidsscore berekent. Een groep software-ontwikkelaars van de universiteiten van Tilburg, Nijmegen en Utrecht maakten van LiNT een gebruikersvriendelijke softwaretool. Recent ontwikkelde Jenia Kim van de Hogeschool Utrecht LiNT-II, een snelle herimplementatie met nieuwere componenten.</p>
                     <p>De UU en de HU werken nu samen aan een uitbreiding van LiNT-II met generatieve AI. Elke suggestie in deze demo is een combinatie van een taalkundig onderbouwde signalering van een leesbaarheidsknelpunt (door LiNT) en een voorstel voor verbetering (door een LLM). <strong>Deze demo kan offline zijn en kan incorrecte uitvoer genereren.</strong> Vragen over deze demo kunnen gesteld worden aan Antal van den Bosch, <a href="mailto:a.p.j.vandenbosch@uu.nl" style="color: inherit;">a.p.j.vandenbosch@uu.nl</a>.</p>
+
+                    <h3>Wat doet LiNT-II niet?</h3>
+                    <p>LiNT-II is een <strong>stilistische revisietool</strong>: de suggesties verbeteren de formulering per zin. LiNT-II verandert niet de volgorde of de structuur van de tekst, voegt geen ontbrekende inhoud toe, en beoordeelt de tekst niet op toon of volledigheid. Wilt u nadenken over wat er inhoudelijk in een tekst hoort te staan, dan is een revisietool daar niet het geschikte hulpmiddel voor.</p>
 
                     <h3>Wat meet LiNT-II?</h3>
                     <p>LiNT-II schat de leesbaarheid van Nederlandse teksten in op basis van vier kernmaten:</p>
@@ -371,7 +375,7 @@
         </div>
     </div>
 
-    <script type="module" src="./src/visualizer/lint_ii_visualizer.js?v=20"></script>
+    <script type="module" src="./src/visualizer/lint_ii_visualizer.js?v=21"></script>
     <script type="module">
         const EXAMPLE_TEXTS = {
             1: `Jan gaat elke zaterdag naar de markt. Hij koopt er groenten en fruit. De markt is groot en druk. Er staan veel kraampjes met eten en drinken. Jan houdt van de kaasmarkt. De man achter de kraam geeft hem een stukje om te proeven. De kaas smaakt lekker. Jan koopt een groot stuk. Daarna drinkt hij een kop koffie bij het café op het plein. Hij fietst blij naar huis met zijn tas vol eten.`,

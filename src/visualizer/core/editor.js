@@ -160,13 +160,38 @@ export class EditorController {
 
         const regions = this._computeWordDiff(origBare, sugBare, sugTokens)
 
+        // Bare forms the suggestion newly inserts (not aligned to any original
+        // word). A deleted original word whose bare form reappears among these
+        // was only MOVED, not changed, so it must not be marked as affected.
+        // Without this, reordered-but-identical words were highlighted as if
+        // changed even though they stay put in the revision (Henk Pander Maat,
+        // feedback H7).
+        const insertedAvail = new Map()
+        for (const region of regions) {
+            for (const t of region.newTexts) {
+                const b = strip(t)
+                insertedAvail.set(b, (insertedAvail.get(b) || 0) + 1)
+            }
+        }
+
+        const raw = new Set()
         const indices = new Set()
         for (const region of regions) {
             for (const idx of region.origIndices) {
-                indices.add(idx)
+                raw.add(idx)
+                const bare = origBare[idx]
+                const avail = insertedAvail.get(bare) || 0
+                if (avail > 0) {
+                    insertedAvail.set(bare, avail - 1) // moved word — not a change
+                } else {
+                    indices.add(idx)
+                }
             }
         }
-        return indices
+
+        // Safety net: never suppress every word (e.g. a pure reorder), or the
+        // suggestion would have no span to click. Fall back to the raw set.
+        return indices.size > 0 ? indices : raw
     }
 
     /**
