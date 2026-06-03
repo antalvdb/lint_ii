@@ -20,13 +20,16 @@ import os
 import json
 import asyncio
 import logging
+import shutil
+import subprocess
+import tempfile
 import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -89,28 +92,37 @@ async def no_cache_html(request, call_next):
 
 
 class AnalyzeRequest(BaseModel):
-    text: str = Field(..., min_length=10, max_length=10_000)
+    text: str = Field(..., min_length=10, max_length=20_000)
     # None means "one readability suggestion per sentence" — resolved at
     # runtime from the analysed sentence count (see _run_analysis).
     max_suggestions: int | None = Field(default=None, ge=1, le=50)
+    # "text" (line-heuristic structure) or "markdown" (AST structure, e.g. from
+    # a converted .docx — see /convert).
+    format: str = Field(default="text")
 
 
-def _run_lint_only(text: str) -> dict:
+def _build_analysis(text: str, fmt: str):
+    """Build a ReadabilityAnalysis, using Markdown structure when requested."""
     from lint_ii import ReadabilityAnalysis
+    if fmt == "markdown":
+        return ReadabilityAnalysis.from_markdown(text)
+    return ReadabilityAnalysis.from_text(text)
+
+
+def _run_lint_only(text: str, fmt: str = "text") -> dict:
     t0 = time.perf_counter()
-    analysis = ReadabilityAnalysis.from_text(text)
+    analysis = _build_analysis(text, fmt)
     logger.info("TIMING spacy_analysis=%.2fs", time.perf_counter() - t0)
     result = analysis.as_dict()
     result['suggestions'] = {'suggestions': [], 'triggers_found': 0, 'triggers_processed': 0, 'model': ''}
     return result
 
 
-def _run_analysis(text: str, max_suggestions: int | None) -> dict:
-    from lint_ii import ReadabilityAnalysis
+def _run_analysis(text: str, max_suggestions: int | None, fmt: str = "text") -> dict:
     from lint_ii.llm.suggestions import SuggestionEngine
 
     t0 = time.perf_counter()
-    analysis = ReadabilityAnalysis.from_text(text)
+    analysis = _build_analysis(text, fmt)
     t1 = time.perf_counter()
     logger.info("TIMING spacy_analysis=%.2fs", t1 - t0)
 
@@ -146,7 +158,9 @@ def health():
 async def analyze_lint(request: AnalyzeRequest):
     try:
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(_executor, _run_lint_only, request.text)
+        result = await loop.run_in_executor(
+            _executor, _run_lint_only, request.text, request.format
+        )
         return result
     except Exception as e:
         logger.error("Lint analysis failed: %s", e, exc_info=True)
@@ -189,9 +203,9 @@ async def analyze(request: AnalyzeRequest):
     job_id = uuid.uuid4().hex[:12]
     with _jobs_lock:
         _jobs[job_id] = {"status": "pending", "ts": time.time()}
-    fut = _executor.submit(_run_analysis, request.text, request.max_suggestions)
+    fut = _executor.submit(_run_analysis, request.text, request.max_suggestions, request.format)
     fut.add_done_callback(lambda f: _store_job_result(job_id, f))
-    logger.info("Analysis job %s started (%d chars)", job_id, len(request.text))
+    logger.info("Analysis job %s started (%d chars, format=%s)", job_id, len(request.text), request.format)
     return {"job_id": job_id}
 
 
@@ -210,6 +224,80 @@ async def analyze_result(job_id: str):
     if job["status"] == "error":
         return {"status": "error", "error": job["error"]}
     return {"status": "done", "result": job["result"]}
+
+
+# --- Document upload -> Markdown (pandoc) -----------------------------------
+# The client POSTs the raw file bytes as the request body with ?filename=<name>
+# (no multipart dependency). pandoc converts to Markdown, which /analyze then
+# segments via the AST (ReadabilityAnalysis.from_markdown), preserving the
+# document's real structure (headings, lists, quotes).
+def _find_pandoc() -> str | None:
+    """Locate pandoc without relying on PATH (launchd starts with a minimal
+    PATH that omits /opt/homebrew/bin)."""
+    found = shutil.which("pandoc")
+    if found:
+        return found
+    for candidate in ("/opt/homebrew/bin/pandoc", "/usr/local/bin/pandoc", "/usr/bin/pandoc"):
+        if os.path.exists(candidate):
+            return candidate
+    return None
+
+
+_PANDOC = _find_pandoc()
+_UPLOAD_FORMATS = {
+    ".docx": "docx", ".odt": "odt", ".rtf": "rtf",
+    ".html": "html", ".htm": "html", ".epub": "epub",
+    ".md": "markdown", ".markdown": "markdown", ".txt": "markdown",
+}
+_MAX_UPLOAD = 8 * 1024 * 1024  # 8 MB
+
+
+@app.post("/convert")
+async def convert(request: Request, filename: str = ""):
+    """Convert an uploaded document to Markdown via pandoc.
+
+    Returns {"markdown", "format"}; the client feeds the markdown back to
+    /analyze with format="markdown".
+    """
+    if _PANDOC is None:
+        raise HTTPException(status_code=503, detail="Documentconversie is niet beschikbaar op de server.")
+    ext = os.path.splitext(filename)[1].lower()
+    src_format = _UPLOAD_FORMATS.get(ext)
+    if src_format is None:
+        supported = ", ".join(sorted(_UPLOAD_FORMATS))
+        raise HTTPException(status_code=415, detail=f"Niet-ondersteund bestandstype. Ondersteund: {supported}.")
+    data = await request.body()
+    if not data:
+        raise HTTPException(status_code=400, detail="Leeg bestand ontvangen.")
+    if len(data) > _MAX_UPLOAD:
+        raise HTTPException(status_code=413, detail="Bestand te groot (max 8 MB).")
+
+    def _convert() -> str:
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+            tmp.write(data)
+            tmp_path = tmp.name
+        try:
+            proc = subprocess.run(
+                [_PANDOC, "--sandbox", tmp_path, "-f", src_format, "-t", "gfm", "--wrap=none"],
+                capture_output=True, timeout=30,
+            )
+        finally:
+            os.unlink(tmp_path)
+        if proc.returncode != 0:
+            raise RuntimeError(proc.stderr.decode("utf-8", "replace")[:300] or "pandoc-fout")
+        return proc.stdout.decode("utf-8", "replace")
+
+    try:
+        loop = asyncio.get_event_loop()
+        markdown = (await loop.run_in_executor(_executor, _convert)).strip()
+    except Exception as e:
+        logger.error("Conversion failed (%s): %s", filename, e)
+        raise HTTPException(status_code=422, detail=f"Conversie mislukt: {e}")
+
+    if not markdown:
+        raise HTTPException(status_code=422, detail="Geen tekst gevonden in het document.")
+    logger.info("Converted %s (%s) -> %d chars markdown", filename, src_format, len(markdown))
+    return {"markdown": markdown, "format": "markdown"}
 
 
 @app.post("/analyze-stream")
