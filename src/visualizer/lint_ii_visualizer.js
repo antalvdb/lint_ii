@@ -720,7 +720,7 @@ export class LintIIVisualizer extends HTMLElement {
                 return this.renderSentence(this._data.sentences[idx], idx)
             }
             if (block.type === "heading") {
-                const tip = "Dit tekstblok (zoals een kop, aanhef of bijschrift) wordt niet geanalyseerd of aangepast."
+                const tip = "Dit tekstblok wordt niet geanalyseerd of aangepast."
                 return `<div class="doc-heading" data-tip="${tip}" aria-label="${tip}">${this._escapeHtml(block.text)}</div>`
             }
             if (block.type === "blank") {
