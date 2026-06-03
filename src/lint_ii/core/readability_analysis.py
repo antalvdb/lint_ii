@@ -124,6 +124,23 @@ def _markdown_block_text(node: dict) -> str:
     return fix_quotemarks(re.sub(r"\s+", " ", raw)).strip()
 
 
+def _is_bold_only_paragraph(node: dict) -> bool:
+    """True if a paragraph is entirely bold (a single strong span, modulo
+    whitespace). Many documents style a heading with bold rather than a Heading
+    style, so pandoc emits it as a **...** paragraph rather than a # heading;
+    we treat such a paragraph as a heading."""
+    has_strong = False
+    for child in node.get("children", []):
+        ctype = child.get("type")
+        if ctype == "strong":
+            has_strong = True
+        elif ctype == "text" and not child.get("raw", "").strip():
+            continue
+        else:
+            return False
+    return has_strong
+
+
 def _segment_blocks_from_markdown(md_text: str) -> list[dict[str, Any]]:
     """Segment Markdown into the same block list as _segment_blocks, but driven
     by the structure encoded in the Markdown (headings, lists, block quotes)
@@ -148,7 +165,15 @@ def _segment_blocks_from_markdown(md_text: str) -> list[dict[str, Any]]:
         kind = node.get("type")
         if kind == "paragraph":
             text = _markdown_block_text(node)
-            if text:
+            if not text:
+                continue
+            # A paragraph that is entirely bold, or that does not read like a
+            # sentence (e.g. a salutation ending in a comma), is a heading the
+            # source styled visually rather than with a Heading style — exclude
+            # it the way the plain-text path would.
+            if _is_bold_only_paragraph(node) or not _ends_like_sentence(text):
+                blocks.append({"type": "heading", "text": text})
+            else:
                 blocks.append({"type": "prose", "text": text})
         elif kind == "heading":
             text = _markdown_block_text(node)
