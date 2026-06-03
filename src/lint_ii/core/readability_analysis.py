@@ -46,9 +46,23 @@ _SENTENCE_FINAL = (".", "!", "?", "…")
 _CLOSERS = "\u0022\u0027)]\u201d\u2019 "
 
 
+# A URL or e-mail address at the very end is a valid sentence ending that
+# carries no final punctuation. A line ending this way is prose (so a whole
+# paragraph that happens to end in a link is still analysed in full), and the
+# URL itself must be left untouched — never append a period to it.
+_URL_OR_EMAIL_END_RE = re.compile(
+    r"(?:https?://|www\.)\S+$|[\w.+-]+@[\w-]+\.[\w.-]+$",
+    re.IGNORECASE,
+)
+
+
 def _ends_like_sentence(line: str) -> bool:
     stripped = line.rstrip(_CLOSERS)
-    return bool(stripped) and stripped[-1] in _SENTENCE_FINAL
+    if not stripped:
+        return False
+    if stripped[-1] in _SENTENCE_FINAL:
+        return True
+    return bool(_URL_OR_EMAIL_END_RE.search(stripped))
 
 
 def _segment_blocks(text: str) -> list[dict[str, Any]]:

@@ -24,6 +24,7 @@ Belangrijke richtlijnen:
 - Voeg geen nieuwe informatie, voorbeelden, metaforen of vergelijkingen toe
 - Herschrijf niet creatief — pas aan, vervang of splits waar nodig, maar verzin niets nieuws
 - Splits geen zinsdelen die met een nevenschikkend voegwoord ('maar', 'want', 'dus', 'en', 'of') zijn verbonden; zo'n voegwoord drukt een betekenisrelatie uit (tegenstelling, reden, gevolg) die verloren gaat bij opsplitsen. Houd die zinsdelen verbonden en vervang een informeel voegwoord als 'maar' niet door een formeler alternatief als 'echter'
+- Laat URLs, webadressen en e-mailadressen exact ongewijzigd staan; verander er niets aan en verwijder ze niet. Voeg geen leestekens toe die in het origineel niet voorkwamen — eindigt een zin op een URL zonder punt, laat dat dan zo
 - Gebruik gangbaar Nederlands, maar pas het taalniveau aan aan de originele tekst
 - Schrijf uitleg in eenvoudige, korte zinnen — vermijd vakjargon
 - Antwoord altijd in het Nederlands"""

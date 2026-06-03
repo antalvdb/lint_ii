@@ -10,6 +10,7 @@ from enum import Enum
 from typing import Any, TYPE_CHECKING
 import logging
 import os
+import re
 import uuid
 
 from lint_ii.llm.providers import LLMProvider, create_provider
@@ -858,6 +859,29 @@ class SuggestionEngine:
                 return conj
         return None
 
+    # URLs and e-mail addresses are not prose: a rewrite must keep them
+    # byte-for-byte. Trailing sentence punctuation is ignored when comparing so
+    # an original "...phishing" still matches a kept "...phishing".
+    _URL_RE = re.compile(
+        r"(?:https?://|www\.)\S+|[\w.+-]+@[\w-]+\.[\w.-]+",
+        re.IGNORECASE,
+    )
+    _URL_TRAIL_PUNCT = ".,;:!?)]"
+
+    @classmethod
+    def _alters_url(cls, original: str, suggested: str) -> str | None:
+        """Return a URL/e-mail the rewrite failed to keep verbatim, else None.
+
+        Deterministic backstop for the prompt guideline: every URL or e-mail
+        address in the original must appear unchanged in the suggestion. If one
+        is dropped, truncated or reworded, we reject the rewrite.
+        """
+        for match in cls._URL_RE.finditer(original):
+            url = match.group(0).rstrip(cls._URL_TRAIL_PUNCT)
+            if url and url not in suggested:
+                return url
+        return None
+
     @staticmethod
     def _in_higher_freq_band(candidate_freq: float, original_freq: float) -> bool:
         """True if candidate sits in a higher Zipf frequency band than original.
@@ -970,6 +994,14 @@ class SuggestionEngine:
                 logger.info(
                     "Consolidated rewrite discarded: broke ', %s ' clause join for sentence %d",
                     broken_conj, job.sentence_index,
+                )
+                return None
+
+            altered_url = self._alters_url(sentence_text, suggested_text)
+            if altered_url:
+                logger.info(
+                    "Consolidated rewrite discarded: URL not preserved (%s) for sentence %d",
+                    altered_url, job.sentence_index,
                 )
                 return None
 
@@ -1116,6 +1148,14 @@ class SuggestionEngine:
                 logger.info(
                     "Trigger suggestion discarded: %s rewrite broke ', %s ' clause join",
                     trigger.type.value, broken_conj,
+                )
+                return None
+
+            altered_url = self._alters_url(trigger.sentence_text or "", suggested_text)
+            if altered_url:
+                logger.info(
+                    "Trigger suggestion discarded: %s rewrite did not preserve URL (%s)",
+                    trigger.type.value, altered_url,
                 )
                 return None
 
