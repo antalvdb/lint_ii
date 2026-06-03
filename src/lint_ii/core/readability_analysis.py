@@ -4,7 +4,7 @@ from typing import Any, TypedDict, TYPE_CHECKING
 import re
 import statistics
 
-from lint_ii.core.preprocessor import preprocess_text, fix_quotemarks
+from lint_ii.core.preprocessor import preprocess_text, fix_quotemarks, extract_text_from_node
 from lint_ii.core.word_features import WordFeatures
 from lint_ii.core.sentence_analysis import SentenceAnalysis
 from lint_ii.core.lint_scorer import LintScorer
@@ -118,6 +118,58 @@ def _is_unscoreable_fragment(text: str) -> bool:
     return len(words) <= 3
 
 
+def _markdown_block_text(node: dict) -> str:
+    """Flatten a Markdown AST node to clean inline text."""
+    raw = extract_text_from_node(node)
+    return fix_quotemarks(re.sub(r"\s+", " ", raw)).strip()
+
+
+def _segment_blocks_from_markdown(md_text: str) -> list[dict[str, Any]]:
+    """Segment Markdown into the same block list as _segment_blocks, but driven
+    by the structure encoded in the Markdown (headings, lists, block quotes)
+    rather than line heuristics. Intended for input produced by converting a
+    source document (e.g. a .docx via pandoc), where the real structure exists.
+
+    Paragraphs become prose (analysed); headings, list items and block quotes
+    are kept verbatim as excluded non-prose blocks. Code blocks, horizontal
+    rules and raw HTML are dropped.
+    """
+    import mistune
+    ast = mistune.create_markdown(renderer="ast")(md_text)
+
+    blocks: list[dict[str, Any]] = []
+
+    def add_blank() -> None:
+        if blocks and blocks[-1]["type"] != "blank":
+            blocks.append({"type": "blank"})
+
+    def add_excluded(text: str) -> None:
+        if text:
+            blocks.append({"type": "heading", "text": text})
+
+    for node in ast:
+        kind = node.get("type")
+        if kind == "paragraph":
+            text = _markdown_block_text(node)
+            if text:
+                blocks.append({"type": "prose", "text": text})
+        elif kind == "heading":
+            add_excluded(_markdown_block_text(node))
+        elif kind == "list":
+            for item in node.get("children", []):
+                add_excluded(_markdown_block_text(item))
+            add_blank()
+        elif kind == "block_quote":
+            add_excluded(_markdown_block_text(node))
+        elif kind == "blank_line":
+            add_blank()
+        # block_code, thematic_break, block_html, etc. are ignored.
+
+    while blocks and blocks[-1]["type"] == "blank":
+        blocks.pop()
+    return blocks
+
+
 class ReadabilityAnalysis(LintIIVisualizer):
     """
     Document-level readability analysis for Dutch texts using the LiNT-II formula.
@@ -226,23 +278,31 @@ class ReadabilityAnalysis(LintIIVisualizer):
         return f"{self.__class__.__name__}({[repr(s.doc) for s in self.sentences]})"
 
     @classmethod
-    def from_text(
-        cls,
-        text: str,
-    ) -> 'ReadabilityAnalysis':
-        """
-        Create analysis from text string:
-        (a) Load spaCy model
-        (b) Pre-process text (clean-up) and create spaCy Doc object
-        (c) Apply sentence-level readability analysis on each sentence in the Doc
-        """
+    def from_text(cls, text: str) -> 'ReadabilityAnalysis':
+        """Create analysis from plain text, detecting structure with line
+        heuristics (headings, blank lines) — see _segment_blocks."""
+        return cls._from_blocks(_segment_blocks(text))
+
+    @classmethod
+    def from_markdown(cls, md_text: str) -> 'ReadabilityAnalysis':
+        """Create analysis from Markdown, using the structure encoded in the
+        Markdown (headings, lists, block quotes) instead of line heuristics.
+        Intended for input produced by converting a source document such as a
+        .docx via pandoc — see _segment_blocks_from_markdown."""
+        return cls._from_blocks(_segment_blocks_from_markdown(md_text))
+
+    @classmethod
+    def _from_blocks(cls, blocks: list[dict[str, Any]]) -> 'ReadabilityAnalysis':
+        """Build the analysis from an ordered block list (prose / heading /
+        blank). Prose blocks are sentence-segmented with spaCy; everything else
+        is preserved verbatim as excluded layout."""
         from lint_ii.linguistic_data.nlp_model import NLP_MODEL
 
         sentence_final = {".", "!", "?"}
         sentences: list[SentenceAnalysis] = []
         layout: list[dict[str, Any]] = []
 
-        for block in _segment_blocks(text):
+        for block in blocks:
             if block["type"] != "prose":
                 # Headings and blank separators are kept verbatim and never
                 # analysed, so they cannot be merged into a sentence, rewritten
