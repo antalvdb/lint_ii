@@ -54,6 +54,10 @@ _URL_OR_EMAIL_END_RE = re.compile(
     r"(?:https?://|www\.)\S+$|[\w.+-]+@[\w-]+\.[\w.-]+$",
     re.IGNORECASE,
 )
+# An internal sentence boundary (final punctuation followed by whitespace) means
+# the line already contains at least one complete sentence, so it is prose even
+# if it ends on a colon — e.g. a line that introduces a list or a link.
+_INTERNAL_SENTENCE_RE = re.compile(r"[.!?…]\s")
 
 
 def _ends_like_sentence(line: str) -> bool:
@@ -62,7 +66,13 @@ def _ends_like_sentence(line: str) -> bool:
         return False
     if stripped[-1] in _SENTENCE_FINAL:
         return True
-    return bool(_URL_OR_EMAIL_END_RE.search(stripped))
+    if _INTERNAL_SENTENCE_RE.search(line):
+        return True
+    # A sentence whose final token is a URL/e-mail (no closing period) is prose
+    # only when there is real text before the link; a bare URL on its own line
+    # is not prose and stays excluded.
+    match = _URL_OR_EMAIL_END_RE.search(stripped)
+    return bool(match) and bool(stripped[: match.start()].strip())
 
 
 def _segment_blocks(text: str) -> list[dict[str, Any]]:
@@ -85,6 +95,27 @@ def _segment_blocks(text: str) -> list[dict[str, Any]]:
     while blocks and blocks[-1]["type"] == "blank":
         blocks.pop()
     return blocks
+
+
+# Runs of letters (no digits/underscore) — used to tell a real (if unscoreable)
+# sentence from a fragment.
+_WORD_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
+
+
+def _is_unscoreable_fragment(text: str) -> bool:
+    """Whether an unscoreable line is a non-prose fragment rather than body text.
+
+    Used only for sentences the scorer returns no level for. Such a line is a
+    fragment when it has no alphabetic word (a bare number), ends in a colon (a
+    label or list/intro), or is very short (<= 3 words). Longer unscoreable
+    prose (e.g. a plain sentence the LiNT formula cannot score) is kept.
+    """
+    words = _WORD_RE.findall(text)
+    if not words:
+        return True
+    if text.rstrip().endswith(":"):
+        return True
+    return len(words) <= 3
 
 
 class ReadabilityAnalysis(LintIIVisualizer):
@@ -243,7 +274,34 @@ class ReadabilityAnalysis(LintIIVisualizer):
                 layout.append({"type": "sentence", "sentence_index": len(sentences)})
                 sentences.append(SentenceAnalysis(span))
 
-        return cls(sentences, layout=layout)
+        analysis = cls(sentences, layout=layout)
+        analysis._exclude_unscoreable_fragments()
+        return analysis
+
+    def _exclude_unscoreable_fragments(self) -> None:
+        """Reclassify unscoreable prose fragments as excluded non-prose blocks.
+
+        A prose sentence the scorer cannot level AND that looks like a fragment
+        (see ``_is_unscoreable_fragment`` — bare number, colon label, or <= 3
+        words) is moved out of ``sentences`` into the layout as a non-prose
+        block, so it renders as excluded text instead of a broken grey "?"
+        sentence, gets no suggestions, and does not affect document scores.
+        Longer unscoreable prose is left as a normal sentence.
+        """
+        new_layout: list[dict[str, Any]] = []
+        new_sentences: list[SentenceAnalysis] = []
+        for entry in self.layout:
+            if entry.get("type") != "sentence":
+                new_layout.append(entry)
+                continue
+            sent = self.sentences[entry["sentence_index"]]
+            if sent.lint.level is None and _is_unscoreable_fragment(sent.doc.text):
+                new_layout.append({"type": "heading", "text": sent.doc.text})
+            else:
+                new_layout.append({"type": "sentence", "sentence_index": len(new_sentences)})
+                new_sentences.append(sent)
+        self.layout = new_layout
+        self.sentences = new_sentences
 
     @property
     def word_features(self) -> list[WordFeatures]:
