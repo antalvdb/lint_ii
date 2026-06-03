@@ -130,9 +130,10 @@ def _segment_blocks_from_markdown(md_text: str) -> list[dict[str, Any]]:
     rather than line heuristics. Intended for input produced by converting a
     source document (e.g. a .docx via pandoc), where the real structure exists.
 
-    Paragraphs become prose (analysed); headings, list items and block quotes
-    are kept verbatim as excluded non-prose blocks. Code blocks, horizontal
-    rules and raw HTML are dropped.
+    Paragraphs and list items become prose (analysed; list items keep their
+    bullet/number marker). Headings and block quotes are kept verbatim as
+    excluded non-prose blocks. Code blocks, horizontal rules and raw HTML are
+    dropped.
     """
     import mistune
     ast = mistune.create_markdown(renderer="ast")(md_text)
@@ -143,10 +144,6 @@ def _segment_blocks_from_markdown(md_text: str) -> list[dict[str, Any]]:
         if blocks and blocks[-1]["type"] != "blank":
             blocks.append({"type": "blank"})
 
-    def add_excluded(text: str) -> None:
-        if text:
-            blocks.append({"type": "heading", "text": text})
-
     for node in ast:
         kind = node.get("type")
         if kind == "paragraph":
@@ -154,13 +151,23 @@ def _segment_blocks_from_markdown(md_text: str) -> list[dict[str, Any]]:
             if text:
                 blocks.append({"type": "prose", "text": text})
         elif kind == "heading":
-            add_excluded(_markdown_block_text(node))
+            text = _markdown_block_text(node)
+            if text:
+                blocks.append({"type": "heading", "text": text})
         elif kind == "list":
-            for item in node.get("children", []):
-                add_excluded(_markdown_block_text(item))
+            ordered = node.get("attrs", {}).get("ordered", False)
+            for number, item in enumerate(node.get("children", []), start=1):
+                text = _markdown_block_text(item)
+                if text:
+                    blocks.append({
+                        "type": "list_item", "text": text,
+                        "ordered": ordered, "number": number,
+                    })
             add_blank()
         elif kind == "block_quote":
-            add_excluded(_markdown_block_text(node))
+            text = _markdown_block_text(node)
+            if text:
+                blocks.append({"type": "quote", "text": text})
         elif kind == "blank_line":
             add_blank()
         # block_code, thematic_break, block_html, etc. are ignored.
@@ -293,30 +300,21 @@ class ReadabilityAnalysis(LintIIVisualizer):
 
     @classmethod
     def _from_blocks(cls, blocks: list[dict[str, Any]]) -> 'ReadabilityAnalysis':
-        """Build the analysis from an ordered block list (prose / heading /
-        blank). Prose blocks are sentence-segmented with spaCy; everything else
-        is preserved verbatim as excluded layout."""
+        """Build the analysis from an ordered block list. Prose blocks and list
+        items are sentence-segmented with spaCy (list items keep their marker);
+        headings, block quotes and blanks are preserved verbatim as excluded
+        layout."""
         from lint_ii.linguistic_data.nlp_model import NLP_MODEL
 
         sentence_final = {".", "!", "?"}
         sentences: list[SentenceAnalysis] = []
         layout: list[dict[str, Any]] = []
 
-        for block in blocks:
-            if block["type"] != "prose":
-                # Headings and blank separators are kept verbatim and never
-                # analysed, so they cannot be merged into a sentence, rewritten
-                # or split (H3). Non-prose carries no sentence_index.
-                layout.append(
-                    {"type": "blank"} if block["type"] == "blank"
-                    else {"type": "heading", "text": block["text"]}
-                )
-                continue
-
-            # Prose block: segment into sentences with spaCy. The short-line
-            # merge runs only WITHIN a block, so it can never glue a heading
-            # onto a following sentence the way the old whole-document pass did.
-            doc = NLP_MODEL(block["text"])
+        def segment(text: str) -> list[int]:
+            """spaCy-segment a block, append its sentences, return their indices.
+            The short-line merge runs only WITHIN the block, so it can never glue
+            a heading onto a following sentence the way a whole-document pass would."""
+            doc = NLP_MODEL(text)
             raw_sents = list(doc.sents)
             merged = []
             i = 0
@@ -329,10 +327,33 @@ class ReadabilityAnalysis(LintIIVisualizer):
                 else:
                     merged.append(sent)
                     i += 1
-
+            indices = []
             for span in merged:
-                layout.append({"type": "sentence", "sentence_index": len(sentences)})
+                indices.append(len(sentences))
                 sentences.append(SentenceAnalysis(span))
+            return indices
+
+        for block in blocks:
+            bt = block["type"]
+            if bt == "prose":
+                for idx in segment(block["text"]):
+                    layout.append({"type": "sentence", "sentence_index": idx})
+            elif bt == "list_item":
+                indices = segment(block["text"])
+                if indices:
+                    layout.append({
+                        "type": "list_item",
+                        "ordered": block.get("ordered", False),
+                        "number": block.get("number", 1),
+                        "sentence_indices": indices,
+                    })
+            elif bt == "blank":
+                layout.append({"type": "blank"})
+            elif bt == "quote":
+                # Quotes are someone else's words — kept verbatim, not analysed.
+                layout.append({"type": "quote", "text": block["text"]})
+            else:  # heading and any other excluded text block
+                layout.append({"type": "heading", "text": block["text"]})
 
         analysis = cls(sentences, layout=layout)
         analysis._exclude_unscoreable_fragments()
@@ -348,18 +369,41 @@ class ReadabilityAnalysis(LintIIVisualizer):
         sentence, gets no suggestions, and does not affect document scores.
         Longer unscoreable prose is left as a normal sentence.
         """
-        new_layout: list[dict[str, Any]] = []
+        drop = {
+            i for i, sent in enumerate(self.sentences)
+            if sent.lint.level is None and _is_unscoreable_fragment(sent.doc.text)
+        }
+        if not drop:
+            return
+
+        # Remap kept sentences to their new indices.
+        remap: dict[int, int] = {}
         new_sentences: list[SentenceAnalysis] = []
-        for entry in self.layout:
-            if entry.get("type") != "sentence":
-                new_layout.append(entry)
-                continue
-            sent = self.sentences[entry["sentence_index"]]
-            if sent.lint.level is None and _is_unscoreable_fragment(sent.doc.text):
-                new_layout.append({"type": "heading", "text": sent.doc.text})
-            else:
-                new_layout.append({"type": "sentence", "sentence_index": len(new_sentences)})
+        for i, sent in enumerate(self.sentences):
+            if i not in drop:
+                remap[i] = len(new_sentences)
                 new_sentences.append(sent)
+
+        new_layout: list[dict[str, Any]] = []
+        for entry in self.layout:
+            t = entry.get("type")
+            if t == "sentence":
+                i = entry["sentence_index"]
+                if i in drop:
+                    new_layout.append({"type": "heading", "text": self.sentences[i].doc.text})
+                else:
+                    new_layout.append({"type": "sentence", "sentence_index": remap[i]})
+            elif t == "list_item":
+                kept = [remap[i] for i in entry["sentence_indices"] if i not in drop]
+                if kept:
+                    new_entry = dict(entry)
+                    new_entry["sentence_indices"] = kept
+                    new_layout.append(new_entry)
+                else:
+                    text = " ".join(self.sentences[i].doc.text for i in entry["sentence_indices"])
+                    new_layout.append({"type": "heading", "text": text})
+            else:
+                new_layout.append(entry)
         self.layout = new_layout
         self.sentences = new_sentences
 

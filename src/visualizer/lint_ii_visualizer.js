@@ -1,8 +1,8 @@
-import { css } from './core/stylesheet.js?v=12'
+import { css } from './core/stylesheet.js?v=13'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
-import { EditorController } from './core/editor.js?v=10'
+import { EditorController } from './core/editor.js?v=11'
 import { SuggestionPopupController } from './core/suggestion-popup.js?v=2'
 
 
@@ -714,14 +714,23 @@ export class LintIIVisualizer extends HTMLElement {
         if (!Array.isArray(blocks) || blocks.length === 0) {
             return this._data.sentences.map((s, idx) => this.renderSentence(s, idx)).join("")
         }
+        const excludedTip = "Dit tekstblok wordt niet geanalyseerd of aangepast."
         return blocks.map(block => {
             if (block.type === "sentence") {
                 const idx = block.sentence_index
                 return this.renderSentence(this._data.sentences[idx], idx)
             }
+            if (block.type === "list_item") {
+                const marker = block.ordered ? `${block.number}.` : "•"
+                const inner = block.sentence_indices
+                    .map(i => this.renderSentence(this._data.sentences[i], i)).join("")
+                return `<div class="doc-list-item"><span class="list-marker">${this._escapeHtml(marker)}</span>${inner}</div>`
+            }
+            if (block.type === "quote") {
+                return `<div class="doc-quote" data-tip="${excludedTip}" aria-label="${excludedTip}">${this._escapeHtml(block.text)}</div>`
+            }
             if (block.type === "heading") {
-                const tip = "Dit tekstblok wordt niet geanalyseerd of aangepast."
-                return `<div class="doc-heading" data-tip="${tip}" aria-label="${tip}">${this._escapeHtml(block.text)}</div>`
+                return `<div class="doc-heading" data-tip="${excludedTip}" aria-label="${excludedTip}">${this._escapeHtml(block.text)}</div>`
             }
             if (block.type === "blank") {
                 return `<div class="doc-blank"></div>`

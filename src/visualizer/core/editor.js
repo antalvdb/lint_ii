@@ -747,6 +747,15 @@ export class EditorController {
         for (const block of blocks) {
             if (block.type === "sentence") {
                 paragraph.push(this._sentenceOutputText(block.sentence_index))
+            } else if (block.type === "list_item") {
+                flush()
+                const marker = block.ordered ? `${block.number}. ` : "- "
+                const body = block.sentence_indices
+                    .map(i => this._sentenceOutputText(i)).join(" ")
+                lines.push(marker + body)
+            } else if (block.type === "quote") {
+                flush()
+                lines.push("> " + block.text)
             } else if (block.type === "heading") {
                 flush()
                 lines.push(block.text)

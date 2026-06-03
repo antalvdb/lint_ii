@@ -164,7 +164,8 @@ export const css = `
     }
     /* Custom hover tooltip for excluded blocks: the native title attribute does
        not render inside this shadow DOM, so we draw it from data-tip. */
-    .doc-heading::after {
+    .doc-heading::after,
+    .doc-quote::after {
         content: attr(data-tip);
         position: absolute;
         left: 0;
@@ -177,6 +178,7 @@ export const css = `
         background: #333;
         color: #fff;
         font-weight: 400;
+        font-style: normal;
         font-size: 0.78em;
         line-height: 1.3;
         white-space: normal;
@@ -186,7 +188,8 @@ export const css = `
         pointer-events: none;
         transition: opacity 0.12s ease 0.1s, visibility 0s linear 0.22s;
     }
-    .doc-heading:hover::after {
+    .doc-heading:hover::after,
+    .doc-quote:hover::after {
         opacity: 1;
         visibility: visible;
         transition: opacity 0.12s ease 0.1s;
@@ -195,6 +198,35 @@ export const css = `
         flex-basis: 100%;
         width: 100%;
         height: 0.5em;
+    }
+    /* Analysed list items (H3): keep the bullet/number marker and indent the
+       item; the sentence(s) inside render with their own brackets + level badge. */
+    .doc-list-item {
+        flex-basis: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0 0.3em;
+        padding-left: 1.6em;
+        margin-block: 0.1em;
+    }
+    .list-marker {
+        font-weight: 600;
+        opacity: 0.8;
+        user-select: none;
+    }
+    /* Block quotes: preserved verbatim (excluded, not analysed), quote-styled. */
+    .doc-quote {
+        position: relative;
+        flex-basis: 100%;
+        width: 100%;
+        padding-left: 0.8em;
+        margin-left: 0.2em;
+        border-left: 3px solid color-mix(in oklch, currentColor 30%, transparent);
+        font-style: italic;
+        line-height: 1.35;
+        user-select: text;
+        cursor: help;
     }
     [data-view="stats"] {
         margin-block: .5em;
