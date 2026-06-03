@@ -48,9 +48,11 @@ and the API hardcodes no host/port, so it works unchanged behind the proxy.
 | Mac | uvicorn on `127.0.0.1:8000` (launchd) | `mac/net.valkuil.lint-ii.plist` |
 | Mac | SSH reverse tunnel to Strato (launchd) | `mac/net.valkuil.lint-ii-tunnel.plist` |
 
-Both Mac jobs are launchd agents with `KeepAlive` + `RunAtLoad`, so the demo
-**comes back by itself after a reboot** and restarts if a process dies. (This
-replaces the old manual `sudo … uvicorn …` start command.)
+Both Mac jobs are launchd agents with `KeepAlive` + `RunAtLoad`, so each
+restarts if it dies, and both start automatically when the `antalb` user's
+desktop session begins. This replaces the old manual `sudo … uvicorn …` start
+command. See **Reboot behaviour (FileVault)** below for what "automatic" means
+on this machine.
 
 ## One-time setup
 
@@ -122,6 +124,35 @@ Lower the `lint-ii.valkuil.net` TTL ahead of time if you can, then point
 `lint-ii.valkuil.net A → 85.215.105.128`. Verify from a network that previously
 failed (the hotspot): open `https://lint-ii.valkuil.net/editor_demo.html` and
 run an analysis.
+
+### 8. Retire the old direct-to-home server
+The pre-tunnel setup ran uvicorn manually with TLS on `0.0.0.0:8443` (started via
+`sudo`). Once the new path is confirmed, stop it so there is a single server and
+no chance of two model inferences competing for the 32 GB of RAM. On the Mac
+(it is root-owned, so `sudo`); the match string hits only the old server because
+the new one binds `127.0.0.1`, not `0.0.0.0`:
+```
+sudo pkill -f "uvicorn api:app --host 0.0.0.0"
+```
+
+## Reboot behaviour (FileVault)
+
+This Mac has **FileVault on**, which is mutually exclusive with macOS automatic
+login — so the demo cannot recover from a cold boot with zero interaction. What
+*does* happen:
+
+- After a reboot the Mac stops at the FileVault unlock screen. Entering the
+  `antalb` password there both unlocks the disk **and logs that user into the
+  desktop session**, which is what starts the two LaunchAgents (uvicorn +
+  tunnel). So: **the demo comes back as soon as someone enters the password
+  once after a reboot** — it does not stay down waiting for a separate login.
+- It will *not* come back while the machine sits at the unlock screen
+  untouched (e.g. after an unattended power loss). That is the price of
+  FileVault and is accepted here.
+- For a **planned remote reboot**, use `sudo fdesetup authrestart`: it takes the
+  unlock credentials now and reboots straight past the FileVault screen into the
+  logged-in session, so the agents start without anyone at the keyboard. (Only
+  works for that one planned restart, not unexpected ones.)
 
 ## Operations
 
