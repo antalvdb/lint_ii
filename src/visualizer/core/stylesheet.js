@@ -104,7 +104,7 @@ export const css = `
     [data-view="sentences"] {
         display: flex;
         flex-wrap: wrap;
-        row-gap: 0.25em;
+        row-gap: 0.4em;
         align-items: center;
         padding-inline: .5em;
         /* Top padding clears the header separator: the brackets use
@@ -125,6 +125,9 @@ export const css = `
         margin-top: 0.6em;
         line-height: 1.35;
         user-select: text;
+        /* cursor:help + a title attribute signal that the block is excluded
+           from analysis (see renderBlocks). */
+        cursor: help;
     }
     .doc-heading:first-child {
         margin-top: 0;

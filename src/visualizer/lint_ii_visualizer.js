@@ -1,4 +1,4 @@
-import { css } from './core/stylesheet.js?v=9'
+import { css } from './core/stylesheet.js?v=10'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
@@ -708,7 +708,8 @@ export class LintIIVisualizer extends HTMLElement {
                 return this.renderSentence(this._data.sentences[idx], idx)
             }
             if (block.type === "heading") {
-                return `<div class="doc-heading">${this._escapeHtml(block.text)}</div>`
+                const tip = "Dit tekstblok (zoals een kop, aanhef of bijschrift) wordt niet geanalyseerd of aangepast."
+                return `<div class="doc-heading" title="${tip}">${this._escapeHtml(block.text)}</div>`
             }
             if (block.type === "blank") {
                 return `<div class="doc-blank"></div>`
