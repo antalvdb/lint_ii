@@ -119,18 +119,46 @@ export const css = `
        separators. flex-basis:100% forces them onto their own row in the
        wrapping sentence flow. They are static text, no brackets or badges. */
     .doc-heading {
+        position: relative;
         flex-basis: 100%;
         width: 100%;
         font-weight: 600;
         margin-top: 0.6em;
         line-height: 1.35;
         user-select: text;
-        /* cursor:help + a title attribute signal that the block is excluded
-           from analysis (see renderBlocks). */
         cursor: help;
     }
     .doc-heading:first-child {
         margin-top: 0;
+    }
+    /* Custom hover tooltip for excluded blocks: the native title attribute does
+       not render inside this shadow DOM, so we draw it from data-tip. */
+    .doc-heading::after {
+        content: attr(data-tip);
+        position: absolute;
+        left: 0;
+        top: calc(100% + 2px);
+        z-index: 20;
+        width: max-content;
+        max-width: 280px;
+        padding: 0.4em 0.6em;
+        border-radius: 4px;
+        background: #333;
+        color: #fff;
+        font-weight: 400;
+        font-size: 0.78em;
+        line-height: 1.3;
+        white-space: normal;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition: opacity 0.12s ease 0.1s, visibility 0s linear 0.22s;
+    }
+    .doc-heading:hover::after {
+        opacity: 1;
+        visibility: visible;
+        transition: opacity 0.12s ease 0.1s;
     }
     .doc-blank {
         flex-basis: 100%;
