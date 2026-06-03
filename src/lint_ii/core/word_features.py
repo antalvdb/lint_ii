@@ -635,8 +635,20 @@ class WordFeatures:
             and token.nbor(1).is_punct
             and not token.whitespace_
         ):
-            token = token.nbor(1)
-            punctuation['trailing'] += token.text
+            nxt = token.nbor(1)
+            # An opening bracket glued to a following content word opens a
+            # parenthetical that belongs to that word (which claims it as its
+            # leading punctuation). Don't also claim it here as trailing, or it
+            # gets duplicated: "testuitslag(en)" -> "testuitslag(" + "(en)".
+            if (
+                nxt.text in ("(", "[", "{")
+                and not nxt.whitespace_
+                and nxt.i < len(nxt.doc) - 1
+                and not nxt.nbor(1).is_punct
+            ):
+                break
+            token = nxt
+            punctuation["trailing"] += token.text
 
         return punctuation if punctuation else None
 
