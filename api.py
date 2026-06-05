@@ -41,6 +41,11 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 _executor = ThreadPoolExecutor(max_workers=4)
+# Heavy LLM analyses run one at a time. The MLX 32B model is a single shared
+# resource on a 32 GB machine; running several /analyze jobs concurrently
+# thrashes memory and wedges the server, so they queue on a single worker while
+# the fast /analyze-lint and /convert paths stay on the 4-worker pool.
+_analysis_executor = ThreadPoolExecutor(max_workers=1)
 _provider = None
 
 LINT_PROVIDER = os.environ.get("LINT_PROVIDER", "mlx")
@@ -203,7 +208,7 @@ async def analyze(request: AnalyzeRequest):
     job_id = uuid.uuid4().hex[:12]
     with _jobs_lock:
         _jobs[job_id] = {"status": "pending", "ts": time.time()}
-    fut = _executor.submit(_run_analysis, request.text, request.max_suggestions, request.format)
+    fut = _analysis_executor.submit(_run_analysis, request.text, request.max_suggestions, request.format)
     fut.add_done_callback(lambda f: _store_job_result(job_id, f))
     logger.info("Analysis job %s started (%d chars, format=%s)", job_id, len(request.text), request.format)
     return {"job_id": job_id}
