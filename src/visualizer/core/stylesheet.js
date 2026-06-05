@@ -97,7 +97,10 @@ export const css = `
        the document scores. Hidden on narrow screens (see media query). */
     .level-legend {
         display: grid;
-        grid-template-columns: auto auto;
+        /* Fill by column so the order is 1/2 in the left column and 3/4 in the
+           right column (2 under 1, 3 to the right of 1). */
+        grid-template-rows: auto auto;
+        grid-auto-flow: column;
         gap: 0.25em 1.2em;
         align-items: center;
         margin-right: 2.4em;
