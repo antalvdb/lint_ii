@@ -515,6 +515,7 @@
         }
 
         let _currentAbortController = null
+        let _currentJobId = null
 
         analyzeBtn.addEventListener('click', async () => {
             const text = textInput.value.trim()
@@ -525,6 +526,12 @@
 
             if (_currentAbortController) {
                 _currentAbortController.abort()
+            }
+            if (_currentJobId) {
+                // Aborting the fetch only stops our polling — tell the server to
+                // drop the previous job so it stops occupying the LLM worker.
+                fetch(`/analyze-cancel/${_currentJobId}`, { method: 'POST' }).catch(() => {})
+                _currentJobId = null
             }
             _currentAbortController = new AbortController()
             const signal = _currentAbortController.signal
@@ -569,6 +576,7 @@
                     throw new Error(err.detail || startResp.statusText)
                 }
                 const { job_id } = await startResp.json()
+                _currentJobId = job_id
 
                 let data = null
                 while (true) {
@@ -586,6 +594,8 @@
                     break
                 }
 
+                _currentJobId = null
+
                 stopProgress(true)
                 fullResultsReceived = true
                 const count = data.suggestions?.suggestions?.length ?? 0
@@ -601,6 +611,7 @@
                 )
             } catch (err) {
                 if (err.name === 'AbortError') return
+                _currentJobId = null
                 stopProgress(false)
                 viz.hidden = false
                 const msg = (err instanceof TypeError)
@@ -611,6 +622,10 @@
             } finally {
                 setLoading(false)
             }
+        })
+
+        window.addEventListener('pagehide', () => {
+            if (_currentJobId) navigator.sendBeacon(`/analyze-cancel/${_currentJobId}`)
         })
     </script>
 </body>

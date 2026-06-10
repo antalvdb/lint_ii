@@ -17,7 +17,6 @@ Usage (Linux/Ollama):
 
 import sys
 import os
-import json
 import asyncio
 import logging
 import shutil
@@ -31,7 +30,6 @@ from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -123,6 +121,12 @@ def _run_lint_only(text: str, fmt: str = "text") -> dict:
     return result
 
 
+# Ceiling for the defaulted suggestion budget (= LLM calls). Without it a
+# document near the 20k-char limit would plan ~300 jobs and occupy the
+# single-worker LLM executor for tens of minutes, starving every other client.
+_MAX_DEFAULT_SUGGESTIONS = 25
+
+
 def _run_analysis(text: str, max_suggestions: int | None, fmt: str = "text") -> dict:
     from lint_ii.llm.suggestions import SuggestionEngine
 
@@ -131,7 +135,8 @@ def _run_analysis(text: str, max_suggestions: int | None, fmt: str = "text") -> 
     t1 = time.perf_counter()
     logger.info("TIMING spacy_analysis=%.2fs", t1 - t0)
 
-    # Default to roughly one readability suggestion per 10 words. Combined with
+    # Default to roughly one readability suggestion per 10 words, capped at
+    # _MAX_DEFAULT_SUGGESTIONS jobs (~5-7s of LLM time each). Combined with
     # the round-robin in _prioritize_triggers, this spreads length-proportional
     # coverage across sentences (at least one suggestion for any non-trivial text).
     if max_suggestions is None:
@@ -140,10 +145,10 @@ def _run_analysis(text: str, max_suggestions: int | None, fmt: str = "text") -> 
             for tok in sent.word_features
             if not tok.is_punctuation
         )
-        max_suggestions = max(1, round(word_count / 10))
+        max_suggestions = min(max(1, round(word_count / 10)), _MAX_DEFAULT_SUGGESTIONS)
         logger.info(
-            "max_suggestions defaulted to %d (word_count=%d, ~1 per 10 words)",
-            max_suggestions, word_count,
+            "max_suggestions defaulted to %d (word_count=%d, ~1 per 10 words, cap %d)",
+            max_suggestions, word_count, _MAX_DEFAULT_SUGGESTIONS,
         )
 
     engine = SuggestionEngine(provider=_provider)
@@ -177,26 +182,41 @@ async def analyze_lint(request: AnalyzeRequest):
 # job and then polls a fast status endpoint instead — no long-lived request.
 _jobs: dict[str, dict] = {}
 _jobs_lock = threading.Lock()
-_JOB_MAX_AGE = 600  # seconds; prune finished/stale jobs after this
+_JOB_MAX_AGE = 600  # seconds; prune unclaimed finished jobs after this
 
 
 def _store_job_result(job_id: str, fut) -> None:
+    if fut.cancelled():
+        logger.info("Analysis job %s cancelled while queued", job_id)
+        with _jobs_lock:
+            _jobs.pop(job_id, None)
+        return
     try:
         result = fut.result()
         n = len(result.get("suggestions", {}).get("suggestions", []))
         logger.info("Analysis job %s complete: %d suggestions", job_id, n)
-        with _jobs_lock:
-            _jobs[job_id] = {"status": "done", "result": result, "ts": time.time()}
+        entry = {"status": "done", "result": result, "ts": time.time()}
     except Exception as e:
         logger.error("Analysis job %s failed: %s", job_id, e, exc_info=True)
-        with _jobs_lock:
-            _jobs[job_id] = {"status": "error", "error": str(e), "ts": time.time()}
+        entry = {"status": "error", "error": str(e), "ts": time.time()}
+    with _jobs_lock:
+        if job_id not in _jobs:
+            # Cancelled while running: nobody is polling anymore, drop the result.
+            logger.info("Analysis job %s finished after cancellation; result discarded", job_id)
+            return
+        _jobs[job_id] = entry
 
 
 def _prune_jobs() -> None:
+    """Drop finished jobs whose result was never picked up. Pending jobs are
+    never pruned: they may legitimately wait in the single-worker queue longer
+    than _JOB_MAX_AGE, and pruning them would 404 a client still polling."""
     now = time.time()
     with _jobs_lock:
-        stale = [jid for jid, j in _jobs.items() if now - j.get("ts", now) > _JOB_MAX_AGE]
+        stale = [
+            jid for jid, j in _jobs.items()
+            if j["status"] != "pending" and now - j.get("ts", now) > _JOB_MAX_AGE
+        ]
         for jid in stale:
             _jobs.pop(jid, None)
 
@@ -209,9 +229,34 @@ async def analyze(request: AnalyzeRequest):
     with _jobs_lock:
         _jobs[job_id] = {"status": "pending", "ts": time.time()}
     fut = _analysis_executor.submit(_run_analysis, request.text, request.max_suggestions, request.format)
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if job is not None and job["status"] == "pending":
+            # Keep the Future so /analyze-cancel can dequeue the job before it runs.
+            job["future"] = fut
     fut.add_done_callback(lambda f: _store_job_result(job_id, f))
     logger.info("Analysis job %s started (%d chars, format=%s)", job_id, len(request.text), request.format)
     return {"job_id": job_id}
+
+
+@app.post("/analyze-cancel/{job_id}")
+async def analyze_cancel(job_id: str):
+    """Cancel an analysis job (sent on re-analyse or page close).
+
+    A job still waiting in the queue is dequeued outright. A job already
+    running cannot be interrupted mid-LLM-call, but its entry is dropped so
+    the result is discarded when it finishes."""
+    with _jobs_lock:
+        job = _jobs.pop(job_id, None)
+    if job is None:
+        return {"cancelled": False}
+    fut = job.get("future")
+    dequeued = bool(fut is not None and fut.cancel())
+    logger.info(
+        "Analysis job %s cancelled by client (%s)",
+        job_id, "dequeued" if dequeued else "already running or finished",
+    )
+    return {"cancelled": True, "dequeued": dequeued}
 
 
 @app.get("/analyze-result/{job_id}")
@@ -303,65 +348,6 @@ async def convert(request: Request, filename: str = ""):
         raise HTTPException(status_code=422, detail="Geen tekst gevonden in het document.")
     logger.info("Converted %s (%s) -> %d chars markdown", filename, src_format, len(markdown))
     return {"markdown": markdown, "format": "markdown"}
-
-
-@app.post("/analyze-stream")
-async def analyze_stream(request: AnalyzeRequest):
-    loop = asyncio.get_event_loop()
-
-    async def event_stream():
-        try:
-            from lint_ii import ReadabilityAnalysis
-            from lint_ii.llm.suggestions import SuggestionEngine
-
-            t0 = time.perf_counter()
-            analysis = await loop.run_in_executor(
-                _executor, lambda: ReadabilityAnalysis.from_text(request.text)
-            )
-            logger.info("TIMING spacy_analysis=%.2fs", time.perf_counter() - t0)
-
-            # Send initial render payload immediately (empty suggestions)
-            base = analysis.as_dict()
-            base['suggestions'] = {'suggestions': [], 'triggers_found': 0, 'triggers_processed': 0, 'model': ''}
-            yield f"data: {json.dumps({'type': 'init', 'data': base})}\n\n"
-
-            engine = SuggestionEngine(provider=_provider)
-
-            # Spelling pass
-            t1 = time.perf_counter()
-            spelling = await loop.run_in_executor(
-                _executor, lambda: engine.generate_spelling_suggestions(analysis, _provider)
-            )
-            logger.info("TIMING spelling_pass=%.2fs (%d)", time.perf_counter() - t1, len(spelling))
-            for s in spelling:
-                yield f"data: {json.dumps({'type': 'suggestion', 'data': s.as_dict()})}\n\n"
-
-            # Trigger passes
-            triggers = engine.identify_triggers(analysis)
-            triggers_to_process = engine._prioritize_triggers(triggers, request.max_suggestions)
-            document_level = getattr(analysis.lint, "level", None)
-
-            for trigger in triggers_to_process:
-                t_t = time.perf_counter()
-                suggestion = await loop.run_in_executor(
-                    _executor,
-                    lambda t=trigger: engine._generate_suggestion_for_trigger(t, _provider, document_level)
-                )
-                logger.info("TIMING trigger_%s=%.2fs", trigger.type.value, time.perf_counter() - t_t)
-                if suggestion:
-                    yield f"data: {json.dumps({'type': 'suggestion', 'data': suggestion.as_dict()})}\n\n"
-
-            yield f"data: {json.dumps({'type': 'done', 'triggers_found': len(triggers), 'triggers_processed': len(triggers_to_process), 'model': _provider.model_name})}\n\n"
-
-        except Exception as e:
-            logger.error("Stream error: %s", e, exc_info=True)
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
 
 
 # Serve the demo frontend as static files (must be last)
