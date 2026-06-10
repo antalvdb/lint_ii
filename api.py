@@ -18,6 +18,7 @@ Usage (Linux/Ollama):
 import sys
 import os
 import asyncio
+import hashlib
 import logging
 import shutil
 import subprocess
@@ -25,6 +26,7 @@ import tempfile
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 
@@ -184,8 +186,37 @@ _jobs: dict[str, dict] = {}
 _jobs_lock = threading.Lock()
 _JOB_MAX_AGE = 600  # seconds; prune unclaimed finished jobs after this
 
+# LRU cache of completed analyses keyed by request content. Testers mostly
+# re-run the same four example texts; serving a repeat from cache makes it
+# near-instant and keeps the LLM worker free for new documents. Suggestions
+# vary run-to-run anyway (sampling), so pinning repeats to one result is fine.
+_RESULT_CACHE_MAX = 16
+_result_cache: OrderedDict[str, dict] = OrderedDict()
+_result_cache_lock = threading.Lock()
 
-def _store_job_result(job_id: str, fut) -> None:
+
+def _cache_key(text: str, max_suggestions: int | None, fmt: str) -> str:
+    raw = f"{fmt}|{max_suggestions}|{text}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _cache_get(key: str) -> dict | None:
+    with _result_cache_lock:
+        result = _result_cache.get(key)
+        if result is not None:
+            _result_cache.move_to_end(key)
+        return result
+
+
+def _cache_put(key: str, result: dict) -> None:
+    with _result_cache_lock:
+        _result_cache[key] = result
+        _result_cache.move_to_end(key)
+        while len(_result_cache) > _RESULT_CACHE_MAX:
+            _result_cache.popitem(last=False)
+
+
+def _store_job_result(job_id: str, cache_key: str, fut) -> None:
     if fut.cancelled():
         logger.info("Analysis job %s cancelled while queued", job_id)
         with _jobs_lock:
@@ -195,6 +226,9 @@ def _store_job_result(job_id: str, fut) -> None:
         result = fut.result()
         n = len(result.get("suggestions", {}).get("suggestions", []))
         logger.info("Analysis job %s complete: %d suggestions", job_id, n)
+        # Cache even if the requesting client cancelled meanwhile — the work is
+        # done, so the next identical request might as well benefit from it.
+        _cache_put(cache_key, result)
         entry = {"status": "done", "result": result, "ts": time.time()}
     except Exception as e:
         logger.error("Analysis job %s failed: %s", job_id, e, exc_info=True)
@@ -226,6 +260,15 @@ async def analyze(request: AnalyzeRequest):
     """Start an analysis job and return its id immediately (poll /analyze-result)."""
     _prune_jobs()
     job_id = uuid.uuid4().hex[:12]
+    cache_key = _cache_key(request.text, request.max_suggestions, request.format)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        # Known text (e.g. an example button): store the job as already done so
+        # the client's normal poll picks it up immediately — no LLM run at all.
+        with _jobs_lock:
+            _jobs[job_id] = {"status": "done", "result": cached, "ts": time.time()}
+        logger.info("Analysis job %s served from cache (%d chars)", job_id, len(request.text))
+        return {"job_id": job_id}
     with _jobs_lock:
         _jobs[job_id] = {"status": "pending", "ts": time.time()}
     fut = _analysis_executor.submit(_run_analysis, request.text, request.max_suggestions, request.format)
@@ -234,7 +277,7 @@ async def analyze(request: AnalyzeRequest):
         if job is not None and job["status"] == "pending":
             # Keep the Future so /analyze-cancel can dequeue the job before it runs.
             job["future"] = fut
-    fut.add_done_callback(lambda f: _store_job_result(job_id, f))
+    fut.add_done_callback(lambda f: _store_job_result(job_id, cache_key, f))
     logger.info("Analysis job %s started (%d chars, format=%s)", job_id, len(request.text), request.format)
     return {"job_id": job_id}
 

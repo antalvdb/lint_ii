@@ -580,15 +580,19 @@
 
                 let data = null
                 while (true) {
-                    await new Promise(r => setTimeout(r, 3000))
                     if (signal.aborted) return
+                    // Poll right away: a cached result (example texts) is ready
+                    // immediately; fresh jobs just get one early "pending".
                     const pollResp = await fetch(`/analyze-result/${job_id}`, { signal })
                     if (!pollResp.ok) {
                         const err = await pollResp.json().catch(() => ({ detail: pollResp.statusText }))
                         throw new Error(err.detail || pollResp.statusText)
                     }
                     const poll = await pollResp.json()
-                    if (poll.status === 'pending') continue
+                    if (poll.status === 'pending') {
+                        await new Promise(r => setTimeout(r, 3000))
+                        continue
+                    }
                     if (poll.status === 'error') throw new Error(poll.error)
                     data = poll.result
                     break
