@@ -161,6 +161,22 @@ def _run_analysis(text: str, max_suggestions: int | None, fmt: str = "text") -> 
     return analysis.with_suggestions(suggestions).as_dict()
 
 
+def _pending_job_stats() -> dict:
+    """Pending-job count and the age of the oldest one, for /health.
+
+    A pending job's ts is its creation time, so the age covers the full
+    client-visible wait (queue time + LLM run). A slowly climbing age is
+    normal under a queue of long documents; an age far beyond the watchdog
+    timeout means jobs are not being drained and warrants a look."""
+    now = time.time()
+    with _jobs_lock:
+        ages = [now - j["ts"] for j in _jobs.values() if j["status"] == "pending"]
+    stats = {"pending_jobs": len(ages)}
+    if ages:
+        stats["oldest_pending_seconds"] = round(max(ages))
+    return stats
+
+
 @app.get("/health")
 def health():
     from fastapi.responses import JSONResponse
@@ -179,9 +195,14 @@ def health():
                 "reason": "llm-watchdog-timeout",
                 "wedged_for_seconds": round(time.time() - wedged_since),
                 "model": _provider.model_name if _provider else None,
+                **_pending_job_stats(),
             },
         )
-    return {"status": "ok", "model": _provider.model_name if _provider else None}
+    return {
+        "status": "ok",
+        "model": _provider.model_name if _provider else None,
+        **_pending_job_stats(),
+    }
 
 
 @app.post("/analyze-lint")
