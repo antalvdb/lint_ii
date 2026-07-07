@@ -26,7 +26,7 @@ Belangrijke richtlijnen:
 - Splits geen zinsdelen die met een nevenschikkend voegwoord ('maar', 'want', 'dus', 'en', 'of') zijn verbonden; zo'n voegwoord drukt een betekenisrelatie uit (tegenstelling, reden, gevolg) die verloren gaat bij opsplitsen. Houd die zinsdelen verbonden en vervang een informeel voegwoord als 'maar' niet door een formeler alternatief als 'echter'
 - Laat URLs, webadressen en e-mailadressen exact ongewijzigd staan; verander er niets aan en verwijder ze niet. Voeg geen leestekens toe die in het origineel niet voorkwamen — eindigt een zin op een URL zonder punt, laat dat dan zo
 - Gebruik gangbaar Nederlands, maar pas het taalniveau aan aan de originele tekst
-- Schrijf uitleg in eenvoudige, korte zinnen — vermijd vakjargon
+- Schrijf uitleg in eenvoudige taal en houd die heel kort: hoogstens tien woorden — vermijd vakjargon
 - Antwoord altijd in het Nederlands"""
 
 
@@ -45,7 +45,7 @@ Belangrijk: als de vervanging gevolgen heeft voor de grammaticale context (bijv.
 
 Geef je antwoord in het volgende formaat:
 VERVANGING: [het nieuwe woord of de nieuwe woordgroep]
-UITLEG: [één korte, eenvoudige zin die uitlegt waarom het nieuwe woord makkelijker is — schrijf alsof je het aan een leek uitlegt]
+UITLEG: [hoogstens tien woorden: waarom het nieuwe woord makkelijker is]
 HERSCHRIJVING: [het volledige herschreven tekstfragment met alle noodzakelijke grammaticale aanpassingen]"""
     ),
 
@@ -63,9 +63,9 @@ Lange afhankelijkheden tussen woorden maken het moeilijker om de zin te begrijpe
 - Een directere woordvolgorde te gebruiken
 
 Geef je antwoord in het volgende formaat:
-PROBLEEM: [korte beschrijving van wat de zin complex maakt]
+PROBLEEM: [hoogstens acht woorden: wat de zin complex maakt]
 HERSCHRIJVING: [de vereenvoudigde zin of zinnen]
-UITLEG: [één korte zin die alleen beschrijft wat er structureel gedaan is, zoals herstructureren of opsplitsen — geen uitleg over het waarom, geen vakjargon]"""
+UITLEG: [hoogstens tien woorden: wat er structureel is gedaan, zoals herstructureren of opsplitsen — niet waarom, geen vakjargon]"""
     ),
 
     "content_words_per_clause": PromptTemplate(
@@ -82,9 +82,9 @@ Een hoge informatiedichtheid maakt tekst moeilijker te verwerken. Probeer:
 - Verbindingswoorden te gebruiken voor samenhang
 
 Geef je antwoord in het volgende formaat:
-PROBLEEM: [welke informatie is samengeperst in deze zin]
+PROBLEEM: [hoogstens acht woorden: welke informatie is samengeperst]
 HERSCHRIJVING: [de opgesplitste zinnen]
-UITLEG: [één korte zin die alleen beschrijft wat er structureel gedaan is, zoals opsplitsen of herformuleren — geen uitleg over het waarom, geen vakjargon]"""
+UITLEG: [hoogstens tien woorden: wat er structureel is gedaan, zoals opsplitsen of herformuleren — niet waarom, geen vakjargon]"""
     ),
 
     "abstract_nouns": PromptTemplate(
@@ -102,7 +102,7 @@ Abstracte woorden zijn moeilijker te begrijpen. Probeer ze te omschrijven of te 
 Geef je antwoord in het volgende formaat:
 ABSTRACTIES: [welke abstracte begrippen je hebt aangepakt]
 HERSCHRIJVING: [het herschreven tekstfragment]
-UITLEG: [één korte, eenvoudige zin over hoe de tekst begrijpelijker is geworden — geen vakjargon]"""
+UITLEG: [hoogstens tien woorden: hoe de tekst begrijpelijker is geworden — geen vakjargon]"""
     ),
 
     "passive": PromptTemplate(
@@ -121,9 +121,9 @@ Actieve zinnen zijn makkelijker te begrijpen omdat duidelijk is wie de handeling
 - De zinsstructuur zo min mogelijk te veranderen
 
 Geef je antwoord in het volgende formaat:
-PROBLEEM: [welke passieve constructie(s) zijn aangepakt]
+PROBLEEM: [hoogstens acht woorden: welke passieve constructie(s) zijn aangepakt]
 HERSCHRIJVING: [de actieve versie van de zin]
-UITLEG: [één korte, eenvoudige zin over de verbetering — geen vakjargon]"""
+UITLEG: [hoogstens tien woorden: wat er is veranderd — geen vakjargon]"""
     ),
 
     "subordinate_clause": PromptTemplate(
@@ -140,9 +140,9 @@ Veel bijzinnen maken een zin moeilijker te volgen. Probeer:
 - Verbindingswoorden te gebruiken voor samenhang
 
 Geef je antwoord in het volgende formaat:
-PROBLEEM: [welke bijzinsstructuur de zin complex maakt]
+PROBLEEM: [hoogstens acht woorden: welke bijzinsstructuur de zin complex maakt]
 HERSCHRIJVING: [de vereenvoudigde zin of zinnen]
-UITLEG: [één korte zin die alleen beschrijft wat er structureel gedaan is, zoals opsplitsen of herstructureren — geen uitleg over het waarom, geen vakjargon]"""
+UITLEG: [hoogstens tien woorden: wat er structureel is gedaan, zoals opsplitsen of herstructureren — niet waarom, geen vakjargon]"""
     ),
 
     "sentence_length": PromptTemplate(
@@ -159,9 +159,9 @@ Lange zinnen zijn moeilijker te verwerken. Probeer:
 - Verbindingswoorden te gebruiken voor samenhang
 
 Geef je antwoord in het volgende formaat:
-PROBLEEM: [wat de zin lang maakt]
+PROBLEEM: [hoogstens acht woorden: wat de zin lang maakt]
 HERSCHRIJVING: [de kortere zinnen]
-UITLEG: [één korte zin die alleen beschrijft wat er structureel gedaan is, zoals opsplitsen — geen uitleg over het waarom, geen vakjargon]"""
+UITLEG: [hoogstens tien woorden: wat er structureel is gedaan, zoals opsplitsen — niet waarom, geen vakjargon]"""
     ),
 
     "sentence_rewrite": PromptTemplate(
@@ -179,7 +179,7 @@ Houd je aan de richtlijnen: behoud de betekenis, de toon en de vakinhoud, voeg n
 
 Geef je antwoord in het volgende formaat:
 HERSCHRIJVING: [de verbeterde zin of zinnen]
-UITLEG: [één korte, eenvoudige zin die beschrijft wat er veranderd is — geen vakjargon]"""
+UITLEG: [hoogstens tien woorden: wat er is veranderd — geen vakjargon]"""
     ),
 
     "spelling": PromptTemplate(
@@ -205,7 +205,7 @@ WOORD: [het foutieve woord]
 ZIN_NUMMER: [het nummer van de zin waarin de fout staat]
 CORRECTIE: [het gecorrigeerde woord]
 CATEGORIE: [spelfout, grammatica of zinsbouw]
-UITLEG: [één korte, eenvoudige zin die uitlegt wat er fout is — schrijf alsof je het aan een leek uitlegt]
+UITLEG: [hoogstens tien woorden: wat er fout is, in eenvoudige taal]
 ---
 
 Als er geen fouten zijn, antwoord dan met:
