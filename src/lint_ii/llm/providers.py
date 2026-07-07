@@ -372,15 +372,39 @@ class OllamaProvider(LLMProvider):
         )
 
 
+def _common_prefix_len(a: list[int], b: list[int]) -> int:
+    n = 0
+    for x, y in zip(a, b):
+        if x != y:
+            break
+        n += 1
+    return n
+
+
 class MLXProvider(LLMProvider):
     """Apple Silicon MLX provider — loads model directly for fast on-device inference."""
 
     DEFAULT_MODEL = "mlx-community/Qwen2.5-14B-Instruct-4bit"
 
+    # Ceiling on prompt tokens retained in the persistent KV cache between
+    # calls. KV state is ~256 KB per token for the 32B model, so 1024 tokens
+    # pins ~260 MB — enough to hold any full system prompt, while a
+    # whole-document spelling prompt would otherwise pin gigabytes.
+    PROMPT_CACHE_MAX_TOKENS = 1024
+
     def __init__(self, model: str | None = None):
         self._model_path = model or os.environ.get("MLX_MODEL", self.DEFAULT_MODEL)
         self._model = None
         self._tokenizer = None
+        # All rewrite prompts within one analysis share the chat-template
+        # header + system prompt; keeping their KV state warm skips re-evaluating
+        # those tokens on every call. Guarded by a lock because completion calls
+        # run on watchdog threads (serialized in practice by the single-worker
+        # analysis executor).
+        self._prompt_cache = None
+        self._prompt_cache_tokens: list[int] = []
+        self._generate_lock = threading.Lock()
+        self._prompt_cache_enabled = os.environ.get("LINT_II_MLX_PROMPT_CACHE", "1") != "0"
 
     @property
     def model_name(self) -> str:
@@ -410,28 +434,92 @@ class MLXProvider(LLMProvider):
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
-        formatted = self._tokenizer.apply_chat_template(
+        tokens = self._tokenizer.apply_chat_template(
             messages,
-            tokenize=False,
             add_generation_prompt=True,
         )
 
         # Per-trigger rewrites fit in the 512-token default; the spelling pass
         # passes a larger ceiling. The model stops at EOS in the common case, so
         # this only caps runaway generation rather than slowing normal calls.
-        content = generate(
-            self._model,
-            self._tokenizer,
-            prompt=formatted,
-            max_tokens=max_tokens or self.DEFAULT_MAX_TOKENS,
-            verbose=False,
-        )
+        max_tokens = max_tokens or self.DEFAULT_MAX_TOKENS
+
+        if self._prompt_cache_enabled:
+            with self._generate_lock:
+                content = self._generate_with_prompt_cache(tokens, max_tokens)
+        else:
+            content = generate(
+                self._model,
+                self._tokenizer,
+                prompt=tokens,
+                max_tokens=max_tokens,
+                verbose=False,
+            )
 
         return LLMResponse(
             content=content,
             model=self._model_path,
             usage=None,
         )
+
+    def _generate_with_prompt_cache(self, tokens: list[int], max_tokens: int) -> str:
+        """Generate while reusing the KV state of the longest token prefix
+        shared with the previous call (typically the chat-template header plus
+        system prompt). Caller must hold _generate_lock."""
+        from mlx_lm import generate
+        from mlx_lm.models.cache import make_prompt_cache, trim_prompt_cache
+
+        # _prompt_cache_tokens mirrors exactly what the KV cache holds; if the
+        # two ever disagree (e.g. an aborted generation), rebuild from scratch.
+        if self._prompt_cache is None or (
+            self._prompt_cache_tokens
+            and self._prompt_cache[0].offset != len(self._prompt_cache_tokens)
+        ):
+            self._prompt_cache = make_prompt_cache(self._model)
+            self._prompt_cache_tokens = []
+
+        # generate() must be fed at least one token, so never reuse the full prompt.
+        common = min(
+            _common_prefix_len(self._prompt_cache_tokens, tokens), len(tokens) - 1
+        )
+        excess = len(self._prompt_cache_tokens) - common
+        if excess > 0 and trim_prompt_cache(self._prompt_cache, excess) != excess:
+            self._prompt_cache = make_prompt_cache(self._model)
+            self._prompt_cache_tokens = []
+            common = 0
+        else:
+            self._prompt_cache_tokens = self._prompt_cache_tokens[:common]
+
+        logger.info(
+            "MLX prompt cache: reusing %d/%d prompt tokens", common, len(tokens)
+        )
+
+        try:
+            content = generate(
+                self._model,
+                self._tokenizer,
+                prompt=tokens[common:],
+                max_tokens=max_tokens,
+                verbose=False,
+                prompt_cache=self._prompt_cache,
+            )
+        except BaseException:
+            # The cache may hold a partially prefilled prompt; discard it.
+            self._prompt_cache = None
+            self._prompt_cache_tokens = []
+            raise
+
+        # The cache now also holds this call's suffix and generated tokens.
+        # Trim back to the (capped) prompt so the next call can reuse its
+        # shared prefix without unbounded KV growth.
+        keep = min(len(tokens), self.PROMPT_CACHE_MAX_TOKENS)
+        surplus = self._prompt_cache[0].offset - keep
+        if surplus > 0 and trim_prompt_cache(self._prompt_cache, surplus) != surplus:
+            self._prompt_cache = None
+            self._prompt_cache_tokens = []
+            return content
+        self._prompt_cache_tokens = tokens[:keep]
+        return content
 
 
 def create_provider(
