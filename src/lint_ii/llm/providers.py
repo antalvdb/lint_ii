@@ -9,8 +9,46 @@ from dataclasses import dataclass
 from typing import Any
 import logging
 import os
+import threading
+import time
 
 logger = logging.getLogger(__name__)
+
+# Watchdog ceiling for a single completion call, in seconds. Normal calls take
+# 5-60s; the whole-document spelling pass on a long text can reach a few
+# minutes. The failure mode this guards against is unbounded: an MLX generate
+# call can hang forever inside the Metal driver (observed 2026-06-10) while the
+# process stays healthy, leaving jobs pending indefinitely with no error.
+LLM_TIMEOUT_SECONDS = float(os.environ.get("LINT_II_LLM_TIMEOUT", "300"))
+
+# Set to a timestamp when a completion call times out. While set, further calls
+# fail fast instead of each waiting out the full timeout — a wedged Metal queue
+# does not recover without a process restart (or the stuck call finishing after
+# all, which clears the flag). Read by the API health endpoint.
+_wedged_at: float | None = None
+_wedged_lock = threading.Lock()
+
+
+def llm_wedged_since() -> float | None:
+    """Timestamp of the first unresolved completion timeout, or None if healthy."""
+    return _wedged_at
+
+
+def _mark_wedged() -> None:
+    global _wedged_at
+    with _wedged_lock:
+        if _wedged_at is None:
+            _wedged_at = time.time()
+
+
+def _clear_wedged() -> None:
+    global _wedged_at
+    with _wedged_lock:
+        _wedged_at = None
+
+
+class LLMTimeoutError(RuntimeError):
+    """A completion call exceeded LLM_TIMEOUT_SECONDS (or the provider is wedged)."""
 
 
 @dataclass
@@ -44,13 +82,67 @@ class LLMProvider(ABC):
             system_prompt or "(none)",
             prompt,
         )
-        response = self._complete(prompt, system_prompt, max_tokens)
+        response = self._complete_with_watchdog(prompt, system_prompt, max_tokens)
         logger.debug(
             "LLM RESPONSE [%s]\n%s\n--- end ---",
             self.model_name,
             response.content,
         )
         return response
+
+    def _complete_with_watchdog(
+        self, prompt: str, system_prompt: str | None = None, max_tokens: int | None = None
+    ) -> LLMResponse:
+        """Run _complete on a watchdog thread so a wedged GPU driver surfaces as
+        an error instead of a forever-pending job. The stuck thread cannot be
+        interrupted (it is inside an iokit trap), so it is left behind as a
+        daemon thread; while the wedge lasts, further calls fail fast."""
+        if LLM_TIMEOUT_SECONDS <= 0:
+            return self._complete(prompt, system_prompt, max_tokens)
+
+        if _wedged_at is not None:
+            raise LLMTimeoutError(
+                f"LLM provider marked wedged since {time.strftime('%H:%M:%S', time.localtime(_wedged_at))}; "
+                "failing fast (restart the server to recover)"
+            )
+
+        outcome: dict[str, Any] = {}
+        timed_out = threading.Event()
+
+        def _run() -> None:
+            try:
+                outcome["response"] = self._complete(prompt, system_prompt, max_tokens)
+            except BaseException as e:
+                outcome["error"] = e
+            finally:
+                if timed_out.is_set():
+                    # The call finished after the watchdog gave up on it: the
+                    # model is slow, not wedged. Let new calls through again.
+                    logger.warning(
+                        "LLM call completed %s after its watchdog timeout fired; "
+                        "clearing wedged state", self.model_name,
+                    )
+                    _clear_wedged()
+
+        worker = threading.Thread(target=_run, name="llm-complete", daemon=True)
+        worker.start()
+        worker.join(LLM_TIMEOUT_SECONDS)
+
+        if worker.is_alive():
+            timed_out.set()
+            _mark_wedged()
+            logger.critical(
+                "LLM call did not finish within %.0fs — provider likely wedged "
+                "(Metal driver hang). Marking degraded; restart the server to recover.",
+                LLM_TIMEOUT_SECONDS,
+            )
+            raise LLMTimeoutError(
+                f"LLM call exceeded {LLM_TIMEOUT_SECONDS:.0f}s watchdog timeout"
+            )
+
+        if "error" in outcome:
+            raise outcome["error"]
+        return outcome["response"]
 
     @property
     @abstractmethod

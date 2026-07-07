@@ -163,6 +163,24 @@ def _run_analysis(text: str, max_suggestions: int | None, fmt: str = "text") -> 
 
 @app.get("/health")
 def health():
+    from fastapi.responses import JSONResponse
+    from lint_ii.llm.providers import llm_wedged_since
+
+    wedged_since = llm_wedged_since()
+    if wedged_since is not None:
+        # An LLM call blew through its watchdog timeout and the Metal driver is
+        # presumed wedged; jobs fail fast until the server is restarted. 503 so
+        # external monitoring finally sees the incident (the 2026-06-10 wedge
+        # kept /health green all day).
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "degraded",
+                "reason": "llm-watchdog-timeout",
+                "wedged_for_seconds": round(time.time() - wedged_since),
+                "model": _provider.model_name if _provider else None,
+            },
+        )
     return {"status": "ok", "model": _provider.model_name if _provider else None}
 
 
@@ -232,7 +250,16 @@ def _store_job_result(job_id: str, cache_key: str, fut) -> None:
         entry = {"status": "done", "result": result, "ts": time.time()}
     except Exception as e:
         logger.error("Analysis job %s failed: %s", job_id, e, exc_info=True)
-        entry = {"status": "error", "error": str(e), "ts": time.time()}
+        from lint_ii.llm.providers import LLMTimeoutError
+        if isinstance(e, LLMTimeoutError):
+            msg = (
+                "Het taalmodel reageert niet; de analyse is afgebroken. "
+                "De demo-server moet waarschijnlijk opnieuw worden gestart — "
+                "probeer het later nog eens."
+            )
+        else:
+            msg = str(e)
+        entry = {"status": "error", "error": msg, "ts": time.time()}
     with _jobs_lock:
         if job_id not in _jobs:
             # Cancelled while running: nobody is polling anymore, drop the result.

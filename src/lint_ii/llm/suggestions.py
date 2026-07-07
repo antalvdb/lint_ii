@@ -13,7 +13,7 @@ import os
 import re
 import uuid
 
-from lint_ii.llm.providers import LLMProvider, create_provider
+from lint_ii.llm.providers import LLMProvider, LLMTimeoutError, create_provider
 from lint_ii.llm.prompts import format_prompt, parse_llm_response, parse_spelling_response
 
 logger = logging.getLogger(__name__)
@@ -597,6 +597,10 @@ class SuggestionEngine:
             # Whole-document pass: enumerates every error in one call, so it
             # needs more headroom than a single-sentence rewrite.
             response = provider.complete(user_prompt, system_prompt, max_tokens=1024)
+        except LLMTimeoutError:
+            # A wedged/timed-out provider must fail the whole job visibly, not
+            # degrade it to an analysis with fewer suggestions.
+            raise
         except Exception as e:
             err_str = str(e).lower()
             if "authentication" in err_str or "401" in err_str or "api_key" in err_str:
@@ -1018,6 +1022,8 @@ class SuggestionEngine:
                 new_sentence_metrics=new_metrics,
             )
 
+        except LLMTimeoutError:
+            raise
         except Exception as e:
             err_str = str(e).lower()
             if "authentication" in err_str or "401" in err_str or "api_key" in err_str:
@@ -1175,6 +1181,8 @@ class SuggestionEngine:
                 new_sentence_metrics=new_metrics,
             )
 
+        except LLMTimeoutError:
+            raise
         except Exception as e:
             # Detect auth errors and abort early instead of retrying
             err_str = str(e).lower()
