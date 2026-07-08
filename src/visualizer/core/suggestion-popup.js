@@ -167,7 +167,7 @@ export class SuggestionPopupController {
                 ${suggestion.explanation ? `
                     <div class="suggestion-explanation">
                         <span class="label">Uitleg:</span>
-                        <span class="text">${this._escapeHtml(suggestion.explanation)}</span>
+                        <span class="text">${this._escapeHtml(this._stripBrackets(suggestion.explanation))}</span>
                     </div>
                 ` : ''}
 
@@ -212,7 +212,7 @@ export class SuggestionPopupController {
                 ${suggestion.explanation ? `
                     <div class="suggestion-explanation">
                         <span class="label">Uitleg:</span>
-                        <span class="text">${this._escapeHtml(suggestion.explanation)}</span>
+                        <span class="text">${this._escapeHtml(this._stripBrackets(suggestion.explanation))}</span>
                     </div>
                 ` : ''}
 
@@ -321,5 +321,16 @@ export class SuggestionPopupController {
         const div = document.createElement('div')
         div.textContent = text
         return div.innerHTML
+    }
+
+    /** The model sometimes echoes the prompt's placeholder brackets around
+     *  its explanation; the server strips them for new analyses, this covers
+     *  results that were cached before that fix. */
+    _stripBrackets(text) {
+        const t = (text || '').trim()
+        if (t.length >= 2 && t.startsWith('[') && t.endsWith(']')) {
+            return t.slice(1, -1).trim()
+        }
+        return t
     }
 }

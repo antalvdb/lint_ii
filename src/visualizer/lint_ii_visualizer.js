@@ -1,9 +1,9 @@
-import { css } from './core/stylesheet.js?v=14'
+import { css } from './core/stylesheet.js?v=15'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
 import { EditorController } from './core/editor.js?v=11'
-import { SuggestionPopupController } from './core/suggestion-popup.js?v=2'
+import { SuggestionPopupController } from './core/suggestion-popup.js?v=3'
 
 
 export class LintIIVisualizer extends HTMLElement {
@@ -29,6 +29,10 @@ export class LintIIVisualizer extends HTMLElement {
 
     disconnectedCallback() {
         this.removeWheelHandling()
+        if (this._docClickHandler) {
+            document.removeEventListener('click', this._docClickHandler)
+            this._docClickHandler = null
+        }
     }
 
     attributeChangedCallback(name, oldValue, newValue) {
@@ -261,7 +265,7 @@ export class LintIIVisualizer extends HTMLElement {
             '.document-scores [data-level]'
         )
 
-        if (scoreEl && score != null) scoreEl.textContent = score.toFixed(1)
+        if (scoreEl && score != null) scoreEl.textContent = score.toFixed(1).replace('.', ',')
         if (levelBadge && level != null) levelBadge.textContent = level
         if (levelContainer && level != null) levelContainer.dataset.level = level
     }
@@ -426,6 +430,18 @@ export class LintIIVisualizer extends HTMLElement {
                 this._suggestionPopupController._hideNow()
             }
         })
+
+        // The shadowRoot listener never sees clicks outside the component
+        // (e.g. on the page background), so those left the popup stuck open.
+        if (this._docClickHandler) {
+            document.removeEventListener('click', this._docClickHandler)
+        }
+        this._docClickHandler = (e) => {
+            if (!this._suggestionPopupController) return
+            if (e.composedPath().includes(this)) return
+            this._suggestionPopupController._hideNow()
+        }
+        document.addEventListener('click', this._docClickHandler)
     }
 
     updateSuggestionStatus(suggestionId, status) {
@@ -657,7 +673,7 @@ export class LintIIVisualizer extends HTMLElement {
             </div>
             <div class="doc-stat">
                 <dt>lint score</dt>
-                <dd class="lint-score-value">${this._data.document_lint_score != null ? this._data.document_lint_score.toFixed(1) : '—'}</dd>
+                <dd class="lint-score-value">${this._data.document_lint_score != null ? this._data.document_lint_score.toFixed(1).replace('.', ',') : '—'}</dd>
             </div>
             ${this.renderDocumentLevel()}
         </dl>`
@@ -775,6 +791,15 @@ export class LintIIVisualizer extends HTMLElement {
     }
 
     async renderStats() {
+        // Vega is loaded by the host page; if it failed to load, degrade to a
+        // message instead of throwing on every render.
+        if (typeof vegaEmbed === "undefined") {
+            const container = this.shadowRoot.querySelector('[data-view="stats"]')
+            if (container) {
+                container.innerHTML = '<p style="opacity:.7">Statistieken zijn niet beschikbaar (grafiekbibliotheek niet geladen).</p>'
+            }
+            return
+        }
         const styles = getComputedStyle(this)
         const colors = {
             concrete: styles.getPropertyValue('--color-concrete').trim(),

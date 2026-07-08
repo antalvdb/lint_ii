@@ -4,17 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LiNT-II | Leesbaarheidsanalyse</title>
-    <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
-    <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
-    <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+    <!-- Vendored locally: the demo must not depend on a CDN (it can run
+         without internet access, and ad blockers break jsdelivr). -->
+    <script src="./src/visualizer/vendor/vega.min.js"></script>
+    <script src="./src/visualizer/vendor/vega-lite.min.js"></script>
+    <script src="./src/visualizer/vendor/vega-embed.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
+        :root {
+            /* Native humanist sans on every platform (SF on the testers'
+               Macs/iPhones), always available offline — no webfont request. */
+            --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
         body {
             background: #cecfb1;
-            font-family: Verdana, sans-serif;
-            font-size: 13px;
-            color: #525347;
+            font-family: var(--font-ui);
+            font-size: 16px;
+            line-height: 1.6;
+            color: #3f4036;
             padding: 2rem;
         }
 
@@ -30,17 +39,19 @@
             margin-bottom: 1.5rem;
         }
 
-#header-text h1 {
-            font-size: 18px;
-            font-weight: bold;
-            color: #525347;
-            margin-bottom: 0.25rem;
+        #header-text h1 {
+            font-size: 26px;
+            font-weight: 650;
+            letter-spacing: -0.01em;
+            color: #3f4036;
+            margin-bottom: 0.35rem;
         }
 
         #header-text p {
-            font-size: 11px;
+            font-size: 13px;
             color: #676758;
-            line-height: 1.5;
+            line-height: 1.55;
+            max-width: 68ch;
         }
 
         #ruler {
@@ -67,8 +78,8 @@
             width: 100%;
             min-height: 160px;
             padding: 1rem;
-            font-family: Verdana, sans-serif;
-            font-size: 13px;
+            font-family: var(--font-ui);
+            font-size: 16px;
             line-height: 1.6;
             border: none;
             border-radius: 10px;
@@ -84,8 +95,8 @@
         }
 
         .hint {
-            font-size: 11px;
-            color: #888;
+            font-size: 13px;
+            color: #80806f;
             margin-top: 0.5rem;
         }
 
@@ -101,12 +112,12 @@
             background: #676758;
             border-radius: 10px;
             color: white;
-            font-family: Verdana, sans-serif;
-            font-size: 12px;
-            font-weight: bold;
+            font-family: var(--font-ui);
+            font-size: 14px;
+            font-weight: 600;
             border: none;
             cursor: pointer;
-            padding: 6px 18px;
+            padding: 8px 20px;
             transition: background 0.1s;
         }
 
@@ -130,10 +141,10 @@
 
         #status {
             flex: 1;
-            padding: 5px 12px;
+            padding: 6px 14px;
             border-radius: 10px;
-            font-size: 11px;
-            min-height: 28px;
+            font-size: 13px;
+            min-height: 32px;
             display: flex;
             align-items: center;
             gap: 0.4rem;
@@ -185,13 +196,14 @@
 
         .instructions-body {
             margin-top: 1rem;
-            line-height: 1.7;
-            font-size: 12px;
-            color: #525347;
+            line-height: 1.65;
+            font-size: 15px;
+            color: #4a4b40;
+            max-width: 75ch;
         }
 
         .instructions-body h3 {
-            font-size: 12px;
+            font-size: 15px;
             font-weight: bold;
             margin-top: 1rem;
             margin-bottom: 0.4rem;
@@ -230,10 +242,12 @@
             margin-right: 0.2em;
         }
 
-        .lvl1 { background: hsl(153, 53%, 53%); }
-        .lvl2 { background: hsl(198, 100%, 70%); }
-        .lvl3 { background: hsl(42, 100%, 53%); }
-        .lvl4 { background: hsl(348, 100%, 70%); }
+        /* Mirrors --color-level-N in the visualizer stylesheet: one ordered
+           cool-to-hot ramp, deep enough for white badge text. */
+        .lvl1 { background: hsl(152, 45%, 33%); }
+        .lvl2 { background: hsl(38, 85%, 33%); }
+        .lvl3 { background: hsl(20, 75%, 38%); }
+        .lvl4 { background: hsl(354, 65%, 40%); }
 
         .color-swatch {
             display: inline-block;
@@ -253,8 +267,8 @@
         }
 
         #example-buttons span {
-            font-size: 11px;
-            color: #888;
+            font-size: 13px;
+            color: #80806f;
             display: flex;
             align-items: center;
         }
@@ -296,7 +310,7 @@
                focused (e.g. after tapping a sample-text button), which
                otherwise scales everything past the right edge. */
             textarea { min-height: 120px; font-size: 16px; }
-            #example-buttons button { font-size: 11px; padding: 5px 10px; }
+            #example-buttons button { font-size: 13px; padding: 6px 12px; }
         }
     </style>
 </head>
@@ -396,7 +410,7 @@
         </div>
     </div>
 
-    <script type="module" src="./src/visualizer/lint_ii_visualizer.js?v=28"></script>
+    <script type="module" src="./src/visualizer/lint_ii_visualizer.js?v=29"></script>
     <script type="module">
         const EXAMPLE_TEXTS = {
             1: `Jan gaat elke zaterdag naar de markt. Hij koopt er groenten en fruit. De markt is groot en druk. Er staan veel kraampjes met eten en drinken. Jan houdt van de kaasmarkt. De man achter de kraam geeft hem een stukje om te proeven. De kaas smaakt lekker. Jan koopt een groot stuk. Daarna drinkt hij een kop koffie bij het café op het plein. Hij fietst blij naar huis met zijn tas vol eten.`,

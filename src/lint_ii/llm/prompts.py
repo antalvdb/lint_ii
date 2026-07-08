@@ -242,6 +242,16 @@ def format_prompt(
     return template["system"], template["user"].format(**kwargs)
 
 
+def _strip_placeholder_brackets(value: str) -> str:
+    """Unwrap answers the model echoed inside the template's placeholder
+    brackets (e.g. "[Meer bekend en eenvoudig]"), which otherwise reach the
+    tester verbatim."""
+    v = value.strip()
+    if len(v) >= 2 and v.startswith("[") and v.endswith("]"):
+        return v[1:-1].strip()
+    return v
+
+
 def parse_llm_response(response: str, template_name: str) -> dict[str, str]:
     """
     Parse a structured LLM response into its components.
@@ -302,7 +312,7 @@ def parse_llm_response(response: str, template_name: str) -> dict[str, str]:
     if current_field:
         result[current_field] = " ".join(current_content).strip()
 
-    return result
+    return {k: _strip_placeholder_brackets(v) for k, v in result.items()}
 
 
 def parse_spelling_response(response: str) -> list[dict[str, str]]:
@@ -332,7 +342,9 @@ def parse_spelling_response(response: str) -> list[dict[str, str]]:
     def _flush_field():
         nonlocal current_field, current_content
         if current_field:
-            current[current_field] = " ".join(current_content).strip()
+            current[current_field] = _strip_placeholder_brackets(
+                " ".join(current_content).strip()
+            )
             current_field = None
             current_content = []
 
