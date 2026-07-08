@@ -55,7 +55,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 # discard reasons) without the bodies. Set LINT_II_LOG_LEVEL=DEBUG locally when
 # debugging suggestion quality; leave it unset in the public deployment.
 _LOG_FORMAT = "%(asctime)s %(levelname)s:%(name)s:%(message)s"
-_APP_LOG_PATH = os.path.expanduser("~/Library/Logs/lint-ii.app.log")
+# Env-overridable so the Linux deployment writes to e.g. /var/log/lint-ii
+# instead of the macOS default. The parent dir is created if missing
+# (RotatingFileHandler does not create it).
+_APP_LOG_PATH = os.path.expanduser(
+    os.environ.get("LINT_II_LOG_PATH", "~/Library/Logs/lint-ii.app.log")
+)
+os.makedirs(os.path.dirname(_APP_LOG_PATH), exist_ok=True)
 _LOG_LEVEL = getattr(logging, os.environ.get("LINT_II_LOG_LEVEL", "INFO").upper(), logging.INFO)
 
 _stderr_handler = logging.StreamHandler()
@@ -73,7 +79,11 @@ logging.getLogger("httpx").setLevel(logging.INFO)
 logging.getLogger("httpcore").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
-_executor = ThreadPoolExecutor(max_workers=4)
+# General-purpose pool: pandoc/pdftotext conversions and the spaCy pass for
+# /analyze-lint. Env-overridable so a many-core host can handle more concurrent
+# conversions.
+_GENERAL_WORKERS = int(os.environ.get("LINT_II_GENERAL_WORKERS", "4"))
+_executor = ThreadPoolExecutor(max_workers=_GENERAL_WORKERS)
 
 LINT_PROVIDER = os.environ.get("LINT_PROVIDER", "mlx")
 LINT_MODEL = os.environ.get("LINT_MODEL", None)
@@ -84,7 +94,14 @@ LINT_MODEL = os.environ.get("LINT_MODEL", None)
 # allows 75 requests/minute and one analysis uses ~20-25/minute, so three
 # concurrent analyses fit comfortably. spaCy calls are serialized by a lock
 # in nlp_model.py; the LLM phases run in parallel.
-_ANALYSIS_WORKERS = 1 if LINT_PROVIDER == "mlx" else 3
+#
+# Env-overridable for the Linux/API deployment. Note the ceiling is the LLM
+# provider's rate limit, NOT the host: even on a 32-core box, more than ~3
+# concurrent Mistral analyses would approach the 75-req/min cap and draw 429s
+# from Mistral, so raise this only if the provider plan allows more throughput.
+_ANALYSIS_WORKERS = int(
+    os.environ.get("LINT_II_ANALYSIS_WORKERS", "1" if LINT_PROVIDER == "mlx" else "3")
+)
 _analysis_executor = ThreadPoolExecutor(max_workers=_ANALYSIS_WORKERS)
 _provider = None
 

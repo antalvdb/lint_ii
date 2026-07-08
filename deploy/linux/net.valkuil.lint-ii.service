@@ -1,0 +1,39 @@
+# systemd unit for the LiNT-II demo on the Strato Linux box.
+# Install to /etc/systemd/system/net.valkuil.lint-ii.service
+# (see deploy/linux/README.md for the full procedure).
+#
+# IMPORTANT: exactly ONE uvicorn process. The job store and thread pools live
+# in-process; running `--workers N` would give each worker its own job dict, so
+# a /analyze-result poll could hit a worker that never ran the job. Concurrency
+# comes from the in-process thread pools (LINT_II_ANALYSIS_WORKERS etc.), not
+# from multiple uvicorn workers.
+
+[Unit]
+Description=LiNT-II readability demo (FastAPI/uvicorn)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lint
+Group=lint
+WorkingDirectory=/opt/lint_ii
+# HOME so the result cache lands in /opt/lint_ii/.cache/lint-ii/.
+Environment=HOME=/opt/lint_ii
+# Secrets and tuning (MISTRAL_API_KEY lives here, NOT in the repo).
+EnvironmentFile=/etc/lint-ii/lint-ii.env
+ExecStart=/opt/lint_ii/.venv/bin/uvicorn api:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+
+# Sandboxing
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectControlGroups=true
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+ReadWritePaths=/var/log/lint-ii /opt/lint_ii
+
+[Install]
+WantedBy=multi-user.target

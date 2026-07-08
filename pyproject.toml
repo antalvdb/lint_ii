@@ -35,6 +35,9 @@ dependencies = [
 [project.optional-dependencies]
 notebook = ["ipykernel", "jupyter"]
 llm = ["openai>=1.0", "anthropic>=0.18", "httpx>=0.24", "spylls>=0.1"]
+# The FastAPI demo server (api.py). Kept separate so the core library has no web
+# dependency. Install with `pip install -e ".[llm,server]"` for the demo.
+server = ["fastapi>=0.110", "uvicorn[standard]>=0.27", "jinja2>=3.1"]
 
 [project.urls]
 homepage = "https://vanboefer.github.io/lint_ii/"
