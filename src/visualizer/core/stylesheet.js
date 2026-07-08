@@ -9,12 +9,14 @@ export const css = `
         --color-unknown: hsl(0, 20%, 90%);
 
         /* Difficulty is ordinal, so the four levels form one cool-to-hot ramp
-           (green, amber, burnt orange, red) that reads as increasing severity.
-           All four are deep enough for white badge text (>= 4:1). */
-        --color-level-1: hsl(152, 45%, 33%);
-        --color-level-2: hsl(38, 85%, 33%);
-        --color-level-3: hsl(20, 75%, 38%);
-        --color-level-4: hsl(354, 65%, 40%);
+           (green, amber, orange, red) that reads as increasing severity.
+           Mid-lightness hues keep the four clearly distinct (amber must not
+           drift towards the red); badge digits are dark for contrast. */
+        --color-level-1: hsl(145, 50%, 45%);
+        --color-level-2: hsl(40, 92%, 52%);
+        --color-level-3: hsl(22, 88%, 54%);
+        --color-level-4: hsl(354, 72%, 54%);
+        --color-level-text: hsl(75, 8%, 12%);
 
         display: grid;
         grid-template-rows: auto auto;
@@ -121,9 +123,10 @@ export const css = `
         width: 1.4em;
         height: 1.4em;
         border-radius: 50%;
-        color: #fff;
+        color: var(--color-level-text);
         font-family: monospace;
         font-size: 0.95em;
+        font-weight: bold;
         line-height: 1;
         user-select: none;
     }
@@ -247,7 +250,8 @@ export const css = `
         margin-right: .5em;
         font-family: monospace;
         line-height: 1em;
-        color: white;
+        color: var(--color-level-text);
+        font-weight: bold;
         user-select: none;
     }
     header .level-badge {

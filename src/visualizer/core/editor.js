@@ -1,3 +1,5 @@
+import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './word-diff.js?v=1'
+
 /**
  * EditorController manages suggestion state and text editing.
  *
@@ -780,7 +782,79 @@ export class EditorController {
         if (accepted.length === 0) {
             return this._reconstructSentenceText(sentence)
         }
-        return accepted[0].suggested_text
+        if (accepted.length === 1) {
+            return accepted[0].suggested_text
+        }
+        // Multiple accepted suggestions must all reach the exported text,
+        // composed the same way the display composes them.
+        return this._composeAcceptedText(sentence, accepted)
+    }
+
+    /**
+     * Compose the output text for a sentence with several accepted
+     * suggestions: diff each suggestion against the original tokens
+     * (word-diff.js, same algorithm as the display path) and apply all
+     * change regions right-to-left, tolerating interleaved regions.
+     */
+    _composeAcceptedText(sentence, accepted) {
+        const tokens = sentence.word_features
+            .filter(wf => wf.pos !== 'PUNCT' || 'punctuation' in wf)
+            .map(wf => (wf.punctuation?.leading || '') + wf.text + (wf.punctuation?.trailing || ''))
+        const origBare = tokens.map(stripToken)
+
+        const allRegions = []
+        for (const suggestion of accepted) {
+            const sugTokens = suggestionTokens(suggestion.suggested_text)
+            const sugBare = sugTokens.map(stripToken)
+            allRegions.push(...computeWordDiff(origBare, sugBare, sugTokens))
+        }
+        allRegions.sort((a, b) => b.insertBeforeIdx - a.insertBeforeIdx)
+
+        const removed = new Array(tokens.length).fill(false)
+        const inserts = Array.from({ length: tokens.length + 1 }, () => [])
+
+        for (const region of allRegions) {
+            const texts = [...region.newTexts]
+            if (region.origIndices.length > 0 && texts.length > 0) {
+                // Preserve punctuation from the replaced original words, as
+                // the display path does.
+                const lastOrig = tokens[region.origIndices.at(-1)]
+                const trailMatch = lastOrig.match(/([.,;:!?]+)$/)
+                if (trailMatch && !texts.at(-1).match(/[.,;:!?]$/)) {
+                    texts[texts.length - 1] += trailMatch[1]
+                }
+                const firstOrig = tokens[region.origIndices[0]]
+                const leadMatch = firstOrig.match(/^([("'“]+)/)
+                if (leadMatch && !texts[0].match(/^[("'“]/)) {
+                    texts[0] = leadMatch[1] + texts[0]
+                }
+                const firstOrigLetter = firstOrig.replace(/^[("'“]+/, '').charAt(0)
+                if (firstOrigLetter && firstOrigLetter === firstOrigLetter.toUpperCase()
+                    && firstOrigLetter !== firstOrigLetter.toLowerCase()) {
+                    texts[0] = capitalizeToken(texts[0])
+                }
+            }
+
+            // Mirror the display's anchor walk: an earlier-applied region may
+            // have removed this region's anchor token.
+            let anchor = region.insertBeforeIdx
+            while (anchor < tokens.length && removed[anchor]) anchor++
+            inserts[anchor].push(...texts)
+
+            for (const i of region.origIndices) {
+                removed[i] = true
+            }
+        }
+
+        const out = []
+        for (let i = 0; i <= tokens.length; i++) {
+            out.push(...inserts[i])
+            if (i < tokens.length && !removed[i]) out.push(tokens[i])
+        }
+        if (out.length > 0) {
+            out[0] = capitalizeToken(out[0])
+        }
+        return out.join(' ')
     }
 
     /**

@@ -1,9 +1,10 @@
-import { css } from './core/stylesheet.js?v=15'
+import { css } from './core/stylesheet.js?v=16'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
-import { EditorController } from './core/editor.js?v=11'
+import { EditorController } from './core/editor.js?v=12'
 import { SuggestionPopupController } from './core/suggestion-popup.js?v=3'
+import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './core/word-diff.js?v=1'
 
 
 export class LintIIVisualizer extends HTMLElement {
@@ -506,30 +507,15 @@ export class LintIIVisualizer extends HTMLElement {
      */
     _applyAcceptedDiffs(sentenceEl, acceptedSuggestions) {
         const wordEls = Array.from(sentenceEl.querySelectorAll('.word'))
-        const strip = t => t.replace(/[,;:()"'\u201c\u201d]/g, "").toLowerCase()
-        const origBare = wordEls.map(el => strip(el.textContent))
+        const origBare = wordEls.map(el => stripToken(el.textContent))
 
         // Collect all change regions from all accepted suggestions
         const allRegions = []
         for (const suggestion of acceptedSuggestions) {
-            const sugText = suggestion.suggested_text
-                .replace(/^[""\u201c]+|[""\u201d]+$/g, '').trim()
-            const sugTokens = sugText.split(/\s+/).filter(Boolean)
+            const sugTokens = suggestionTokens(suggestion.suggested_text)
+            const sugBare = sugTokens.map(stripToken)
 
-            // Capitalize the first suggested token to match sentence start,
-            // so capitalization differences never produce a spurious diff region.
-            if (sugTokens.length > 0) {
-                const first = sugTokens[0]
-                const lead = first.match(/^[("'\u201c]*/)
-                const off = lead ? lead[0].length : 0
-                if (off < first.length) {
-                    sugTokens[0] = first.slice(0, off) + first.charAt(off).toUpperCase() + first.slice(off + 1)
-                }
-            }
-
-            const sugBare = sugTokens.map(strip)
-
-            const regions = this._computeWordDiff(origBare, sugBare, sugTokens)
+            const regions = computeWordDiff(origBare, sugBare, sugTokens)
             for (const region of regions) {
                 region.suggestion = suggestion
             }
@@ -605,77 +591,8 @@ export class LintIIVisualizer extends HTMLElement {
         // Ministerie ..."). Make sure the sentence starts with a capital.
         const firstWord = sentenceEl.querySelector('.word')
         if (firstWord) {
-            const text = firstWord.textContent
-            const lead = text.match(/^[("'“]*/)
-            const off = lead ? lead[0].length : 0
-            if (off < text.length) {
-                firstWord.textContent =
-                    text.slice(0, off) + text.charAt(off).toUpperCase() + text.slice(off + 1)
-            }
+            firstWord.textContent = capitalizeToken(firstWord.textContent)
         }
-    }
-
-    /**
-     * LCS-based word diff that returns multiple independent change regions.
-     * Each region: { origIndices: [...], newTexts: [...], insertBeforeIdx }
-     */
-    _computeWordDiff(origBare, sugBare, sugTokens) {
-        const m = origBare.length
-        const n = sugBare.length
-
-        // LCS dynamic programming
-        const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0))
-        for (let i = 1; i <= m; i++) {
-            for (let j = 1; j <= n; j++) {
-                dp[i][j] = origBare[i - 1] === sugBare[j - 1]
-                    ? dp[i - 1][j - 1] + 1
-                    : Math.max(dp[i - 1][j], dp[i][j - 1])
-            }
-        }
-
-        // Backtrack to produce alignment operations
-        const ops = []
-        let i = m, j = n
-        while (i > 0 || j > 0) {
-            if (i > 0 && j > 0 && origBare[i - 1] === sugBare[j - 1]) {
-                ops.push({ type: 'keep', origIdx: i - 1 })
-                i--; j--
-            } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
-                ops.push({ type: 'insert', sugIdx: j - 1 })
-                j--
-            } else {
-                ops.push({ type: 'delete', origIdx: i - 1 })
-                i--
-            }
-        }
-        ops.reverse()
-
-        // Group contiguous non-keep operations into change regions
-        const regions = []
-        let idx = 0
-        while (idx < ops.length) {
-            if (ops[idx].type === 'keep') { idx++; continue }
-
-            const origIndices = []
-            const newTexts = []
-            while (idx < ops.length && ops[idx].type !== 'keep') {
-                if (ops[idx].type === 'delete') {
-                    origIndices.push(ops[idx].origIdx)
-                } else {
-                    newTexts.push(sugTokens[ops[idx].sugIdx])
-                }
-                idx++
-            }
-
-            // Determine DOM insertion point
-            const insertBeforeIdx = origIndices.length > 0
-                ? origIndices[origIndices.length - 1] + 1
-                : (idx < ops.length ? ops[idx].origIdx : origBare.length)
-
-            regions.push({ origIndices, newTexts, insertBeforeIdx })
-        }
-
-        return regions
     }
 
     renderContent() {

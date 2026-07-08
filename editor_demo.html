@@ -237,17 +237,17 @@
             font-size: 0.85em;
             font-family: monospace;
             font-weight: bold;
-            color: white;
+            color: #1e1f1a;
             vertical-align: middle;
             margin-right: 0.2em;
         }
 
         /* Mirrors --color-level-N in the visualizer stylesheet: one ordered
-           cool-to-hot ramp, deep enough for white badge text. */
-        .lvl1 { background: hsl(152, 45%, 33%); }
-        .lvl2 { background: hsl(38, 85%, 33%); }
-        .lvl3 { background: hsl(20, 75%, 38%); }
-        .lvl4 { background: hsl(354, 65%, 40%); }
+           cool-to-hot ramp at mid lightness, dark badge digits. */
+        .lvl1 { background: hsl(145, 50%, 45%); }
+        .lvl2 { background: hsl(40, 92%, 52%); }
+        .lvl3 { background: hsl(22, 88%, 54%); }
+        .lvl4 { background: hsl(354, 72%, 54%); }
 
         .color-swatch {
             display: inline-block;
@@ -410,7 +410,7 @@
         </div>
     </div>
 
-    <script type="module" src="./src/visualizer/lint_ii_visualizer.js?v=31"></script>
+    <script type="module" src="./src/visualizer/lint_ii_visualizer.js?v=32"></script>
     <script type="module">
         const EXAMPLE_TEXTS = {
             1: `Jan gaat elke zaterdag naar de markt. Hij koopt er groenten en fruit. De markt is groot en druk. Er staan veel kraampjes met eten en drinken. Jan houdt van de kaasmarkt. De man achter de kraam geeft hem een stukje om te proeven. De kaas smaakt lekker. Jan koopt een groot stuk. Daarna drinkt hij een kop koffie bij het café op het plein. Hij fietst blij naar huis met zijn tas vol eten.`,
