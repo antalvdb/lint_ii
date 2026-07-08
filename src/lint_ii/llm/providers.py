@@ -381,6 +381,84 @@ def _common_prefix_len(a: list[int], b: list[int]) -> int:
     return n
 
 
+class MistralProvider(LLMProvider):
+    """Mistral API provider (api.mistral.ai).
+
+    Cloud alternative to the on-machine MLX provider: no local memory
+    pressure and no Metal wedge risk, at the cost of sending tester text to
+    an external service. Selected with LINT_PROVIDER=mistral; the key comes
+    from the MISTRAL_API_KEY environment variable (set in the launchd plist,
+    never in the repo)."""
+
+    DEFAULT_MODEL = "mistral-large-latest"
+    BASE_URL = "https://api.mistral.ai/v1"
+
+    def __init__(self, api_key: str | None = None, model: str | None = None):
+        self._api_key = api_key or os.environ.get("MISTRAL_API_KEY")
+        if not self._api_key:
+            raise ValueError(
+                "Mistral API key required. Pass api_key or set MISTRAL_API_KEY env var."
+            )
+        self._model = model or os.environ.get("LINT_II_LLM_MODEL", self.DEFAULT_MODEL)
+        self._client = None
+
+    @property
+    def model_name(self) -> str:
+        return self._model
+
+    def _get_client(self) -> Any:
+        if self._client is None:
+            try:
+                import httpx
+            except ImportError:
+                raise ImportError(
+                    "httpx package not installed. Install with: pip install lint_ii[llm]"
+                )
+            self._client = httpx.Client(
+                base_url=self.BASE_URL,
+                headers={"Authorization": f"Bearer {self._api_key}"},
+                timeout=120.0,
+            )
+        return self._client
+
+    def _complete(
+        self, prompt: str, system_prompt: str | None = None, max_tokens: int | None = None
+    ) -> LLMResponse:
+        """Generate completion using the Mistral chat completions API."""
+        client = self._get_client()
+
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        response = client.post(
+            "/chat/completions",
+            json={
+                "model": self._model,
+                "messages": messages,
+                "temperature": 0.7,
+                "max_tokens": max_tokens or self.DEFAULT_MAX_TOKENS,
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        usage = None
+        if data.get("usage"):
+            usage = {
+                "prompt_tokens": data["usage"].get("prompt_tokens", 0),
+                "completion_tokens": data["usage"].get("completion_tokens", 0),
+                "total_tokens": data["usage"].get("total_tokens", 0),
+            }
+
+        return LLMResponse(
+            content=data["choices"][0]["message"]["content"] or "",
+            model=data.get("model", self._model),
+            usage=usage,
+        )
+
+
 class MLXProvider(LLMProvider):
     """Apple Silicon MLX provider — loads model directly for fast on-device inference."""
 
@@ -550,6 +628,7 @@ def create_provider(
         "anthropic": AnthropicProvider,
         "ollama": OllamaProvider,
         "mlx": MLXProvider,
+        "mistral": MistralProvider,
     }
 
     if provider not in providers:

@@ -33,8 +33,19 @@
     <key>WorkingDirectory</key>
     <string>/Users/antalb/Software/lint_ii</string>
 
+    <!--
+      Provider switch. Default is the on-machine MLX model. To use the Mistral
+      API instead: set LINT_PROVIDER to "mistral", change LINT_MODEL to a
+      Mistral model name (e.g. mistral-large-latest) or remove it, and add
+      MISTRAL_API_KEY with the real key IN THE INSTALLED COPY ONLY
+      (~/Library/LaunchAgents/) — never commit a key to this file.
+      launchctl kickstart does not re-read this file; after editing, unload
+      and load the plist.
+    -->
     <key>EnvironmentVariables</key>
     <dict>
+        <key>LINT_PROVIDER</key>
+        <string>mlx</string>
         <key>LINT_MODEL</key>
         <string>mlx-community/Qwen2.5-32B-Instruct-4bit</string>
     </dict>

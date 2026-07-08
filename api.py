@@ -7,6 +7,10 @@ and returns the full visualization payload.
 Provider is selected via the LINT_PROVIDER env var (default: mlx).
   LINT_PROVIDER=mlx       Apple Silicon, model path via LINT_MODEL (default: mlx-community/Qwen2.5-14B-Instruct-4bit)
   LINT_PROVIDER=ollama    Ollama server, model name via LINT_MODEL (default: qwen2.5:72b)
+  LINT_PROVIDER=mistral   Mistral API, model via LINT_MODEL (default: mistral-large-latest);
+                          key via MISTRAL_API_KEY. NOTE: sends tester text to
+                          an external service, and LINT_MODEL must be changed
+                          away from the MLX model path when switching.
 
 Usage (Mac):
     /Users/antalb/opt/miniconda3/envs/py311/bin/uvicorn api:app --host 0.0.0.0 --port 8443 ...
