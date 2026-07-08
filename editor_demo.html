@@ -322,7 +322,7 @@
                 <p>Voer een Nederlandse tekst in om suggesties te krijgen om de tekst leesbaarder te maken.<br>
                 LiNT-II analyseert de tekst en genereert verbeteringsvoorstellen met uitleg.<br>
                 <strong>LiNT-II beperkt zich tot stilistische verbeteringen per zin: de tool verandert niets aan de inhoud of de volgorde van uw tekst en vult geen ontbrekende informatie aan.</strong><br>
-                Deze demo is gebaseerd op <a href="https://lint.hum.uu.nl/home" target="_blank" style="color: inherit;">LiNT</a> en <a href="https://github.com/vanboefer/lint_ii" target="_blank" style="color: inherit;">lint-ii</a>, en maakt gebruik van Qwen2.5-32B-Instruct-4bit.</p>
+                Deze demo is gebaseerd op <a href="https://lint.hum.uu.nl/home" target="_blank" style="color: inherit;">LiNT</a> en <a href="https://github.com/vanboefer/lint_ii" target="_blank" style="color: inherit;">lint-ii</a>, en maakt gebruik van <span id="model-name">een groot taalmodel</span>.</p>
             </div>
         </div>
 
@@ -421,6 +421,12 @@
 
             4: `De aanbestedende dienst is gehouden de opdracht te gunnen aan de inschrijver die de economisch meest voordelige inschrijving heeft gedaan, beoordeeld op basis van de in de aanbestedingsdocumenten vermelde criteria. Ingevolge artikel 2.114 van de Aanbestedingswet 2012 dienen de gunningscriteria verband te houden met het voorwerp van de opdracht en mogen zij de aanbestedende dienst geen onbeperkte keuzevrijheid verlenen. Bij de vaststelling van de gunningscriteria dient de aanbestedende dienst ervoor zorg te dragen dat een daadwerkelijke mededinging mogelijk blijft en dat de criteria op objectieve en niet-discriminerende wijze worden toegepast.`,
         }
+
+        // Show the actually configured model (the provider is switchable
+        // server-side between the on-machine MLX model and the Mistral API).
+        fetch('/health').then(r => r.json()).then(h => {
+            if (h.model) document.getElementById('model-name').textContent = h.model
+        }).catch(() => {})
 
         const textInput = document.getElementById('text-input')
         const analyzeBtn = document.getElementById('analyze-btn')
