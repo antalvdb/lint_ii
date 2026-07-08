@@ -38,6 +38,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -616,5 +617,46 @@ async def convert(request: Request, filename: str = ""):
     return {"markdown": converted, "format": out_format}
 
 
-# Serve the demo frontend as static files (must be last)
-app.mount("/", StaticFiles(directory=".", html=True), name="static")
+# Serve ONLY the public frontend assets. A previous catch-all
+# StaticFiles(directory=".") mount exposed the entire project root over HTTP
+# (source, .git, deploy/, and gitignored PII test documents). The demo needs
+# exactly two HTML pages plus the visualiser subtree, so whitelist those and
+# nothing else. Paths are resolved relative to this file so the working
+# directory does not matter.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_PUBLIC_PAGES = {
+    # "/" serves the documentation page, matching the previous html=True mount
+    # (which resolved a bare "/" to index.html). The interactive demo lives at
+    # /editor_demo.html.
+    "/": "index.html",
+    "/editor_demo.html": "editor_demo.html",
+    "/index.html": "index.html",
+}
+
+
+def _public_page(name: str) -> FileResponse:
+    return FileResponse(os.path.join(_HERE, name), media_type="text/html")
+
+
+@app.get("/", include_in_schema=False)
+async def _root():
+    return _public_page(_PUBLIC_PAGES["/"])
+
+
+@app.get("/editor_demo.html", include_in_schema=False)
+async def _editor_page():
+    return _public_page("editor_demo.html")
+
+
+@app.get("/index.html", include_in_schema=False)
+async def _index_page():
+    return _public_page("index.html")
+
+
+# Versioned JS/CSS assets and vendored Vega. StaticFiles refuses to serve paths
+# that escape this directory, so ../ traversal to the project root is blocked.
+app.mount(
+    "/src/visualizer",
+    StaticFiles(directory=os.path.join(_HERE, "src", "visualizer")),
+    name="visualizer",
+)
