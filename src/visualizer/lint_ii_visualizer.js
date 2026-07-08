@@ -390,7 +390,14 @@ export class LintIIVisualizer extends HTMLElement {
         // Listen for editor changes to update UI
         this._editorController.addEventListener('editor-change', (e) => {
             const { suggestionId, status } = e.detail
-            this.updateSuggestionStatus(suggestionId, status)
+            try {
+                this.updateSuggestionStatus(suggestionId, status)
+            } catch (err) {
+                // A diff-application failure on one sentence must not abort
+                // the toolbar/score/split updates below, or the view is left
+                // inconsistent (stale split parts render as duplicated text).
+                console.error('updateSuggestionStatus failed:', err)
+            }
             this.updateEditorToolbar()
             this.updateDocumentScore()
             const suggestion = this._editorController.getSuggestion(suggestionId)
@@ -533,9 +540,20 @@ export class LintIIVisualizer extends HTMLElement {
         allRegions.sort((a, b) => b.insertBeforeIdx - a.insertBeforeIdx)
 
         for (const region of allRegions) {
-            const insertBefore = region.insertBeforeIdx < wordEls.length
-                ? wordEls[region.insertBeforeIdx]
-                : sentenceEl.querySelector('.sent-end-group')
+            // Regions from different accepted suggestions can interleave: an
+            // earlier-applied region may have removed this region's anchor
+            // word (insertBefore on a detached node throws). Walk forward to
+            // the first still-attached word.
+            let insertBefore = null
+            for (let idx = region.insertBeforeIdx; idx < wordEls.length; idx++) {
+                if (wordEls[idx].isConnected) {
+                    insertBefore = wordEls[idx]
+                    break
+                }
+            }
+            if (!insertBefore) {
+                insertBefore = sentenceEl.querySelector('.sent-end-group')
+            }
 
             // Preserve punctuation and capitalization from deleted original words.
             const texts = [...region.newTexts]
