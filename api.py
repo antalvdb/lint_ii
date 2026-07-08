@@ -67,15 +67,19 @@ logging.getLogger("httpcore").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 _executor = ThreadPoolExecutor(max_workers=4)
-# Heavy LLM analyses run one at a time. The MLX 32B model is a single shared
-# resource on a 32 GB machine; running several /analyze jobs concurrently
-# thrashes memory and wedges the server, so they queue on a single worker while
-# the fast /analyze-lint and /convert paths stay on the 4-worker pool.
-_analysis_executor = ThreadPoolExecutor(max_workers=1)
-_provider = None
 
 LINT_PROVIDER = os.environ.get("LINT_PROVIDER", "mlx")
 LINT_MODEL = os.environ.get("LINT_MODEL", None)
+
+# Heavy LLM analyses: with the on-machine MLX model they MUST run one at a
+# time (a single 32B model on a 32 GB machine; concurrent jobs thrash memory
+# and wedge the server). API providers have no such constraint — Mistral
+# allows 75 requests/minute and one analysis uses ~20-25/minute, so three
+# concurrent analyses fit comfortably. spaCy calls are serialized by a lock
+# in nlp_model.py; the LLM phases run in parallel.
+_ANALYSIS_WORKERS = 1 if LINT_PROVIDER == "mlx" else 3
+_analysis_executor = ThreadPoolExecutor(max_workers=_ANALYSIS_WORKERS)
+_provider = None
 
 
 def _load_provider():
@@ -296,11 +300,15 @@ def _cache_put(key: str, result: dict) -> None:
 
 def _cache_save(snapshot: list[tuple[str, dict]]) -> None:
     """Write the cache to disk (atomically, via a temp file). Runs outside the
-    cache lock; a failed write only costs persistence, never correctness."""
+    cache lock; a failed write only costs persistence, never correctness. The
+    temp file name is unique per call so concurrent saves from parallel
+    analysis workers cannot clobber each other mid-write."""
     try:
         os.makedirs(os.path.dirname(_RESULT_CACHE_PATH), exist_ok=True)
-        tmp_path = _RESULT_CACHE_PATH + ".tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
+        fd, tmp_path = tempfile.mkstemp(
+            dir=os.path.dirname(_RESULT_CACHE_PATH), suffix=".tmp"
+        )
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump({"entries": [[k, v] for k, v in snapshot]}, f)
         os.replace(tmp_path, _RESULT_CACHE_PATH)
     except Exception as e:
@@ -473,15 +481,17 @@ async def analyze_result(job_id: str):
     with _jobs_lock:
         job = _jobs.get(job_id)
         if job is not None and job["status"] == "pending":
-            # Queue position: pending jobs ahead of this one. Insertion order
-            # is submission order, and the single analysis worker runs jobs
-            # FIFO, so position 0 means "being analysed now".
-            position = 0
+            # Queue position: how many jobs must finish before this one can
+            # start. Insertion order is submission order and the pool runs
+            # FIFO, so with W workers the first W pending jobs are running
+            # (position 0 = "being analysed now").
+            ahead = 0
             for jid, j in _jobs.items():
                 if jid == job_id:
                     break
                 if j["status"] == "pending":
-                    position += 1
+                    ahead += 1
+            position = max(0, ahead - (_ANALYSIS_WORKERS - 1))
             return {"status": "pending", "queue_position": position}
     if job is None:
         raise HTTPException(status_code=404, detail="Onbekende of verlopen analyse.")
