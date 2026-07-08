@@ -274,7 +274,9 @@ export const css = `
         .sent-idx,
         .sent-start::before,
         .sent-end::after {
-            color: var(--color-level-1);
+            /* Slightly darker than the badge fill: thin bracket glyphs need
+               more depth than a filled disc to hold up against white. */
+            color: color-mix(in oklch, var(--color-level-1) 76%, black);
         }
     }
     [data-level="2"] {
@@ -284,7 +286,9 @@ export const css = `
         .sent-idx,
         .sent-start::before,
         .sent-end::after {
-            color: var(--color-level-2);
+            /* Slightly darker than the badge fill: thin bracket glyphs need
+               more depth than a filled disc to hold up against white. */
+            color: color-mix(in oklch, var(--color-level-2) 76%, black);
         }
     }
     [data-level="3"] {
@@ -294,7 +298,9 @@ export const css = `
         .sent-idx,
         .sent-start::before,
         .sent-end::after {
-            color: var(--color-level-3);
+            /* Slightly darker than the badge fill: thin bracket glyphs need
+               more depth than a filled disc to hold up against white. */
+            color: color-mix(in oklch, var(--color-level-3) 76%, black);
         }
     }
     [data-level="4"] {
@@ -304,7 +310,9 @@ export const css = `
         .sent-idx,
         .sent-start::before,
         .sent-end::after {
-            color: var(--color-level-4);
+            /* Slightly darker than the badge fill: thin bracket glyphs need
+               more depth than a filled disc to hold up against white. */
+            color: color-mix(in oklch, var(--color-level-4) 76%, black);
         }
     }
 
