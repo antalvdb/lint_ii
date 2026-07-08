@@ -75,6 +75,70 @@ def _ends_like_sentence(line: str) -> bool:
     return bool(match) and bool(stripped[: match.start()].strip())
 
 
+def _join_hyphenated(left: str, right: str) -> str:
+    """Join a line ending in a hyphen with its continuation, dropping the
+    hyphen when that produces a known Dutch word."""
+    m_left = re.search(r"([^\W\d_]+)-$", left, re.UNICODE)
+    m_right = re.match(r"([^\W\d_]+)", right, re.UNICODE)
+    if m_left and m_right:
+        candidate = m_left.group(1) + m_right.group(1)
+        try:
+            from lint_ii.llm.hunspell_spelling import _get_dictionary
+            if _get_dictionary().lookup(candidate):
+                return left[:-1] + right
+        except Exception:
+            pass
+    return left + right
+
+
+def _unwrap_hard_breaks(text: str) -> str:
+    """Rejoin hard-wrapped lines (text copied from a PDF or plain-text email)
+    into paragraphs before block segmentation.
+
+    Hard-wrapped input breaks the line heuristics twice over: lines cut
+    mid-sentence are classified as headings (excluded from analysis), and the
+    prose that remains is analysed in half-sentences. The unwrap only fires
+    when the text as a whole looks hard-wrapped — a large share of its line
+    breaks fall mid-sentence — so deliberately structured input (one
+    paragraph or heading per line) keeps its line breaks. Within the unwrap,
+    blank lines still separate paragraphs, and a line surrounded by blank
+    lines keeps its own line (a likely real heading)."""
+    lines = [ln.strip() for ln in text.split("\n")]
+
+    joinable = suspicious = 0
+    for i in range(len(lines) - 1):
+        if lines[i] and lines[i + 1]:
+            joinable += 1
+            if not _ends_like_sentence(lines[i]):
+                suspicious += 1
+    if joinable < 3 or suspicious < max(2.0, 0.4 * joinable):
+        return text
+
+    out: list[str] = []
+    paragraph: list[str] = []
+
+    def flush() -> None:
+        if paragraph:
+            out.append(" ".join(paragraph))
+            paragraph.clear()
+
+    for line in lines:
+        if not line:
+            flush()
+            out.append("")
+            continue
+        if paragraph and paragraph[-1].endswith("-") and line[:1].islower():
+            # A hyphenated line-end is a broken-off word. Drop the hyphen when
+            # the rejoined word is real Dutch ("mogelijk-/heid" ->
+            # "mogelijkheid"); otherwise keep it, which leaves legitimate
+            # compound hyphens like "milieu-incidenten" intact.
+            paragraph[-1] = _join_hyphenated(paragraph[-1], line)
+        else:
+            paragraph.append(line)
+    flush()
+    return "\n".join(out)
+
+
 def _segment_blocks(text: str) -> list[dict[str, Any]]:
     """Split raw text into ordered structural blocks without flattening it.
 
@@ -312,8 +376,9 @@ class ReadabilityAnalysis(LintIIVisualizer):
     @classmethod
     def from_text(cls, text: str) -> 'ReadabilityAnalysis':
         """Create analysis from plain text, detecting structure with line
-        heuristics (headings, blank lines) — see _segment_blocks."""
-        return cls._from_blocks(_segment_blocks(text))
+        heuristics (headings, blank lines) — see _segment_blocks. Hard-wrapped
+        input (PDF copy-paste) is rejoined into paragraphs first."""
+        return cls._from_blocks(_segment_blocks(_unwrap_hard_breaks(text)))
 
     @classmethod
     def from_markdown(cls, md_text: str) -> 'ReadabilityAnalysis':
