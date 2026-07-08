@@ -14,7 +14,7 @@ import re
 import uuid
 
 from lint_ii.llm.providers import LLMProvider, LLMTimeoutError, create_provider
-from lint_ii.llm.prompts import format_prompt, parse_llm_response, parse_spelling_response
+from lint_ii.llm.prompts import format_prompt, parse_block_response, parse_llm_response, parse_spelling_response
 
 logger = logging.getLogger(__name__)
 
@@ -157,15 +157,23 @@ SENTENCE_LEVEL_TRIGGER_TYPES = frozenset({
 })
 
 
+# Word-frequency triggers per bundled LLM call. Response budget is ~150-200
+# tokens per item (VERVANGING + short UITLEG + full rewritten fragment).
+_WORDFREQ_BUNDLE_SIZE = 8
+
+
 @dataclass
 class SuggestionJob:
-    """One planned LLM call that produces (at most) one suggestion.
+    """One planned LLM call.
 
-    kind == "single":       one trigger, generated with that trigger's own
-                            type-specific prompt (legacy per-trigger behaviour;
-                            also used for word_frequency under consolidation).
-    kind == "consolidated": several sentence-level triggers for one sentence,
-                            addressed together via the sentence_rewrite prompt.
+    kind == "single":          one trigger, generated with that trigger's own
+                               type-specific prompt (one suggestion).
+    kind == "consolidated":    several sentence-level triggers for one sentence,
+                               addressed together via the sentence_rewrite
+                               prompt (one suggestion).
+    kind == "wordfreq_bundle": up to _WORDFREQ_BUNDLE_SIZE word_frequency
+                               triggers answered by one LLM call (one
+                               suggestion per trigger).
     """
     kind: str
     sentence_index: int
@@ -553,23 +561,32 @@ class SuggestionEngine:
                     triggers=[sent_triggers[0]],
                 ))
 
-        # Round 2+: word_frequency jobs, round-robin across sentences
+        # Round 2+: word_frequency triggers, round-robin across sentences.
+        # Selection (and the cap, which counts SUGGESTIONS) is unchanged, but
+        # the selected triggers are bundled into groups of up to
+        # _WORDFREQ_BUNDLE_SIZE, each answered by ONE LLM call that returns a
+        # block per word — same suggestions, far fewer calls.
+        selected_wf: list[SuggestionTrigger] = []
         wf_order = sorted(wordfreq_by_sentence.keys())
-        while len(jobs) < cap:
+        while len(jobs) + len(selected_wf) < cap:
             progressed = False
             for sent_idx in wf_order:
-                if len(jobs) >= cap:
+                if len(jobs) + len(selected_wf) >= cap:
                     break
                 bucket = wordfreq_by_sentence[sent_idx]
                 if bucket:
-                    jobs.append(SuggestionJob(
-                        kind="single",
-                        sentence_index=sent_idx,
-                        triggers=[bucket.pop(0)],
-                    ))
+                    selected_wf.append(bucket.pop(0))
                     progressed = True
             if not progressed:
                 break
+
+        for i in range(0, len(selected_wf), _WORDFREQ_BUNDLE_SIZE):
+            group = selected_wf[i:i + _WORDFREQ_BUNDLE_SIZE]
+            jobs.append(SuggestionJob(
+                kind="wordfreq_bundle",
+                sentence_index=group[0].sentence_index,
+                triggers=group,
+            ))
 
         return jobs
 
@@ -585,31 +602,39 @@ class SuggestionEngine:
         Returns:
             List of Suggestion objects with type=SPELLING.
         """
-        # Build numbered text from all sentences
-        sentence_texts: list[str] = []
-        for idx, sent_analysis in enumerate(analysis.sentence_analyses):
-            sentence_texts.append(f"{idx + 1}. {sent_analysis.doc.text}")
-        full_text = "\n".join(sentence_texts)
+        # Chunk the document: a single whole-document call risks truncating
+        # its response at max_tokens on long texts (errors beyond the cutoff
+        # are silently lost). Sentences keep their GLOBAL 1-based numbers so
+        # ZIN_NUMMER maps back directly regardless of chunk.
+        _CHUNK_SENTENCES = 25
+        sentence_analyses = analysis.sentence_analyses
+        parsed_errors: list[dict[str, str]] = []
+        for start in range(0, len(sentence_analyses), _CHUNK_SENTENCES):
+            chunk = sentence_analyses[start:start + _CHUNK_SENTENCES]
+            chunk_text = "\n".join(
+                f"{start + i + 1}. {sa.doc.text}" for i, sa in enumerate(chunk)
+            )
+            system_prompt, user_prompt = format_prompt("spelling", text=chunk_text)
 
-        system_prompt, user_prompt = format_prompt("spelling", text=full_text)
+            try:
+                response = provider.complete(user_prompt, system_prompt, max_tokens=1024)
+            except LLMTimeoutError:
+                # A wedged/timed-out provider must fail the whole job visibly,
+                # not degrade it to an analysis with fewer suggestions.
+                raise
+            except Exception as e:
+                err_str = str(e).lower()
+                if "authentication" in err_str or "401" in err_str or "api_key" in err_str:
+                    raise _AuthenticationError(e) from e
+                logger.error(
+                    "Spelling pass failed for sentences %d-%d: %s",
+                    start + 1, start + len(chunk), e, exc_info=True,
+                )
+                continue
 
-        try:
-            # Whole-document pass: enumerates every error in one call, so it
-            # needs more headroom than a single-sentence rewrite.
-            response = provider.complete(user_prompt, system_prompt, max_tokens=1024)
-        except LLMTimeoutError:
-            # A wedged/timed-out provider must fail the whole job visibly, not
-            # degrade it to an analysis with fewer suggestions.
-            raise
-        except Exception as e:
-            err_str = str(e).lower()
-            if "authentication" in err_str or "401" in err_str or "api_key" in err_str:
-                raise _AuthenticationError(e) from e
-            logger.error("Failed to generate spelling suggestions: %s", e, exc_info=True)
-            return []
-
-        logger.debug("Spelling LLM response:\n%s", response.content)
-        parsed_errors = parse_spelling_response(response.content)
+            logger.debug("Spelling LLM response (sentences %d-%d):\n%s",
+                         start + 1, start + len(chunk), response.content)
+            parsed_errors.extend(parse_spelling_response(response.content))
 
         suggestions: list[Suggestion] = []
         for error in parsed_errors:
@@ -726,7 +751,7 @@ class SuggestionEngine:
                 word=word,
                 word_index=word_index,
                 replacement_word=correction,
-                model=response.model,
+                model=provider.model_name,
                 error_category=error_category,
             ))
 
@@ -795,20 +820,28 @@ class SuggestionEngine:
         for job in jobs:
             t_job = time.perf_counter()
             try:
-                suggestion = self._generate_suggestion_for_job(job, provider, document_level)
+                if job.kind == "wordfreq_bundle":
+                    new_suggestions = self._generate_wordfreq_bundle(job, provider, document_level)
+                else:
+                    single = self._generate_suggestion_for_job(job, provider, document_level)
+                    new_suggestions = [single] if single else []
             except _AuthenticationError as e:
                 raise RuntimeError(
                     f"LLM authentication failed: {e}. Check your API key."
                 ) from e
-            label = "consolidated" if job.kind == "consolidated" else job.triggers[0].type.value
+            if job.kind == "consolidated":
+                label = "consolidated"
+            elif job.kind == "wordfreq_bundle":
+                label = f"wordfreq_bundle_{len(job.triggers)}"
+            else:
+                label = job.triggers[0].type.value
             logger.info("TIMING job_%s=%.2fs", label, time.perf_counter() - t_job)
-            if suggestion:
-                suggestions.append(suggestion)
+            suggestions.extend(new_suggestions)
 
         return SuggestionsResult(
             suggestions=suggestions,
             triggers_found=len(triggers),
-            triggers_processed=len(jobs),
+            triggers_processed=sum(len(j.triggers) for j in jobs),
             model=provider.model_name,
         )
 
@@ -1051,6 +1084,124 @@ class SuggestionEngine:
                 job.sentence_index, e, exc_info=True,
             )
             return None
+
+    def _generate_wordfreq_bundle(
+        self,
+        job: SuggestionJob,
+        provider: LLMProvider,
+        document_level: int | None = None,
+    ) -> list[Suggestion]:
+        """Generate word-swap suggestions for several word_frequency triggers
+        with ONE LLM call. Each trigger yields its own suggestion and passes
+        the same validation as the per-trigger path."""
+        triggers = job.triggers
+        items = "\n\n".join(
+            f'{i + 1}. WOORD: "{t.word}" (frequentie {t.feature_value:.2f})\n'
+            f'   FRAGMENT: "{t.context or t.sentence_text}"'
+            for i, t in enumerate(triggers)
+        )
+        try:
+            system_prompt, user_prompt = format_prompt(
+                "word_frequency_bundle", n_items=len(triggers), items=items,
+            )
+            system_prompt = self._append_level_constraint(system_prompt, document_level)
+            response = provider.complete(
+                user_prompt, system_prompt,
+                max_tokens=min(2048, 200 * len(triggers) + 150),
+            )
+        except LLMTimeoutError:
+            raise
+        except Exception as e:
+            err_str = str(e).lower()
+            if "authentication" in err_str or "401" in err_str or "api_key" in err_str:
+                raise _AuthenticationError(e) from e
+            logger.error("Failed to generate word-frequency bundle: %s", e, exc_info=True)
+            return []
+
+        logger.debug("Word-frequency bundle response:\n%s", response.content)
+        blocks = parse_block_response(
+            response.content,
+            fields=["NUMMER", "VERVANGING", "UITLEG", "HERSCHRIJVING"],
+            required="NUMMER",
+        )
+        suggestions: list[Suggestion] = []
+        seen: set[int] = set()
+        for block in blocks:
+            match = re.search(r"\d+", block.get("NUMMER", ""))
+            if match is None:
+                continue
+            item_idx = int(match.group()) - 1
+            if item_idx < 0 or item_idx >= len(triggers) or item_idx in seen:
+                continue
+            seen.add(item_idx)
+            suggestion = self._build_wordfreq_suggestion(
+                triggers[item_idx], block, provider.model_name,
+            )
+            if suggestion:
+                suggestions.append(suggestion)
+        if len(suggestions) < len(triggers):
+            logger.info(
+                "Word-frequency bundle: %d of %d items yielded a suggestion",
+                len(suggestions), len(triggers),
+            )
+        return suggestions
+
+    def _build_wordfreq_suggestion(
+        self,
+        trigger: SuggestionTrigger,
+        parsed: dict[str, str],
+        model_name: str,
+    ) -> Suggestion | None:
+        """Validate one parsed word-swap block into a Suggestion, applying the
+        same filters as the per-trigger word_frequency path (frequency band,
+        placeholder markers, clause-conjunction and URL preservation)."""
+        suggested_text = parsed.get("HERSCHRIJVING", "")
+        original = trigger.sentence_text or ""
+        _quotes = '"“”‘’\''
+        if suggested_text and not original.startswith(tuple(_quotes)):
+            suggested_text = suggested_text.lstrip(_quotes)
+        if suggested_text and not original.endswith(tuple(_quotes)):
+            suggested_text = suggested_text.rstrip(_quotes)
+        explanation = parsed.get("UITLEG", "")
+        replacement_word = parsed.get("VERVANGING")
+
+        if not suggested_text:
+            logger.warning(
+                "No HERSCHRIJVING in bundle block for word %r", trigger.word,
+            )
+            return None
+        if "niet toegepast" in suggested_text.lower():
+            return None
+
+        if replacement_word:
+            from lint_ii.linguistic_data.wordlists import FREQ_DATA
+            zero_count_freq = 1.359228547196266
+            replacement_freq = FREQ_DATA.get(replacement_word.lower(), zero_count_freq)
+            if not self._in_higher_freq_band(replacement_freq, trigger.feature_value):
+                logger.info(
+                    "Dropping bundled word_frequency suggestion: %r -> %r not in a higher band",
+                    trigger.word, replacement_word,
+                )
+                return None
+
+        if self._breaks_clause_conjunction(original, suggested_text):
+            return None
+        if self._alters_url(original, suggested_text):
+            return None
+
+        return Suggestion(
+            id=str(uuid.uuid4())[:8],
+            type=trigger.type,
+            sentence_index=trigger.sentence_index,
+            original_text=trigger.sentence_text,
+            suggested_text=suggested_text,
+            explanation=explanation,
+            word=trigger.word,
+            word_index=trigger.word_index,
+            replacement_word=replacement_word,
+            model=model_name,
+            new_sentence_metrics=self._analyze_suggested_text(suggested_text),
+        )
 
     def _generate_suggestion_for_trigger(
         self,

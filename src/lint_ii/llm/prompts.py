@@ -182,6 +182,26 @@ HERSCHRIJVING: [de verbeterde zin of zinnen]
 UITLEG: [hoogstens tien woorden: wat er is veranderd — geen vakjargon]"""
     ),
 
+    "word_frequency_bundle": PromptTemplate(
+        system=SYSTEM_PROMPT_BASE + """
+
+Je richt je specifiek op het vervangen van infrequente of moeilijke woorden door meer gangbare synoniemen.""",
+        user="""Hieronder staan {n_items} genummerde tekstfragmenten. In elk fragment is één woord aangegeven dat een lage woordfrequentie heeft, wat betekent dat veel lezers dit woord mogelijk niet kennen. Vervang in elk fragment het aangegeven woord door een frequenter, begrijpelijker synoniem.
+
+Belangrijk: als de vervanging gevolgen heeft voor de grammaticale context (bijv. adjectief­verbuiging, lidwoord de/het, meervoud/enkelvoud, werkwoordsvervoeging), pas dan ook de omringende woorden aan zodat de zin grammaticaal correct blijft.
+
+{items}
+
+Geef voor elk item een blok in het volgende gestructureerde formaat (één blok per item):
+
+---
+NUMMER: [het nummer van het item]
+VERVANGING: [het nieuwe woord of de nieuwe woordgroep]
+UITLEG: [hoogstens tien woorden: waarom het nieuwe woord makkelijker is]
+HERSCHRIJVING: [het volledige herschreven tekstfragment met alle noodzakelijke grammaticale aanpassingen]
+---"""
+    ),
+
     "spelling": PromptTemplate(
         system="""Je bent een expert Nederlandse taalkundige en corrector. Je taak is om suggesties te geven om Nederlandse tekst leesbaarder te maken, door spelfouten en contextuele zinsbouw- en grammaticafouten te identificeren.
 
@@ -332,7 +352,19 @@ def parse_spelling_response(response: str) -> list[dict[str, str]]:
     if "GEEN_FOUTEN" in response and "WOORD:" not in response.upper():
         return []
 
-    fields = ["WOORD", "ZIN_NUMMER", "CORRECTIE", "CATEGORIE", "UITLEG"]
+    return parse_block_response(
+        response,
+        fields=["WOORD", "ZIN_NUMMER", "CORRECTIE", "CATEGORIE", "UITLEG"],
+        required="WOORD",
+    )
+
+
+def parse_block_response(response: str, fields: list[str], required: str) -> list[dict[str, str]]:
+    """
+    Parse a multi-block response ('---'-delimited blocks of FIELD: value
+    lines) into a list of dicts. Blocks missing the `required` field are
+    dropped. Values are unwrapped from echoed placeholder brackets.
+    """
     errors: list[dict[str, str]] = []
 
     current: dict[str, str] = {}
@@ -351,7 +383,7 @@ def parse_spelling_response(response: str) -> list[dict[str, str]]:
     def _flush_block():
         nonlocal current
         _flush_field()
-        if current and "WOORD" in current:
+        if current and required in current:
             errors.append(current)
         current = {}
 
