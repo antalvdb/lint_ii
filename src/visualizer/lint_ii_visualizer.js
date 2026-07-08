@@ -600,6 +600,19 @@ export class LintIIVisualizer extends HTMLElement {
             }
         }
 
+        // A region may have deleted the original sentence-initial words,
+        // promoting a mid-sentence word to the front (e.g. "het Openbaar
+        // Ministerie ..."). Make sure the sentence starts with a capital.
+        const firstWord = sentenceEl.querySelector('.word')
+        if (firstWord) {
+            const text = firstWord.textContent
+            const lead = text.match(/^[("'“]*/)
+            const off = lead ? lead[0].length : 0
+            if (off < text.length) {
+                firstWord.textContent =
+                    text.slice(0, off) + text.charAt(off).toUpperCase() + text.slice(off + 1)
+            }
+        }
     }
 
     /**
