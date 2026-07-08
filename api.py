@@ -44,13 +44,19 @@ from pydantic import BaseModel, Field
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-# Logging: the DEBUG stream (full LLM prompts/responses — the primary
-# debugging tool, but also the growth driver) goes to a size-capped rotating
-# file; launchd's err.log only receives INFO and up, so it stays small.
-# Timestamps are included in both (the 2026-06-10 wedge diagnosis had to
-# reconstruct timing from file mtimes).
+# Logging goes to a size-capped rotating file plus stderr (launchd's err.log).
+# Timestamps are included (the 2026-06-10 wedge diagnosis had to reconstruct
+# timing from file mtimes).
+#
+# The level defaults to INFO. At DEBUG the llm modules log full prompts and
+# model responses — derived from the user's submitted text — which on a public
+# demo builds a plaintext pile of tester content (some of it sensitive) on disk
+# with no retention policy. INFO keeps the useful diagnostics (timings, per-word
+# discard reasons) without the bodies. Set LINT_II_LOG_LEVEL=DEBUG locally when
+# debugging suggestion quality; leave it unset in the public deployment.
 _LOG_FORMAT = "%(asctime)s %(levelname)s:%(name)s:%(message)s"
 _APP_LOG_PATH = os.path.expanduser("~/Library/Logs/lint-ii.app.log")
+_LOG_LEVEL = getattr(logging, os.environ.get("LINT_II_LOG_LEVEL", "INFO").upper(), logging.INFO)
 
 _stderr_handler = logging.StreamHandler()
 _stderr_handler.setLevel(logging.INFO)
@@ -58,7 +64,7 @@ _file_handler = logging.handlers.RotatingFileHandler(
     _APP_LOG_PATH, maxBytes=50 * 1024 * 1024, backupCount=3, encoding="utf-8",
 )
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=_LOG_LEVEL,
     format=_LOG_FORMAT,
     handlers=[_stderr_handler, _file_handler],
 )
@@ -260,6 +266,15 @@ async def analyze_lint(request: AnalyzeRequest):
 _jobs: dict[str, dict] = {}
 _jobs_lock = threading.Lock()
 _JOB_MAX_AGE = 600  # seconds; prune unclaimed finished jobs after this
+# Cap simultaneously-queued analyses. /analyze is public and unauthenticated;
+# without a bound a flood piles up unbounded LLM work (queue starvation for real
+# testers) and unbounded pending entries (memory). With _ANALYSIS_WORKERS in
+# service this still leaves a healthy queue for genuine concurrent use.
+_MAX_PENDING_JOBS = int(os.environ.get("LINT_II_MAX_PENDING_JOBS", "12"))
+# Absolute ceiling on a pending job's lifetime. The LLM watchdog fails wedged
+# calls long before this, so anything still pending afterwards is an abandoned
+# client poll; drop it (and cancel its queued Future) to bound growth.
+_MAX_PENDING_JOB_AGE = int(os.environ.get("LINT_II_MAX_PENDING_JOB_AGE", "1800"))
 
 # LRU cache of completed analyses keyed by request content. Testers mostly
 # re-run the same four example texts; serving a repeat from cache makes it
@@ -416,17 +431,27 @@ def _store_job_result(job_id: str, cache_key: str, fut) -> None:
 
 
 def _prune_jobs() -> None:
-    """Drop finished jobs whose result was never picked up. Pending jobs are
-    never pruned: they may legitimately wait in the single-worker queue longer
-    than _JOB_MAX_AGE, and pruning them would 404 a client still polling."""
+    """Drop finished jobs whose result was never picked up, plus any pending job
+    past the absolute age ceiling (an abandoned poll, or a wedge the watchdog
+    already failed). Normal pending jobs are kept: they may legitimately wait in
+    the queue longer than _JOB_MAX_AGE, and pruning them would 404 a client
+    still polling."""
     now = time.time()
     with _jobs_lock:
-        stale = [
-            jid for jid, j in _jobs.items()
-            if j["status"] != "pending" and now - j.get("ts", now) > _JOB_MAX_AGE
-        ]
+        stale = []
+        for jid, j in _jobs.items():
+            age = now - j.get("ts", now)
+            if j["status"] != "pending":
+                if age > _JOB_MAX_AGE:
+                    stale.append(jid)
+            elif age > _MAX_PENDING_JOB_AGE:
+                stale.append(jid)
         for jid in stale:
-            _jobs.pop(jid, None)
+            job = _jobs.pop(jid, None)
+            if job is not None:
+                fut = job.get("future")
+                if fut is not None:
+                    fut.cancel()
 
 
 @app.post("/analyze")
@@ -444,6 +469,17 @@ async def analyze(request: AnalyzeRequest):
         logger.info("Analysis job %s served from cache (%d chars)", job_id, len(request.text))
         return {"job_id": job_id}
     with _jobs_lock:
+        pending = sum(1 for j in _jobs.values() if j["status"] == "pending")
+        if pending >= _MAX_PENDING_JOBS:
+            logger.warning("Rejecting /analyze: %d jobs already pending (cap %d)", pending, _MAX_PENDING_JOBS)
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "De demo verwerkt op dit moment te veel analyses tegelijk. "
+                    "Wacht een halve minuut en probeer het opnieuw."
+                ),
+                headers={"Retry-After": "30"},
+            )
         _jobs[job_id] = {"status": "pending", "ts": time.time()}
     fut = _analysis_executor.submit(_run_analysis, request.text, request.max_suggestions, request.format)
     with _jobs_lock:
