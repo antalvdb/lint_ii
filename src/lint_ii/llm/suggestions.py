@@ -629,6 +629,24 @@ class SuggestionEngine:
             if not word or not correction:
                 continue
 
+            # The model sometimes writes the correction in "oud → nieuw
+            # *(of alternatief)*" notation or as a mini-rewrite with
+            # commentary. A correction must be a drop-in replacement for
+            # WOORD: reject meta-notation outright, and corrections that are
+            # far longer than the word they replace.
+            if any(marker in correction for marker in ("→", "->", "(of ", "*(")):
+                logger.info(
+                    "Spelling suggestion discarded: meta-notation in correction '%s'",
+                    correction[:80],
+                )
+                continue
+            if len(correction.split()) > max(4, 2 * len(word.split()) + 2):
+                logger.info(
+                    "Spelling suggestion discarded: correction too long for '%s': '%s'",
+                    word, correction[:80],
+                )
+                continue
+
             # Map category to normalized value
             if "spel" in category_raw:
                 error_category = "spelling"

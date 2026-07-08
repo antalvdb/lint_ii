@@ -203,7 +203,7 @@ Geef voor elke gevonden fout het volgende gestructureerde formaat (één blok pe
 ---
 WOORD: [het foutieve woord]
 ZIN_NUMMER: [het nummer van de zin waarin de fout staat]
-CORRECTIE: [het gecorrigeerde woord]
+CORRECTIE: [alleen het verbeterde woord zelf — geen pijlen, geen alternatieven, geen toelichting]
 CATEGORIE: [spelfout, grammatica of zinsbouw]
 UITLEG: [hoogstens tien woorden: wat er fout is, in eenvoudige taal]
 ---
