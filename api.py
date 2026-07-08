@@ -451,10 +451,19 @@ async def analyze_result(job_id: str):
     """Return the status of an analysis job; delivers the result once when done."""
     with _jobs_lock:
         job = _jobs.get(job_id)
+        if job is not None and job["status"] == "pending":
+            # Queue position: pending jobs ahead of this one. Insertion order
+            # is submission order, and the single analysis worker runs jobs
+            # FIFO, so position 0 means "being analysed now".
+            position = 0
+            for jid, j in _jobs.items():
+                if jid == job_id:
+                    break
+                if j["status"] == "pending":
+                    position += 1
+            return {"status": "pending", "queue_position": position}
     if job is None:
         raise HTTPException(status_code=404, detail="Onbekende of verlopen analyse.")
-    if job["status"] == "pending":
-        return {"status": "pending"}
     # Terminal state — hand it over once and drop it from the store.
     with _jobs_lock:
         _jobs.pop(job_id, None)

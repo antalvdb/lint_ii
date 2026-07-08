@@ -558,7 +558,8 @@
 
             setLoading(true)
             startProgress()
-            setStatus('<span class="spinner"></span>Analyse bezig… (20–60 seconden)', 'busy')
+            let wasQueued = false
+            setStatus('<span class="spinner"></span>Analyse bezig… (enkele seconden tot een minuut)', 'busy')
             viz.hidden = true
 
             let fullResultsReceived = false
@@ -610,6 +611,20 @@
                     }
                     const poll = await pollResp.json()
                     if (poll.status === 'pending') {
+                        // Queue feedback: only override the status text while
+                        // other analyses are ahead of this one, and restore
+                        // the normal busy text once the job starts running.
+                        const q = poll.queue_position
+                        if (typeof q === 'number') {
+                            if (q > 0) {
+                                const noun = q === 1 ? 'analyse' : 'analyses'
+                                setStatus(`<span class="spinner"></span>In de wachtrij: ${q} ${noun} voor u…`, 'busy')
+                                wasQueued = true
+                            } else if (wasQueued) {
+                                setStatus('<span class="spinner"></span>Uw tekst wordt geanalyseerd…', 'busy')
+                                wasQueued = false
+                            }
+                        }
                         await new Promise(r => setTimeout(r, 3000))
                         continue
                     }
