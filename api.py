@@ -25,6 +25,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import logging.handlers
 import shutil
 import subprocess
 import tempfile
@@ -42,7 +43,27 @@ from pydantic import BaseModel, Field
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-logging.basicConfig(level=logging.DEBUG)
+# Logging: the DEBUG stream (full LLM prompts/responses — the primary
+# debugging tool, but also the growth driver) goes to a size-capped rotating
+# file; launchd's err.log only receives INFO and up, so it stays small.
+# Timestamps are included in both (the 2026-06-10 wedge diagnosis had to
+# reconstruct timing from file mtimes).
+_LOG_FORMAT = "%(asctime)s %(levelname)s:%(name)s:%(message)s"
+_APP_LOG_PATH = os.path.expanduser("~/Library/Logs/lint-ii.app.log")
+
+_stderr_handler = logging.StreamHandler()
+_stderr_handler.setLevel(logging.INFO)
+_file_handler = logging.handlers.RotatingFileHandler(
+    _APP_LOG_PATH, maxBytes=50 * 1024 * 1024, backupCount=3, encoding="utf-8",
+)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format=_LOG_FORMAT,
+    handlers=[_stderr_handler, _file_handler],
+)
+# httpx/httpcore emit several DEBUG lines per request; useless bulk.
+logging.getLogger("httpx").setLevel(logging.INFO)
+logging.getLogger("httpcore").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 _executor = ThreadPoolExecutor(max_workers=4)
