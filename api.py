@@ -480,13 +480,28 @@ def _find_pandoc() -> str | None:
     return None
 
 
+def _find_pdftotext() -> str | None:
+    """Locate pdftotext (poppler) without relying on PATH."""
+    found = shutil.which("pdftotext")
+    if found:
+        return found
+    for candidate in ("/opt/homebrew/bin/pdftotext", "/usr/local/bin/pdftotext", "/usr/bin/pdftotext"):
+        if os.path.exists(candidate):
+            return candidate
+    return None
+
+
 _PANDOC = _find_pandoc()
+_PDFTOTEXT = _find_pdftotext()
 _UPLOAD_FORMATS = {
     ".docx": "docx", ".odt": "odt", ".rtf": "rtf",
     ".html": "html", ".htm": "html", ".epub": "epub",
     ".md": "markdown", ".markdown": "markdown", ".txt": "markdown",
 }
 _MAX_UPLOAD = 8 * 1024 * 1024  # 8 MB
+# Mirror of AnalyzeRequest's max_length: converted text that /analyze would
+# reject anyway should fail here, with a friendlier message.
+_MAX_ANALYZE_CHARS = 20_000
 
 
 @app.post("/convert")
@@ -496,13 +511,17 @@ async def convert(request: Request, filename: str = ""):
     Returns {"markdown", "format"}; the client feeds the markdown back to
     /analyze with format="markdown".
     """
-    if _PANDOC is None:
-        raise HTTPException(status_code=503, detail="Documentconversie is niet beschikbaar op de server.")
     ext = os.path.splitext(filename)[1].lower()
+    is_pdf = ext == ".pdf"
     src_format = _UPLOAD_FORMATS.get(ext)
-    if src_format is None:
-        supported = ", ".join(sorted(_UPLOAD_FORMATS))
+    if is_pdf:
+        if _PDFTOTEXT is None:
+            raise HTTPException(status_code=503, detail="PDF-conversie is niet beschikbaar op de server.")
+    elif src_format is None:
+        supported = ", ".join(sorted(_UPLOAD_FORMATS) + ([".pdf"] if _PDFTOTEXT else []))
         raise HTTPException(status_code=415, detail=f"Niet-ondersteund bestandstype. Ondersteund: {supported}.")
+    elif _PANDOC is None:
+        raise HTTPException(status_code=503, detail="Documentconversie is niet beschikbaar op de server.")
     data = await request.body()
     if not data:
         raise HTTPException(status_code=400, detail="Leeg bestand ontvangen.")
@@ -514,27 +533,47 @@ async def convert(request: Request, filename: str = ""):
             tmp.write(data)
             tmp_path = tmp.name
         try:
-            proc = subprocess.run(
-                [_PANDOC, "--sandbox", tmp_path, "-f", src_format, "-t", "gfm", "--wrap=none"],
-                capture_output=True, timeout=30,
-            )
+            if is_pdf:
+                # Plain-text extraction in reading order. The output is
+                # hard-wrapped at PDF line width; /analyze with format="text"
+                # rejoins it into paragraphs (_unwrap_hard_breaks).
+                proc = subprocess.run(
+                    [_PDFTOTEXT, "-enc", "UTF-8", "-nopgbrk", tmp_path, "-"],
+                    capture_output=True, timeout=30,
+                )
+            else:
+                proc = subprocess.run(
+                    [_PANDOC, "--sandbox", tmp_path, "-f", src_format, "-t", "gfm", "--wrap=none"],
+                    capture_output=True, timeout=30,
+                )
         finally:
             os.unlink(tmp_path)
         if proc.returncode != 0:
-            raise RuntimeError(proc.stderr.decode("utf-8", "replace")[:300] or "pandoc-fout")
+            tool = "pdftotext-fout" if is_pdf else "pandoc-fout"
+            raise RuntimeError(proc.stderr.decode("utf-8", "replace")[:300] or tool)
         return proc.stdout.decode("utf-8", "replace")
 
     try:
         loop = asyncio.get_event_loop()
-        markdown = (await loop.run_in_executor(_executor, _convert)).strip()
+        converted = (await loop.run_in_executor(_executor, _convert)).strip()
     except Exception as e:
         logger.error("Conversion failed (%s): %s", filename, e)
         raise HTTPException(status_code=422, detail=f"Conversie mislukt: {e}")
 
-    if not markdown:
+    if not converted:
         raise HTTPException(status_code=422, detail="Geen tekst gevonden in het document.")
-    logger.info("Converted %s (%s) -> %d chars markdown", filename, src_format, len(markdown))
-    return {"markdown": markdown, "format": "markdown"}
+    if len(converted) > _MAX_ANALYZE_CHARS:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Het document bevat {len(converted):,} tekens; de demo analyseert "
+                f"maximaal {_MAX_ANALYZE_CHARS:,} tekens. Kort het document in of "
+                "plak een gedeelte in het tekstvak."
+            ).replace(",", "."),
+        )
+    out_format = "text" if is_pdf else "markdown"
+    logger.info("Converted %s (%s) -> %d chars %s", filename, "pdf" if is_pdf else src_format, len(converted), out_format)
+    return {"markdown": converted, "format": out_format}
 
 
 # Serve the demo frontend as static files (must be last)
