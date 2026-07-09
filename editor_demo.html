@@ -544,6 +544,22 @@
                 return
             }
 
+            // Long-document warning: the analysis processes each sentence with a
+            // separate LLM call (~2 s/sentence), so a long document can take
+            // minutes and holds one of the few analysis slots the whole time.
+            // Warn — but let the user proceed — above ~300 words.
+            const wordCount = (text.match(/\S+/g) || []).length
+            if (wordCount > 300) {
+                const estMin = Math.max(1, Math.round(wordCount * 0.15 / 60))
+                const noun = estMin === 1 ? 'minuut' : 'minuten'
+                const proceed = confirm(
+                    `Dit document bevat ongeveer ${wordCount} woorden. De analyse ` +
+                    `verwerkt elke zin apart en kan daardoor ongeveer ${estMin} ${noun} ` +
+                    `duren. Wilt u toch doorgaan?`
+                )
+                if (!proceed) return
+            }
+
             if (_currentAbortController) {
                 _currentAbortController.abort()
             }
