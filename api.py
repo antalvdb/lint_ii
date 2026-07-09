@@ -720,10 +720,11 @@ async def convert(request: Request, filename: str = ""):
 # directory does not matter.
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _PUBLIC_PAGES = {
-    # "/" serves the documentation page, matching the previous html=True mount
-    # (which resolved a bare "/" to index.html). The interactive demo lives at
-    # /editor_demo.html.
-    "/": "index.html",
+    # "/" serves the interactive demo (the tool). The older background/
+    # documentation page lives at /index.html and is linked from the demo.
+    # /editor_demo.html is kept as an alias for the tool because existing
+    # testers have bookmarked that URL.
+    "/": "editor_demo.html",
     "/editor_demo.html": "editor_demo.html",
     "/index.html": "index.html",
 }
