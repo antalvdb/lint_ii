@@ -100,6 +100,18 @@
             margin-top: 0.5rem;
         }
 
+        #page-footer {
+            font-size: 13px;
+            color: #80806f;
+            text-align: center;
+            margin-top: 1.5rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e5e5dc;
+        }
+        #page-footer a {
+            color: inherit;
+        }
+
         #controls {
             display: flex;
             gap: 0.75rem;
@@ -409,6 +421,10 @@
         <div class="panel" id="viz-panel">
             <lint-ii-visualizer id="viz" mode="editor"></lint-ii-visualizer>
         </div>
+
+        <footer id="page-footer">
+            Deze demo wordt gehost op een server van <a href="https://www.strato.nl/" target="_blank" rel="noopener">Strato</a>.
+        </footer>
     </div>
 
     <script type="module" src="./src/visualizer/lint_ii_visualizer.js?v=33"></script>
