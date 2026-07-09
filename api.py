@@ -155,6 +155,39 @@ async def no_cache_html(request, call_next):
     return response
 
 
+# --- Language gate ----------------------------------------------------------
+# LiNT-II's readability model, spaCy pipeline and LLM prompts are all Dutch, so
+# a non-Dutch document produces meaningless suggestions (and still costs a full
+# LLM run). Reject clearly-non-Dutch input up front. langid ships its own model
+# (no download) and is confident on full sentences; we only second-guess texts
+# long enough to classify reliably, and never block on detector failure.
+from langid.langid import LanguageIdentifier, model as _LANGID_MODEL
+
+_lang_identifier = LanguageIdentifier.from_modelstring(_LANGID_MODEL, norm_probs=True)
+_LANG_MIN_CHARS = 25  # below this, too short to judge — let it through
+_LANG_NAMES_NL = {
+    "en": "Engels", "de": "Duits", "fr": "Frans", "es": "Spaans",
+    "it": "Italiaans", "pt": "Portugees", "af": "Afrikaans", "da": "Deens",
+    "sv": "Zweeds", "no": "Noors", "pl": "Pools", "ru": "Russisch",
+    "tr": "Turks", "ar": "Arabisch", "id": "Indonesisch",
+}
+
+
+def _detected_non_dutch(text: str) -> str | None:
+    """Dutch-language name of the detected language if `text` is confidently NOT
+    Dutch, else None. Short texts and detector errors never trigger a rejection."""
+    stripped = text.strip()
+    if len(stripped) < _LANG_MIN_CHARS:
+        return None
+    try:
+        lang, _conf = _lang_identifier.classify(stripped)
+    except Exception:
+        return None
+    if lang == "nl":
+        return None
+    return _LANG_NAMES_NL.get(lang, lang)
+
+
 class AnalyzeRequest(BaseModel):
     text: str = Field(..., min_length=10, max_length=20_000)
     # None means "one readability suggestion per sentence" — resolved at
@@ -474,6 +507,15 @@ def _prune_jobs() -> None:
 @app.post("/analyze")
 async def analyze(request: AnalyzeRequest):
     """Start an analysis job and return its id immediately (poll /analyze-result)."""
+    non_dutch = _detected_non_dutch(request.text)
+    if non_dutch is not None:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Deze tekst lijkt in het {non_dutch} te zijn geschreven. "
+                "LiNT-II analyseert alleen Nederlandstalige teksten."
+            ),
+        )
     _prune_jobs()
     job_id = uuid.uuid4().hex[:12]
     cache_key = _cache_key(request.text, request.max_suggestions, request.format)
