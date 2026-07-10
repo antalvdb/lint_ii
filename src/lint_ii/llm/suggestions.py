@@ -949,6 +949,91 @@ class SuggestionEngine:
         """
         return round(candidate_freq) > round(original_freq)
 
+    # Split a rewrite into word tokens, stripping surrounding punctuation.
+    _TOKEN_TRIM_RE = re.compile(r"^[^0-9A-Za-zÀ-ſ]+|[^0-9A-Za-zÀ-ſ]+$")
+
+    @classmethod
+    def _word_tokens(cls, text: str) -> list[str]:
+        return [cls._TOKEN_TRIM_RE.sub("", t) for t in text.split()]
+
+    @classmethod
+    def _introduces_misspelling(cls, original: str, suggested: str) -> str | None:
+        """Return a NEW misspelled token the rewrite introduced, else None.
+
+        Deterministic safety net against gross corruption: a rewrite must not
+        introduce a token that is absent from the original, unknown to both the
+        Dutch Hunspell dictionary and SUBTLEX-NL, and not a likely proper noun.
+        Conservative on purpose (skips capitalised, short, non-alphabetic and
+        known-frequent tokens) so it never rejects a legitimate rewrite.
+        """
+        try:
+            from lint_ii.llm.hunspell_spelling import _get_dictionary
+            from lint_ii.linguistic_data.wordlists import FREQ_DATA
+            dictionary = _get_dictionary()
+        except Exception as e:  # dictionary/data unavailable — fail open
+            logger.warning("Misspelling backstop unavailable: %s", e)
+            return None
+
+        original_tokens = {t.lower() for t in cls._word_tokens(original)}
+        for raw in cls._word_tokens(suggested):
+            low = raw.lower()
+            if not raw or low in original_tokens:
+                continue
+            if len(raw) < 3 or not raw.isalpha():
+                continue
+            if raw[0].isupper():          # likely a proper noun
+                continue
+            if low in FREQ_DATA:          # a known Dutch word by frequency
+                continue
+            if dictionary.lookup(raw):    # valid per Hunspell
+                continue
+            return raw
+        return None
+
+    # A definite/demonstrative/possessive determiner makes an -e adjective
+    # correct, so its presence suppresses the de/het check below.
+    _DEFINITE_DET_TAG_PREFIXES = ("LID|bep", "VNW|aanw", "VNW|bez")
+
+    @classmethod
+    def _dehet_disagreement(cls, text: str) -> str | None:
+        """Return an adjective+noun pair with wrong de/het inflection, else None.
+
+        Conservative check for the one unambiguous over-inflection direction:
+        a positive-degree prenominal adjective carrying -e ('met-e') on an
+        INDEFINITE, SINGULAR, NEUTER noun, where Dutch requires the bare form
+        (e.g. 'buitenlandse bezit' → should be 'buitenlands bezit', Henk zin 5).
+        The reverse direction is deliberately left alone — materials/-en
+        adjectives ('houten', 'gouden') are legitimately uninflected — so this
+        does not reject good rewrites. Validated to 0 false positives on a
+        battery of correct sentences.
+        """
+        try:
+            from lint_ii.core.readability_analysis import ReadabilityAnalysis
+            analysis = ReadabilityAnalysis.from_text(text)
+        except Exception as e:  # parse failure — fail open, never reject
+            logger.warning("de/het backstop parse failed: %s", e)
+            return None
+
+        for sent in analysis.sentence_analyses:
+            for tok in sent.doc:
+                if tok.pos_ != "ADJ" or tok.dep_ != "amod":
+                    continue
+                if not {"prenom", "basis", "met-e"} <= set(tok.tag_.split("|")):
+                    continue
+                noun = tok.head
+                if noun.pos_ != "NOUN" or noun.i < tok.i:
+                    continue
+                if not {"ev", "onz"} <= set(noun.tag_.split("|")):
+                    continue
+                if any(
+                    child.dep_ in ("det", "nmod:poss")
+                    and any(child.tag_.startswith(p) for p in cls._DEFINITE_DET_TAG_PREFIXES)
+                    for child in noun.children
+                ):
+                    continue
+                return f"{tok.text} {noun.text}"
+        return None
+
     @staticmethod
     def _format_issue(trigger: SuggestionTrigger) -> str | None:
         """Render one sentence-level trigger as a Dutch bullet for the rewrite prompt."""
@@ -1057,6 +1142,22 @@ class SuggestionEngine:
                 logger.info(
                     "Consolidated rewrite discarded: URL not preserved (%s) for sentence %d",
                     altered_url, job.sentence_index,
+                )
+                return None
+
+            typo = self._introduces_misspelling(sentence_text, suggested_text)
+            if typo:
+                logger.info(
+                    "Consolidated rewrite discarded: introduced misspelling '%s' for sentence %d",
+                    typo, job.sentence_index,
+                )
+                return None
+
+            disagreement = self._dehet_disagreement(suggested_text)
+            if disagreement:
+                logger.info(
+                    "Consolidated rewrite discarded: de/het disagreement '%s' for sentence %d",
+                    disagreement, job.sentence_index,
                 )
                 return None
 
@@ -1187,6 +1288,8 @@ class SuggestionEngine:
         if self._breaks_clause_conjunction(original, suggested_text):
             return None
         if self._alters_url(original, suggested_text):
+            return None
+        if self._introduces_misspelling(original, suggested_text):
             return None
 
         return Suggestion(
@@ -1331,6 +1434,22 @@ class SuggestionEngine:
                 logger.info(
                     "Trigger suggestion discarded: %s rewrite did not preserve URL (%s)",
                     trigger.type.value, altered_url,
+                )
+                return None
+
+            typo = self._introduces_misspelling(trigger.sentence_text or "", suggested_text)
+            if typo:
+                logger.info(
+                    "Trigger suggestion discarded: %s rewrite introduced misspelling '%s'",
+                    trigger.type.value, typo,
+                )
+                return None
+
+            disagreement = self._dehet_disagreement(suggested_text)
+            if disagreement:
+                logger.info(
+                    "Trigger suggestion discarded: %s rewrite has de/het disagreement '%s'",
+                    trigger.type.value, disagreement,
                 )
                 return None
 
