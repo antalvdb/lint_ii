@@ -427,7 +427,7 @@
         </footer>
     </div>
 
-    <script type="module" src="./src/visualizer/lint_ii_visualizer.js?v=34"></script>
+    <script type="module" src="./src/visualizer/lint_ii_visualizer.js?v=35"></script>
     <script type="module">
         const EXAMPLE_TEXTS = {
             1: `Jan gaat elke zaterdag naar de markt. Hij koopt er groenten en fruit. De markt is groot en druk. Er staan veel kraampjes met eten en drinken. Jan houdt van de kaasmarkt. De man achter de kraam geeft hem een stukje om te proeven. De kaas smaakt lekker. Jan koopt een groot stuk. Daarna drinkt hij een kop koffie bij het café op het plein. Hij fietst blij naar huis met zijn tas vol eten.`,
@@ -670,11 +670,15 @@
 
                 stopProgress(true)
                 fullResultsReceived = true
-                const count = data.suggestions?.suggestions?.length ?? 0
+                const rawCount = data.suggestions?.suggestions?.length ?? 0
 
-                viz.setAttribute('mode', count > 0 ? 'editor' : 'analysis')
+                viz.setAttribute('mode', rawCount > 0 ? 'editor' : 'analysis')
                 viz.data = data
                 viz.hidden = false
+                // Announce the number of suggestions the user can actually see
+                // and act on (highlighted clusters), not the raw suggestion
+                // count, which collapses clustered alternatives into one span.
+                const count = rawCount > 0 ? viz.actionableSuggestionCount : 0
                 setStatus(
                     count > 0
                         ? `✓ Analyse klaar — ${count} suggesties gevonden.`

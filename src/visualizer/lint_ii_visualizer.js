@@ -2,7 +2,7 @@ import { css } from './core/stylesheet.js?v=18'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
-import { EditorController } from './core/editor.js?v=13'
+import { EditorController } from './core/editor.js?v=14'
 import { SuggestionPopupController } from './core/suggestion-popup.js?v=4'
 import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './core/word-diff.js?v=2'
 
@@ -91,6 +91,15 @@ export class LintIIVisualizer extends HTMLElement {
     async loadFromUrl(url) {
         const response = await fetch(url)
         this.data = await response.json()
+    }
+
+    /**
+     * Number of actionable suggestions the user can see and act on (highlighted
+     * clusters), for the "N suggesties gevonden" headline. Falls back to 0 when
+     * there is no editor (analysis-only result).
+     */
+    get actionableSuggestionCount() {
+        return this._editorController ? this._editorController.clusterCounts.total : 0
     }
 
     /**
@@ -211,7 +220,7 @@ export class LintIIVisualizer extends HTMLElement {
     renderEditorToolbar() {
         if (!this._editorController) return ''
 
-        const counts = this._editorController.counts
+        const counts = this._editorController.clusterCounts
         return `
             <div class="editor-toolbar">
                 <div class="suggestion-counts">
@@ -241,7 +250,7 @@ export class LintIIVisualizer extends HTMLElement {
     updateEditorToolbar() {
         if (!this._editorController) return
 
-        const counts = this._editorController.counts
+        const counts = this._editorController.clusterCounts
         const toolbar = this.shadowRoot.querySelector('.editor-toolbar')
         if (!toolbar) return
 

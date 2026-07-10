@@ -509,6 +509,23 @@ export class EditorController {
     }
 
     /**
+     * Counts by the unit the user actually sees and acts on: the cluster (one
+     * highlighted span, one decision), not the raw suggestion. Clustered
+     * alternatives collapse into one highlight, so the raw count over-reports
+     * what is visible ("3 aangekondigd, ik zie er 1" — Henk zin 2). Clusters
+     * with no highlightable word are excluded, since they cannot be clicked.
+     */
+    get clusterCounts() {
+        const counts = { pending: 0, accepted: 0, ignored: 0, total: 0 }
+        for (const [clusterId, cluster] of this._clusters) {
+            if (cluster.wordIndices.size === 0) continue
+            counts[this.getClusterState(clusterId)]++
+            counts.total++
+        }
+        return counts
+    }
+
+    /**
      * Get state of a specific suggestion
      */
     getState(suggestionId) {
