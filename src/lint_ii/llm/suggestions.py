@@ -100,6 +100,9 @@ class Suggestion:
     # Metadata
     model: str | None = None
     error_category: str | None = None  # "spelling" or "grammar" for spelling suggestions
+    # For a consolidated sentence_rewrite: the LiNT trigger types it merged, so
+    # the UI can name the underlying signals instead of a generic label.
+    component_types: list[str] = field(default_factory=list)
     # Precomputed metrics for score recomputation
     new_sentence_metrics: dict[str, Any] | None = None
 
@@ -121,6 +124,8 @@ class Suggestion:
             result["replacement_word"] = self.replacement_word
         if self.error_category is not None:
             result["error_category"] = self.error_category
+        if self.component_types:
+            result["component_types"] = self.component_types
         if self.new_sentence_metrics is not None:
             result["new_sentence_metrics"] = self.new_sentence_metrics
         return result
@@ -1171,6 +1176,7 @@ class SuggestionEngine:
                 suggested_text=suggested_text,
                 explanation=explanation,
                 model=response.model,
+                component_types=list(dict.fromkeys(t.type.value for t in job.triggers)),
                 new_sentence_metrics=new_metrics,
             )
 

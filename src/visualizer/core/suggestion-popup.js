@@ -140,7 +140,7 @@ export class SuggestionPopupController {
      */
     _renderSingleSuggestion(suggestion) {
         const status = this._editor.getState(suggestion.id)
-        const typeLabel = this._typeLabel(suggestion.type)
+        const typeLabel = this._suggestionLabel(suggestion)
         const categoryLabel = suggestion.error_category ? this._errorCategoryLabel(suggestion.error_category) : null
         const { statusHTML, buttonsHTML } = this._statusAndButtons(suggestion.id, status)
         const currentOriginal = this._editor.getCurrentOriginalForSuggestion(suggestion.id)
@@ -185,7 +185,7 @@ export class SuggestionPopupController {
      */
     _renderSuggestionSection(suggestion, index, total) {
         const status = this._editor.getState(suggestion.id)
-        const typeLabel = this._typeLabel(suggestion.type)
+        const typeLabel = this._suggestionLabel(suggestion)
         const categoryLabel = suggestion.error_category ? this._errorCategoryLabel(suggestion.error_category) : null
         const { statusHTML, buttonsHTML } = this._statusAndButtons(suggestion.id, status)
         const currentOriginal = this._editor.getCurrentOriginalForSuggestion(suggestion.id)
@@ -223,6 +223,24 @@ export class SuggestionPopupController {
                 </div>
             </div>
         `
+    }
+
+    /**
+     * Heading label for a suggestion. A consolidated sentence_rewrite names the
+     * underlying LiNT signals it addressed (from component_types) rather than
+     * the generic "Zinsverbetering", so the user can see which measured feature
+     * each rewrite targets.
+     */
+    _suggestionLabel(suggestion) {
+        if (suggestion.type === 'sentence_rewrite'
+            && Array.isArray(suggestion.component_types)
+            && suggestion.component_types.length) {
+            const signals = suggestion.component_types
+                .map(t => this._typeLabel(t))
+                .join(', ')
+            return `Zinsverbetering: ${signals}`
+        }
+        return this._typeLabel(suggestion.type)
     }
 
     _typeLabel(type) {

@@ -283,6 +283,9 @@
             color: #80806f;
             display: flex;
             align-items: center;
+            /* Own line, so the four level buttons stay together on the next
+               row instead of wrapping mid-way at narrow widths. */
+            flex-basis: 100%;
         }
 
         .input-header {
@@ -427,7 +430,7 @@
         </footer>
     </div>
 
-    <script type="module" src="./src/visualizer/lint_ii_visualizer.js?v=35"></script>
+    <script type="module" src="./src/visualizer/lint_ii_visualizer.js?v=36"></script>
     <script type="module">
         const EXAMPLE_TEXTS = {
             1: `Jan gaat elke zaterdag naar de markt. Hij koopt er groenten en fruit. De markt is groot en druk. Er staan veel kraampjes met eten en drinken. Jan houdt van de kaasmarkt. De man achter de kraam geeft hem een stukje om te proeven. De kaas smaakt lekker. Jan koopt een groot stuk. Daarna drinkt hij een kop koffie bij het café op het plein. Hij fietst blij naar huis met zijn tas vol eten.`,
