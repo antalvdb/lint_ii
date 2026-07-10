@@ -1,10 +1,10 @@
-import { css } from './core/stylesheet.js?v=17'
+import { css } from './core/stylesheet.js?v=18'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
-import { EditorController } from './core/editor.js?v=12'
-import { SuggestionPopupController } from './core/suggestion-popup.js?v=3'
-import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './core/word-diff.js?v=1'
+import { EditorController } from './core/editor.js?v=13'
+import { SuggestionPopupController } from './core/suggestion-popup.js?v=4'
+import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './core/word-diff.js?v=2'
 
 
 export class LintIIVisualizer extends HTMLElement {
@@ -355,7 +355,7 @@ export class LintIIVisualizer extends HTMLElement {
                     delete this.dataset.showSemTypes
                     semToggle.classList.remove('active')
                 } else {
-                    this.dataset.showSemTypes = ''
+                    this.dataset.showSemTypes = '1'
                     semToggle.classList.add('active')
                 }
             })
@@ -507,7 +507,8 @@ export class LintIIVisualizer extends HTMLElement {
      */
     _applyAcceptedDiffs(sentenceEl, acceptedSuggestions) {
         const wordEls = Array.from(sentenceEl.querySelectorAll('.word'))
-        const origBare = wordEls.map(el => stripToken(el.textContent))
+        const origTokens = wordEls.map(el => el.textContent)
+        const origBare = origTokens.map(stripToken)
 
         // Collect all change regions from all accepted suggestions
         const allRegions = []
@@ -515,7 +516,7 @@ export class LintIIVisualizer extends HTMLElement {
             const sugTokens = suggestionTokens(suggestion.suggested_text)
             const sugBare = sugTokens.map(stripToken)
 
-            const regions = computeWordDiff(origBare, sugBare, sugTokens)
+            const regions = computeWordDiff(origBare, sugBare, sugTokens, origTokens)
             for (const region of regions) {
                 region.suggestion = suggestion
             }
@@ -555,10 +556,14 @@ export class LintIIVisualizer extends HTMLElement {
                     texts[0] = leadMatch[1] + texts[0]
                 }
 
-                // Preserve capitalization: if first deleted word started
-                // uppercase, capitalize the first new word to match.
+                // Preserve capitalization only at the sentence start: if the
+                // FIRST word of the sentence is being replaced and it was
+                // uppercase, capitalize the first new word to match. Applying
+                // this mid-sentence would re-uppercase a word the LLM
+                // deliberately lowercased (Henk: stray "Onze" in zin 8); the
+                // real sentence start is fixed up again at the end of this method.
                 const firstOrigLetter = firstOrig.replace(/^[("'\u201c]+/, '').charAt(0)
-                if (firstOrigLetter && firstOrigLetter === firstOrigLetter.toUpperCase() && firstOrigLetter !== firstOrigLetter.toLowerCase()) {
+                if (region.origIndices[0] === 0 && firstOrigLetter && firstOrigLetter === firstOrigLetter.toUpperCase() && firstOrigLetter !== firstOrigLetter.toLowerCase()) {
                     const firstNew = texts[0]
                     const leadPunct = firstNew.match(/^[("'\u201c]*/)
                     const offset = leadPunct ? leadPunct[0].length : 0

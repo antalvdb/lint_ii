@@ -72,7 +72,9 @@ export class SuggestionPopupController {
             this._popup.style.left = `${window.innerWidth - popupRect.width - 16}px`
         }
         if (popupRect.bottom > window.innerHeight - 16) {
-            this._popup.style.top = `${rect.top - popupRect.height - 8}px`
+            // Flip above the target, but never past the top edge — a tall
+            // multi-alternative popup scrolls internally (max-height in CSS).
+            this._popup.style.top = `${Math.max(8, rect.top - popupRect.height - 8)}px`
         }
     }
 

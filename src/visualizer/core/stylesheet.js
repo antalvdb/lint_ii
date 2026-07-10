@@ -567,6 +567,11 @@ export const css = `
         pointer-events: auto;
         position: fixed;
         max-width: 500px;
+        /* Clusters with several alternatives can be taller than the viewport;
+           scroll inside the popup instead of clipping (Henk: "de tweede
+           suggestie is maar half zichtbaar"). */
+        max-height: calc(100vh - 2rem);
+        overflow-y: auto;
         padding: 1rem;
         border: 2px solid #b3b3ab;
         border-radius: 10px;

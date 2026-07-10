@@ -10,8 +10,17 @@ export const stripToken = t => t.replace(/[,;:()"'“”]/g, '').toLowerCase()
 /**
  * Word diff that returns independent change regions.
  * Each region: { origIndices: [...], newTexts: [...], insertBeforeIdx }
+ *
+ * Alignment is on the normalized (stripToken) forms, so edits that live only
+ * in the stripped-away layer — added punctuation, letter case, quote style —
+ * align as "keep" and would otherwise be invisible, re-emitting the original
+ * surface. Pass `origTokens` (the raw original surfaces) to catch these: a kept
+ * pair whose RAW surfaces differ becomes a 1:1 replacement so the suggested
+ * surface reaches the output (Henk Pander Maat: dropped comma zin 17, kept
+ * original casing zin 8). Omit `origTokens` for the legacy surface-blind
+ * behaviour.
  */
-export function computeWordDiff(origBare, sugBare, sugTokens) {
+export function computeWordDiff(origBare, sugBare, sugTokens, origTokens = null) {
     const m = origBare.length
     const n = sugBare.length
 
@@ -30,7 +39,7 @@ export function computeWordDiff(origBare, sugBare, sugTokens) {
     let i = m, j = n
     while (i > 0 || j > 0) {
         if (i > 0 && j > 0 && origBare[i - 1] === sugBare[j - 1]) {
-            ops.push({ type: 'keep', origIdx: i - 1 })
+            ops.push({ type: 'keep', origIdx: i - 1, sugIdx: j - 1 })
             i--; j--
         } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
             ops.push({ type: 'insert', sugIdx: j - 1 })
@@ -42,19 +51,31 @@ export function computeWordDiff(origBare, sugBare, sugTokens) {
     }
     ops.reverse()
 
-    // Group contiguous non-keep operations into change regions
+    // A "keep" is only a true region boundary when the raw surfaces also match.
+    // A surface-differing keep is a hidden edit and joins the change region.
+    const isBoundary = (op) =>
+        op.type === 'keep' &&
+        (origTokens === null || origTokens[op.origIdx] === sugTokens[op.sugIdx])
+
+    // Group contiguous change operations (including surface-differing keeps)
+    // into change regions
     const regions = []
     let idx = 0
     while (idx < ops.length) {
-        if (ops[idx].type === 'keep') { idx++; continue }
+        if (isBoundary(ops[idx])) { idx++; continue }
 
         const origIndices = []
         const newTexts = []
-        while (idx < ops.length && ops[idx].type !== 'keep') {
-            if (ops[idx].type === 'delete') {
-                origIndices.push(ops[idx].origIdx)
+        while (idx < ops.length && !isBoundary(ops[idx])) {
+            const op = ops[idx]
+            if (op.type === 'delete') {
+                origIndices.push(op.origIdx)
+            } else if (op.type === 'insert') {
+                newTexts.push(sugTokens[op.sugIdx])
             } else {
-                newTexts.push(sugTokens[ops[idx].sugIdx])
+                // Surface-differing keep → replace the original word in place.
+                origIndices.push(op.origIdx)
+                newTexts.push(sugTokens[op.sugIdx])
             }
             idx++
         }

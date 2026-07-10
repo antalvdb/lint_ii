@@ -1,4 +1,19 @@
-import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './word-diff.js?v=1'
+import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './word-diff.js?v=2'
+
+// Suggestion types that reformulate a whole sentence. Any two of these on the
+// same sentence — or one of these plus any other edit — cannot be safely merged
+// by the diff-splice compose path, so accepting one makes the rest of the
+// sentence's suggestions mutually exclusive. Only word-level edits
+// (word_frequency, spelling) are localized enough to co-apply. See accept().
+const SENTENCE_SCOPED_TYPES = new Set([
+    'sentence_rewrite',
+    'max_sdl',
+    'content_words_per_clause',
+    'abstract_nouns',
+    'passive',
+    'subordinate_clause',
+    'sentence_length',
+])
 
 /**
  * EditorController manages suggestion state and text editing.
@@ -522,6 +537,26 @@ export class EditorController {
             }
         }
 
+        // Sentence-scoped exclusivity: a whole-sentence rewrite and any other
+        // edit on the same sentence cannot be composed by the diff-splice merge
+        // (it interleaves them into garbage — Henk Pander Maat, zin 15/16/22/24).
+        // So accepting a sentence-scoped suggestion drops every other suggestion
+        // in that sentence, and accepting a word-level edit drops any
+        // sentence-scoped rewrite there. Two word-level edits (neither scoped)
+        // skip this and still co-apply, as they compose cleanly.
+        const accepted = this.getSuggestion(suggestionId)
+        if (accepted) {
+            const acceptedScoped = SENTENCE_SCOPED_TYPES.has(accepted.type)
+            for (const other of this.getSuggestionsForSentence(accepted.sentence_index)) {
+                if (other.id === suggestionId) continue
+                if (acceptedScoped || SENTENCE_SCOPED_TYPES.has(other.type)) {
+                    if (this._suggestionStates.get(other.id) !== 'ignored') {
+                        this._suggestionStates.set(other.id, 'ignored')
+                    }
+                }
+            }
+        }
+
         this._dispatchChange(suggestionId, 'accepted')
     }
 
@@ -806,7 +841,7 @@ export class EditorController {
         for (const suggestion of accepted) {
             const sugTokens = suggestionTokens(suggestion.suggested_text)
             const sugBare = sugTokens.map(stripToken)
-            allRegions.push(...computeWordDiff(origBare, sugBare, sugTokens))
+            allRegions.push(...computeWordDiff(origBare, sugBare, sugTokens, tokens))
         }
         allRegions.sort((a, b) => b.insertBeforeIdx - a.insertBeforeIdx)
 
@@ -828,8 +863,10 @@ export class EditorController {
                 if (leadMatch && !texts[0].match(/^[("'“]/)) {
                     texts[0] = leadMatch[1] + texts[0]
                 }
+                // Only re-capitalize at the true sentence start; mid-sentence
+                // this would undo a deliberate LLM lowercasing (Henk, zin 8).
                 const firstOrigLetter = firstOrig.replace(/^[("'“]+/, '').charAt(0)
-                if (firstOrigLetter && firstOrigLetter === firstOrigLetter.toUpperCase()
+                if (region.origIndices[0] === 0 && firstOrigLetter && firstOrigLetter === firstOrigLetter.toUpperCase()
                     && firstOrigLetter !== firstOrigLetter.toLowerCase()) {
                     texts[0] = capitalizeToken(texts[0])
                 }
