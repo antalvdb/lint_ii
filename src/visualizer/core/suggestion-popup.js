@@ -173,6 +173,8 @@ export class SuggestionPopupController {
                     </div>
                 ` : ''}
 
+                ${this._suggestionNote(suggestion)}
+
                 <div class="suggestion-actions">
                     ${buttonsHTML}
                 </div>
@@ -218,6 +220,8 @@ export class SuggestionPopupController {
                     </div>
                 ` : ''}
 
+                ${this._suggestionNote(suggestion)}
+
                 <div class="suggestion-actions">
                     ${buttonsHTML}
                 </div>
@@ -241,6 +245,21 @@ export class SuggestionPopupController {
             return `Zinsverbetering: ${signals}`
         }
         return this._typeLabel(suggestion.type)
+    }
+
+    /**
+     * Optional advisory note under a suggestion. For a pure passive-voice
+     * suggestion, a passive can be a deliberate choice, so nudge the user to
+     * decide rather than accept blindly (Henk Pander Maat, zin 13).
+     */
+    _suggestionNote(suggestion) {
+        if (suggestion.type === 'passive') {
+            return `
+                <div class="suggestion-note">
+                    Let op: een passieve vorm kan een bewuste keuze zijn — beoordeel zelf of herschrijven hier nodig is.
+                </div>`
+        }
+        return ''
     }
 
     _typeLabel(type) {

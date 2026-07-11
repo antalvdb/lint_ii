@@ -1,9 +1,9 @@
-import { css } from './core/stylesheet.js?v=18'
+import { css } from './core/stylesheet.js?v=19'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
 import { EditorController } from './core/editor.js?v=14'
-import { SuggestionPopupController } from './core/suggestion-popup.js?v=5'
+import { SuggestionPopupController } from './core/suggestion-popup.js?v=6'
 import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './core/word-diff.js?v=2'
 
 

@@ -690,6 +690,16 @@ export const css = `
         }
     }
 
+    .suggestion-note {
+        font-size: 0.85em;
+        line-height: 1.45;
+        font-style: italic;
+        opacity: 0.85;
+        padding: 0.4rem 0.5rem;
+        border-radius: 0.25rem;
+        background: color-mix(in oklch, #d8a200 12%, transparent);
+    }
+
     .suggestion-actions {
         display: flex;
         gap: 0.5rem;
