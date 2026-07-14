@@ -690,6 +690,63 @@ export const css = `
         }
     }
 
+    /* Original score/level shown beside the current one for progress context. */
+    .lint-score-orig,
+    .level-orig {
+        font-family: var(--font-ui, sans-serif);
+        font-size: 0.62em;
+        opacity: 0.55;
+        font-weight: normal;
+        margin-left: 0.4em;
+        white-space: nowrap;
+    }
+    .lint-score-orig[hidden],
+    .level-orig[hidden] {
+        display: none;
+    }
+
+    /* Transient score-delta badge popped next to an accepted suggestion. */
+    .score-flash {
+        position: fixed;
+        z-index: 1002;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.05rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.4rem;
+        font-family: Verdana, sans-serif;
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.15;
+        color: white;
+        background: #2a5c38;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+        animation: score-flash-rise 1.6s ease-out forwards;
+    }
+    .score-flash.worse {
+        background: #8a8a83;
+    }
+    .score-flash-level {
+        font-size: 11px;
+        font-weight: 500;
+        opacity: 0.9;
+    }
+    @keyframes score-flash-rise {
+        0%   { opacity: 0; transform: translateY(6px) scale(0.96); }
+        15%  { opacity: 1; transform: translateY(0) scale(1); }
+        70%  { opacity: 1; transform: translateY(-6px); }
+        100% { opacity: 0; transform: translateY(-16px); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .score-flash { animation: score-flash-fade 1.6s ease-out forwards; }
+        @keyframes score-flash-fade {
+            0%, 80% { opacity: 1; }
+            100%    { opacity: 0; }
+        }
+    }
+
     .suggestion-note {
         font-size: 0.85em;
         line-height: 1.45;

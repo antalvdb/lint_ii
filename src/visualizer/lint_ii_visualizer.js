@@ -1,4 +1,4 @@
-import { css } from './core/stylesheet.js?v=19'
+import { css } from './core/stylesheet.js?v=20'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
@@ -266,18 +266,65 @@ export class LintIIVisualizer extends HTMLElement {
     updateDocumentScore() {
         if (!this._editorController) return
         const { score, level } = this._editorController.computeUpdatedScore()
+        const origScore = this._data.document_lint_score
+        const origLevel = this._data.document_difficulty_level
 
         const scoreEl = this.shadowRoot.querySelector('.lint-score-value')
+        const scoreOrig = this.shadowRoot.querySelector('.lint-score-orig')
         const levelBadge = this.shadowRoot.querySelector(
             '.document-scores [data-level] .level-badge'
         )
         const levelContainer = this.shadowRoot.querySelector(
             '.document-scores [data-level]'
         )
+        const levelOrig = this.shadowRoot.querySelector('.level-orig')
 
-        if (scoreEl && score != null) scoreEl.textContent = score.toFixed(1).replace('.', ',')
+        if (scoreEl && score != null) scoreEl.textContent = this._fmtScore(score)
+        if (scoreOrig) {
+            scoreOrig.textContent = `was ${this._fmtScore(origScore)}`
+            scoreOrig.hidden = !(score != null && origScore != null && Math.abs(score - origScore) >= 0.05)
+        }
         if (levelBadge && level != null) levelBadge.textContent = level
         if (levelContainer && level != null) levelContainer.dataset.level = level
+        if (levelOrig) {
+            levelOrig.textContent = `was ${origLevel}`
+            levelOrig.hidden = !(level != null && origLevel != null && level !== origLevel)
+        }
+    }
+
+    /**
+     * Pop a transient score-delta badge next to the just-accepted change, so
+     * the improvement registers even though the score bar in the header is
+     * scrolled out of view while editing.
+     */
+    _flashScoreDelta(suggestionId, suggestion, delta, levelFrom, levelTo) {
+        this.shadowRoot.querySelectorAll('.score-flash').forEach(el => el.remove())
+
+        let anchor = this.shadowRoot.querySelector(
+            `.suggestion-changed[data-suggestion-id="${suggestionId}"]`
+        )
+        if (!anchor && suggestion) {
+            anchor = this.shadowRoot.querySelector(
+                `[data-sentence-index="${suggestion.sentence_index}"]:not([data-split-part])`
+            )
+        }
+        if (!anchor) return
+        const rect = anchor.getBoundingClientRect()
+
+        const sign = delta < 0 ? '−' : '+'
+        const mag = Math.abs(delta).toFixed(1).replace('.', ',')
+        const levelChanged = levelFrom != null && levelTo != null && levelFrom !== levelTo
+
+        const flash = document.createElement('div')
+        flash.className = 'score-flash ' + (delta < 0 ? 'improve' : 'worse')
+        flash.innerHTML =
+            `<span class="score-flash-delta">${sign}${mag}</span>` +
+            (levelChanged ? `<span class="score-flash-level">niveau ${levelFrom}→${levelTo}</span>` : '')
+        this.shadowRoot.appendChild(flash)
+
+        flash.style.top = `${Math.max(8, rect.top - 6)}px`
+        flash.style.left = `${Math.min(window.innerWidth - 130, rect.right + 8)}px`
+        flash.addEventListener('animationend', () => flash.remove())
     }
 
     updateSentenceScore(sentenceIndex) {
@@ -397,9 +444,17 @@ export class LintIIVisualizer extends HTMLElement {
             })
         }
 
+        // Baseline for score-delta flashes; reflects the current accepted
+        // state so a re-render doesn't produce a spurious flash.
+        const base = this._editorController.computeUpdatedScore()
+        this._lastDocScore = base.score
+        this._lastDocLevel = base.level
+
         // Listen for editor changes to update UI
         this._editorController.addEventListener('editor-change', (e) => {
             const { suggestionId, status } = e.detail
+            const beforeScore = this._lastDocScore
+            const beforeLevel = this._lastDocLevel
             try {
                 this.updateSuggestionStatus(suggestionId, status)
             } catch (err) {
@@ -412,6 +467,18 @@ export class LintIIVisualizer extends HTMLElement {
             this.updateDocumentScore()
             const suggestion = this._editorController.getSuggestion(suggestionId)
             if (suggestion) this.updateSentenceScore(suggestion.sentence_index)
+
+            const after = this._editorController.computeUpdatedScore()
+            if (status === 'accepted' && beforeScore != null && after.score != null
+                && Math.abs(after.score - beforeScore) >= 0.05) {
+                try {
+                    this._flashScoreDelta(suggestionId, suggestion, after.score - beforeScore, beforeLevel, after.level)
+                } catch (err) {
+                    console.error('score flash failed:', err)
+                }
+            }
+            this._lastDocScore = after.score
+            this._lastDocLevel = after.level
         })
 
         // Suggestion hover handling (cluster-aware)
@@ -625,8 +692,20 @@ export class LintIIVisualizer extends HTMLElement {
         }
     }
 
+    _fmtScore(v) {
+        return v != null ? v.toFixed(1).replace('.', ',') : '—'
+    }
+
     renderDocumentScores() {
-        const totalWords = this._data.sentences.reduce((sum, s) => sum + s.word_features.length, 0)
+        const origScore = this._data.document_lint_score
+        const origLevel = this._data.document_difficulty_level
+        let curScore = origScore, curLevel = origLevel
+        if (this._editorController) {
+            const u = this._editorController.computeUpdatedScore()
+            if (u.score != null) curScore = u.score
+            if (u.level != null) curLevel = u.level
+        }
+        const scoreChanged = curScore != null && origScore != null && Math.abs(curScore - origScore) >= 0.05
 
         return `<dl class="document-scores">
             <div class="doc-stat">
@@ -635,14 +714,21 @@ export class LintIIVisualizer extends HTMLElement {
             </div>
             <div class="doc-stat">
                 <dt>lint score</dt>
-                <dd class="lint-score-value">${this._data.document_lint_score != null ? this._data.document_lint_score.toFixed(1).replace('.', ',') : '—'}</dd>
+                <dd>
+                    <span class="lint-score-value">${this._fmtScore(curScore)}</span>
+                    <span class="lint-score-orig"${scoreChanged ? '' : ' hidden'}>was ${this._fmtScore(origScore)}</span>
+                </dd>
             </div>
-            ${this.renderDocumentLevel()}
+            ${this.renderDocumentLevel(curLevel, origLevel)}
         </dl>`
     }
 
-    renderDocumentLevel() {
-        return `<div data-level="${this._data.document_difficulty_level}"><span class="level-badge">${this._data.document_difficulty_level}</span></div>`
+    renderDocumentLevel(curLevel = this._data.document_difficulty_level, origLevel = this._data.document_difficulty_level) {
+        const changed = curLevel != null && origLevel != null && curLevel !== origLevel
+        return `<div data-level="${curLevel}">
+            <span class="level-badge">${curLevel}</span>
+            <span class="level-orig"${changed ? '' : ' hidden'}>was ${origLevel}</span>
+        </div>`
     }
 
     /** 2x2 legend of the four LiNT levels with their colours and a short label. */
