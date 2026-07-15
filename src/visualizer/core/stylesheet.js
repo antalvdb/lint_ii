@@ -583,6 +583,12 @@ export const css = `
         filter: brightness(0.94);
     }
 
+    /* Words of an accepted merged sentence stay clickable so the popup (and its
+       "Ongedaan maken") is reachable. */
+    .word[data-connective-id] {
+        cursor: pointer;
+    }
+
     /* A sentence absorbed into the preceding one by an accepted merge is hidden;
        its text now lives in the merged first sentence. */
     .connective-absorbed {

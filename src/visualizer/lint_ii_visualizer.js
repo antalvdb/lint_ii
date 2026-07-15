@@ -1,4 +1,4 @@
-import { css } from './core/stylesheet.js?v=21'
+import { css } from './core/stylesheet.js?v=22'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
@@ -734,18 +734,27 @@ export class LintIIVisualizer extends HTMLElement {
         if (fresh) el.replaceWith(fresh)
     }
 
-    /** Rebuild the first sentence's element to display the merged sentence text,
-     *  each word tagged as an accepted change so styling and the score flash
-     *  anchor correctly. The level badge is refined by updateSentenceScore. */
+    /** Rebuild the first sentence's element to display the merged sentence text.
+     *  Every word carries data-connective-id so the whole merged sentence stays
+     *  clickable (to reach the popup and undo); only the inserted connective is
+     *  highlighted as the change, and it anchors the score flash. The level
+     *  badge is refined by updateSentenceScore. */
     _renderMergedSentence(idx, suggestion) {
         const el = this.shadowRoot.querySelector(
             `[data-sentence-index="${idx}"]:not([data-split-part])`)
         if (!el) return
         const tokens = suggestion.suggested_text.trim().split(/\s+/).filter(Boolean)
-        const wordsHtml = tokens.map(t =>
-            `<span class="word suggestion-changed" data-suggestion-id="${suggestion.id}"` +
-            ` data-suggestion-status="accepted">${this._escapeHtml(t)}</span>`
-        ).join(' ')
+        const strip = t => t.replace(/[.,;:!?()"'“”‘’]/g, '').toLowerCase()
+        const connWord = this._connectiveWord(suggestion)
+        let marked = false
+        const wordsHtml = tokens.map(t => {
+            const isConn = !marked && strip(t) === connWord
+            if (isConn) marked = true
+            const cls = isConn ? 'word suggestion-changed' : 'word'
+            const statusAttr = isConn ? ' data-suggestion-status="accepted"' : ''
+            return `<span class="${cls}" data-connective-id="${suggestion.id}"` +
+                ` data-suggestion-id="${suggestion.id}"${statusAttr}>${this._escapeHtml(t)}</span>`
+        }).join(' ')
         const level = this._data.sentences[idx]?.difficulty_level ?? '?'
         el.innerHTML =
             `<span class="sent-start-group"><span class="sent-idx">${idx + 1}</span>` +
