@@ -13,8 +13,13 @@ const SENTENCE_SCOPED_TYPES = new Set([
     'passive',
     'subordinate_clause',
     'sentence_length',
-    'connective',
 ])
+
+// A connective merge is NOT in SENTENCE_SCOPED_TYPES: it does not rewrite a
+// sentence's content, it joins two sentences at their boundary. A full rewrite
+// of the FIRST (joining) sentence therefore composes with the merge — the
+// rewritten clause simply carries the connective — so the two co-apply instead
+// of being mutually exclusive. See _applyConnectiveExclusivity / _composedMergeText.
 
 /**
  * EditorController manages suggestion state and text editing.
@@ -472,7 +477,12 @@ export class EditorController {
             .filter(s => this._suggestionStates.get(s.id) === 'accepted')
 
         if (accepted.length > 0) {
-            // Use the first accepted suggestion that has precomputed metrics
+            // A merge dominates: its metrics describe the whole merged sentence
+            // (approximate when composed with a first-sentence rewrite — the
+            // rewrite's own metric change is not separately reflected).
+            const conn = accepted.find(s => s.type === 'connective' && s.new_sentence_metrics)
+            if (conn) return conn.new_sentence_metrics
+            // Otherwise use the first accepted suggestion that has metrics.
             const withMetrics = accepted.find(s => s.new_sentence_metrics)
             if (withMetrics) return withMetrics.new_sentence_metrics
         }
@@ -616,18 +626,19 @@ export class EditorController {
         // sentence-scoped rewrite there. Two word-level edits (neither scoped)
         // skip this and still co-apply, as they compose cleanly.
         const accepted = this.getSuggestion(suggestionId)
-        if (accepted) {
+        if (accepted && accepted.type !== 'connective') {
             const acceptedScoped = SENTENCE_SCOPED_TYPES.has(accepted.type)
             for (const other of this.getSuggestionsForSentence(accepted.sentence_index)) {
                 if (other.id === suggestionId) continue
+                if (other.type === 'connective') continue  // composes; handled below
                 if (acceptedScoped || SENTENCE_SCOPED_TYPES.has(other.type)) {
                     if (this._suggestionStates.get(other.id) !== 'ignored') {
                         this._suggestionStates.set(other.id, 'ignored')
                     }
                 }
             }
-            this._applyConnectiveExclusivity(accepted)
         }
+        if (accepted) this._applyConnectiveExclusivity(accepted)
 
         // Record connective-related auto-ignores (a merge and a rewrite of one
         // of its sentences are alternatives). Scoped to connective conflicts so
@@ -654,26 +665,39 @@ export class EditorController {
      * user's earlier explicit choice is never overridden.
      */
     _applyConnectiveExclusivity(accepted) {
-        const dropPendingOnSentence = (idx, exceptId) => {
-            for (const other of this.getSuggestionsForSentence(idx)) {
-                if (other.id === exceptId) continue
-                if (this._suggestionStates.get(other.id) === 'pending') {
-                    this._suggestionStates.set(other.id, 'ignored')
-                }
+        const dropPending = (id) => {
+            if (this._suggestionStates.get(id) === 'pending') {
+                this._suggestionStates.set(id, 'ignored')
             }
         }
 
         if (accepted.type === 'connective') {
             const m = accepted.merges_sentences || []
-            for (const idx of m) dropPendingOnSentence(idx, accepted.id)
+            const first = m[0], second = m[m.length - 1]
+            // The absorbed second sentence: every edit on it conflicts.
+            for (const other of this.getSuggestionsForSentence(second)) {
+                if (other.id !== accepted.id) dropPending(other.id)
+            }
+            // The first sentence: a full rewrite composes (kept); anything that
+            // can't be grafted (word-level edits) conflicts.
+            for (const other of this.getSuggestionsForSentence(first)) {
+                if (other.id === accepted.id) continue
+                if (!SENTENCE_SCOPED_TYPES.has(other.type)) dropPending(other.id)
+            }
             return
         }
 
-        // A non-connective edit was accepted: drop any pending connective that
-        // merges the sentence it touches.
+        // A non-connective edit was accepted. It conflicts with a pending
+        // connective when it touches the absorbed (second) sentence, or when it
+        // is a non-composable (word-level) edit of the first sentence. A full
+        // rewrite of the first sentence composes, so the merge is kept.
         for (const c of this.connectiveSuggestions) {
             if (this._suggestionStates.get(c.id) !== 'pending') continue
-            if ((c.merges_sentences || []).includes(accepted.sentence_index)) {
+            const m = c.merges_sentences || []
+            const first = m[0], second = m[m.length - 1]
+            if (accepted.sentence_index === second) {
+                this._suggestionStates.set(c.id, 'ignored')
+            } else if (accepted.sentence_index === first && !SENTENCE_SCOPED_TYPES.has(accepted.type)) {
                 this._suggestionStates.set(c.id, 'ignored')
             }
         }
@@ -748,6 +772,54 @@ export class EditorController {
             const m = s.merges_sentences
             return Array.isArray(m) && m.length >= 2 && m[m.length - 1] === sentenceIndex
         }) || null
+    }
+
+    /** The connective whose merge treats this sentence as its FIRST (joining)
+     *  half — the one a full rewrite of the sentence composes with. */
+    getConnectiveForFirstSentence(sentenceIndex) {
+        return this.connectiveSuggestions.find(s => {
+            const m = s.merges_sentences
+            return Array.isArray(m) && m.length >= 2 && m[0] === sentenceIndex
+        }) || null
+    }
+
+    /** The word a connective inserts: the first word of its rewrite not present
+     *  in the original sentence pair (falls back to the relation). */
+    _connectiveWord(suggestion) {
+        const strip = t => t.replace(/[.,;:!?()"'“”‘’]/g, '').toLowerCase()
+        const orig = new Set((suggestion.original_text || '').split(/\s+/).map(strip))
+        for (const tok of (suggestion.suggested_text || '').split(/\s+/)) {
+            const b = strip(tok)
+            if (b && !orig.has(b)) return b
+        }
+        return (suggestion.relation || '').toLowerCase()
+    }
+
+    /**
+     * The merged sentence text, grafting an accepted full rewrite of the first
+     * sentence onto the connective when one exists: the rewritten first clause
+     * carries the connective tail ("Alle treinen stonden stil" + ", want …").
+     * Falls back to the connective's own suggested_text when there is no
+     * first-sentence rewrite, or when the join can't be located.
+     */
+    _composedMergeText(connective) {
+        const m = connective.merges_sentences || []
+        if (m.length < 2) return connective.suggested_text
+        const first = m[0]
+        const r0 = this.getSuggestionsForSentence(first).find(s =>
+            s.id !== connective.id
+            && SENTENCE_SCOPED_TYPES.has(s.type)
+            && this._suggestionStates.get(s.id) === 'accepted')
+        if (!r0) return connective.suggested_text
+
+        const cw = this._connectiveWord(connective)
+        if (!cw) return connective.suggested_text
+        const sug = connective.suggested_text
+        const sep = sug.toLowerCase().indexOf(', ' + cw + ' ')
+        if (sep < 0) return connective.suggested_text  // can't locate the join
+        const tail = sug.slice(sep)                    // ", want er was een sein defect."
+        const firstClause = r0.suggested_text.trim().replace(/[.!?]+$/, '')
+        return firstClause + tail
     }
 
     /**
@@ -966,6 +1038,12 @@ export class EditorController {
         const accepted = this.getSuggestionsForSentence(idx).filter(
             s => this._suggestionStates.get(s.id) === "accepted"
         )
+        // An accepted merge produces the whole sentence, composing an accepted
+        // first-sentence rewrite when present.
+        const conn = accepted.find(s => s.type === "connective")
+        if (conn) {
+            return this._composedMergeText(conn)
+        }
         if (accepted.length === 0) {
             return this._reconstructSentenceText(sentence)
         }

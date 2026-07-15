@@ -2,8 +2,8 @@ import { css } from './core/stylesheet.js?v=22'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
-import { EditorController } from './core/editor.js?v=17'
-import { SuggestionPopupController } from './core/suggestion-popup.js?v=7'
+import { EditorController } from './core/editor.js?v=18'
+import { SuggestionPopupController } from './core/suggestion-popup.js?v=8'
 import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './core/word-diff.js?v=2'
 
 
@@ -467,6 +467,17 @@ export class LintIIVisualizer extends HTMLElement {
             this.updateDocumentScore()
             const suggestion = this._editorController.getSuggestion(suggestionId)
             if (suggestion) this.updateSentenceScore(suggestion.sentence_index)
+            // A rewrite of a merge's first sentence composes into the merged
+            // text; if that merge is accepted, re-render it to reflect the graft.
+            if (suggestion && suggestion.type !== 'connective') {
+                const c = this._editorController.getConnectiveForFirstSentence(suggestion.sentence_index)
+                if (c && this._editorController.getState(c.id) === 'accepted') {
+                    try {
+                        this._renderMergedSentence(c.merges_sentences[0], c)
+                        this.updateSentenceScore(c.merges_sentences[0])
+                    } catch (err) { console.error('merge recompose failed:', err) }
+                }
+            }
             // Reconcile connective chips/merged views with current state: an
             // accept elsewhere may have auto-ignored (or an undo revived) a
             // connective whose own change wasn't dispatched to this sentence.
@@ -475,7 +486,12 @@ export class LintIIVisualizer extends HTMLElement {
             }
 
             const after = this._editorController.computeUpdatedScore()
-            if (status === 'accepted' && beforeScore != null && after.score != null
+            // Suppress the delta flash for a connective merge: fusing sentences
+            // raises the score (a longer sentence), which the flash would read as
+            // "you made it worse". Coherence isn't captured by the LiNT metrics;
+            // the popup explains this instead. Ordinary rewrites still flash.
+            if (status === 'accepted' && suggestion?.type !== 'connective'
+                && beforeScore != null && after.score != null
                 && Math.abs(after.score - beforeScore) >= 0.05) {
                 try {
                     this._flashScoreDelta(suggestionId, suggestion, after.score - beforeScore, beforeLevel, after.level)
@@ -789,7 +805,10 @@ export class LintIIVisualizer extends HTMLElement {
         const el = this.shadowRoot.querySelector(
             `[data-sentence-index="${idx}"]:not([data-split-part])`)
         if (!el) return
-        const tokens = suggestion.suggested_text.trim().split(/\s+/).filter(Boolean)
+        const text = this._editorController._composedMergeText
+            ? this._editorController._composedMergeText(suggestion)
+            : suggestion.suggested_text
+        const tokens = text.trim().split(/\s+/).filter(Boolean)
         const strip = t => t.replace(/[.,;:!?()"'“”‘’]/g, '').toLowerCase()
         const connWord = this._connectiveWord(suggestion)
         let marked = false

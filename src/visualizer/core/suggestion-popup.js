@@ -334,6 +334,7 @@ export class SuggestionPopupController {
             return `
                 <div class="suggestion-note">
                     Let op: het verband tussen de zinnen is een interpretatie — beoordeel zelf of het klopt voordat je samenvoegt.
+                    Samenvoegen maakt de zin langer, waardoor de LiNT-score iets kan stijgen; een verbindingswoord verbetert de samenhang, en dat meet de LiNT-score niet.
                 </div>`
         }
         return ''
