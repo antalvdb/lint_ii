@@ -32,7 +32,7 @@ export class EditorController {
 
         // Initialize all suggestions as pending
         if (data.suggestions?.suggestions) {
-            for (const suggestion of data.suggestions.suggestions) {
+            for (const suggestion of this.suggestions) {
                 this._suggestionStates.set(suggestion.id, 'pending')
             }
             this._buildClusters()
@@ -493,7 +493,10 @@ export class EditorController {
      * Get all suggestions
      */
     get suggestions() {
-        return this._data.suggestions?.suggestions || []
+        // Phase 1: connective suggestions are backend-only (no accept path yet).
+        // Ignore them everywhere in the editor until phase 2 wires their rendering;
+        // the raw analysis JSON still carries them for inspection.
+        return (this._data.suggestions?.suggestions || []).filter(s => s.type !== "connective")
     }
 
     /**

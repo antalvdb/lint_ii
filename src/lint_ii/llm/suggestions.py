@@ -55,6 +55,10 @@ class SuggestionType(str, Enum):
     # Consolidated per-sentence rewrite addressing several sentence-level issues
     # at once (see _plan_jobs / sentence_rewrite prompt). Phase 1 scaffolding.
     SENTENCE_REWRITE = "sentence_rewrite"
+    # Cross-sentence coherence: add a missing connective between two adjacent
+    # sentences (may merge them). Detected per paragraph, LLM-driven. Gated
+    # behind LINT_II_CONNECTIVES; frontend accept path is not wired yet.
+    CONNECTIVE = "connective"
 
 
 # Default thresholds for triggering suggestions
@@ -103,6 +107,10 @@ class Suggestion:
     # For a consolidated sentence_rewrite: the LiNT trigger types it merged, so
     # the UI can name the underlying signals instead of a generic label.
     component_types: list[str] = field(default_factory=list)
+    # For a connective suggestion: the sentence indices it spans (may be two,
+    # when it merges a pair) and the discourse relation it makes explicit.
+    merges_sentences: list[int] = field(default_factory=list)
+    relation: str | None = None
     # Precomputed metrics for score recomputation
     new_sentence_metrics: dict[str, Any] | None = None
 
@@ -126,6 +134,10 @@ class Suggestion:
             result["error_category"] = self.error_category
         if self.component_types:
             result["component_types"] = self.component_types
+        if self.merges_sentences:
+            result["merges_sentences"] = self.merges_sentences
+        if self.relation is not None:
+            result["relation"] = self.relation
         if self.new_sentence_metrics is not None:
             result["new_sentence_metrics"] = self.new_sentence_metrics
         return result
@@ -843,6 +855,17 @@ class SuggestionEngine:
             logger.info("TIMING job_%s=%.2fs", label, time.perf_counter() - t_job)
             suggestions.extend(new_suggestions)
 
+        # Step 4: cross-sentence coherence pass (gated behind LINT_II_CONNECTIVES,
+        # fail-open). Adds connective suggestions that span sentence pairs.
+        t_conn = time.perf_counter()
+        connective_suggestions = self.generate_connective_suggestions(analysis, provider)
+        if connective_suggestions:
+            logger.info(
+                "TIMING connective_pass=%.2fs (%d suggestions)",
+                time.perf_counter() - t_conn, len(connective_suggestions),
+            )
+        suggestions.extend(connective_suggestions)
+
         return SuggestionsResult(
             suggestions=suggestions,
             triggers_found=len(triggers),
@@ -1038,6 +1061,177 @@ class SuggestionEngine:
                     continue
                 return f"{tok.text} {noun.text}"
         return None
+
+    # ── Connective (coherence) pass ──────────────────────────────────────
+    # Discourse connectives, lowercased. Used to (a) skip a boundary whose
+    # second sentence already opens with one, and (b) allow these words to be
+    # added by a rewrite without tripping the "invented content" backstop.
+    _CONNECTIVE_LEXICON = frozenset({
+        "want", "omdat", "doordat", "aangezien", "zodat", "waardoor", "dus",
+        "daarom", "hierdoor", "daardoor", "maar", "echter", "toch", "hoewel",
+        "terwijl", "immers", "namelijk", "bovendien", "daarnaast", "verder",
+        "ook", "vervolgens", "daarna", "kortom", "derhalve", "bijgevolg",
+        "desondanks", "niettemin", "integendeel", "sterker",
+    })
+
+    @staticmethod
+    def _connective_paragraphs(analysis: "ReadabilityAnalysis") -> list[list[int]]:
+        """Group the document into paragraphs: maximal runs of consecutive
+        sentence entries in the layout (never crossing a heading, blank, list
+        item or quote). Returns lists of global sentence indices."""
+        paragraphs: list[list[int]] = []
+        current: list[int] = []
+        for entry in analysis.layout:
+            if entry.get("type") == "sentence":
+                current.append(entry["sentence_index"])
+            else:
+                if current:
+                    paragraphs.append(current)
+                    current = []
+        if current:
+            paragraphs.append(current)
+        return paragraphs
+
+    @classmethod
+    def _connective_candidates(cls, analysis: "ReadabilityAnalysis", para: list[int]) -> list[int]:
+        """Return the 0-based positions p in `para` where the boundary between
+        para[p] and para[p+1] is a candidate for a connective: both sentences
+        are declarative and long enough, and the second doesn't already open
+        with a connective. Cheap deterministic pre-filter to bound LLM calls."""
+        def declarative_and_long(sent) -> bool:
+            text = sent.doc.text.strip()
+            if text.endswith("?"):
+                return False
+            content = [t for t in sent.doc if not t.is_punct and not t.is_space]
+            return len(content) >= 4
+
+        def opens_with_connective(sent) -> bool:
+            for t in sent.doc:
+                if t.is_punct or t.is_space:
+                    continue
+                return t.lower_ in cls._CONNECTIVE_LEXICON
+            return False
+
+        candidates = []
+        for p in range(len(para) - 1):
+            a = analysis.sentences[para[p]]
+            b = analysis.sentences[para[p + 1]]
+            if declarative_and_long(a) and declarative_and_long(b) and not opens_with_connective(b):
+                candidates.append(p)
+        return candidates
+
+    @classmethod
+    def _connective_adds_content(cls, original: str, suggested: str) -> str | None:
+        """Return a content word the rewrite introduced that is neither in the
+        original pair nor an allowed connective, else None. Guards against the
+        model inventing content or smuggling in a relation's facts."""
+        orig = {t.lower() for t in cls._word_tokens(original)}
+        for raw in cls._word_tokens(suggested):
+            low = raw.lower()
+            if low in orig or low in cls._CONNECTIVE_LEXICON:
+                continue
+            if len(raw) < 4 or not raw.isalpha():   # allow short function words
+                continue
+            if raw[0].isupper():                     # proper noun / sentence start
+                continue
+            return raw
+        return None
+
+    def generate_connective_suggestions(
+        self,
+        analysis: "ReadabilityAnalysis",
+        provider: LLMProvider,
+    ) -> list[Suggestion]:
+        """Cross-sentence coherence pass: per paragraph, one LLM call proposes
+        connectives for the candidate boundaries. Gated behind LINT_II_CONNECTIVES
+        (default off) and fail-open — any error yields no connective suggestions
+        rather than breaking the main pass."""
+        if os.environ.get("LINT_II_CONNECTIVES", "0").lower() not in ("1", "true", "yes", "on"):
+            return []
+
+        suggestions: list[Suggestion] = []
+        try:
+            paragraphs = self._connective_paragraphs(analysis)
+        except Exception as e:
+            logger.warning("Connective pass: paragraph grouping failed: %s", e)
+            return []
+
+        for para in paragraphs:
+            if len(para) < 2:
+                continue
+            try:
+                candidates = self._connective_candidates(analysis, para)
+                if not candidates:
+                    continue
+                numbered = "\n".join(
+                    f"{i + 1}. {analysis.sentences[g].doc.text}" for i, g in enumerate(para)
+                )
+                boundaries = ", ".join(str(p + 1) for p in candidates)
+                system_prompt, user_prompt = format_prompt(
+                    "connective", paragraph=numbered, boundaries=boundaries,
+                )
+                response = provider.complete(user_prompt, system_prompt)
+                blocks = parse_block_response(
+                    response.content,
+                    fields=["NA_ZIN", "RELATIE", "HERSCHRIJVING", "UITLEG"],
+                    required="NA_ZIN",
+                )
+                for block in blocks:
+                    sug = self._build_connective_suggestion(
+                        analysis, para, set(candidates), block, response.model
+                    )
+                    if sug:
+                        suggestions.append(sug)
+            except LLMTimeoutError:
+                raise
+            except Exception as e:
+                logger.warning("Connective pass failed for a paragraph: %s", e)
+                continue
+
+        return suggestions
+
+    def _build_connective_suggestion(
+        self,
+        analysis: "ReadabilityAnalysis",
+        para: list[int],
+        candidate_positions: set[int],
+        block: dict[str, str],
+        model: str | None,
+    ) -> Suggestion | None:
+        """Validate one parsed connective block and build a Suggestion, or None."""
+        m = re.search(r"\d+", block.get("NA_ZIN", ""))
+        if not m:
+            return None
+        pos = int(m.group()) - 1
+        if pos not in candidate_positions or pos + 1 >= len(para):
+            return None
+
+        n, n1 = para[pos], para[pos + 1]
+        suggested = block.get("HERSCHRIJVING", "").strip().strip('"“”')
+        if not suggested or "niet toegepast" in suggested.lower():
+            return None
+
+        original_pair = f"{analysis.sentences[n].doc.text} {analysis.sentences[n1].doc.text}"
+        if self._connective_adds_content(original_pair, suggested):
+            logger.info("Connective discarded: introduced content, sentences %d-%d", n, n1)
+            return None
+        if self._introduces_misspelling(original_pair, suggested):
+            return None
+        if self._dehet_disagreement(suggested):
+            return None
+
+        return Suggestion(
+            id=str(uuid.uuid4())[:8],
+            type=SuggestionType.CONNECTIVE,
+            sentence_index=n,
+            original_text=original_pair,
+            suggested_text=suggested,
+            explanation=block.get("UITLEG", ""),
+            model=model,
+            merges_sentences=[n, n1],
+            relation=(block.get("RELATIE") or None),
+            new_sentence_metrics=self._analyze_suggested_text(suggested),
+        )
 
     @staticmethod
     def _format_issue(trigger: SuggestionTrigger) -> str | None:
