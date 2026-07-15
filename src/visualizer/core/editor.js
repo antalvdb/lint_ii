@@ -823,6 +823,26 @@ export class EditorController {
     }
 
     /**
+     * The "before" sentence pair for a connective's popup, reflecting an accepted
+     * full rewrite of the first sentence (so the popup doesn't show a stale
+     * original first sentence once its rewrite is applied). Falls back to the
+     * stored original_text when there is no accepted first-sentence rewrite.
+     */
+    connectiveOriginalPair(connective) {
+        const m = connective.merges_sentences || []
+        if (m.length < 2) return connective.original_text
+        const first = m[0], second = m[m.length - 1]
+        const r0 = this.getSuggestionsForSentence(first).find(s =>
+            s.id !== connective.id
+            && SENTENCE_SCOPED_TYPES.has(s.type)
+            && this._suggestionStates.get(s.id) === 'accepted')
+        if (!r0) return connective.original_text
+        const secondText = this._data.sentences[second]
+            ? this._reconstructSentenceText(this._data.sentences[second]) : ''
+        return r0.suggested_text.trim() + (secondText ? ' ' + secondText : '')
+    }
+
+    /**
      * Return the current text of a sentence after applying all accepted
      * suggestion diffs. Used by the popup to show an up-to-date "Origineel".
      */

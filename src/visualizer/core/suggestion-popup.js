@@ -112,7 +112,13 @@ export class SuggestionPopupController {
         const relation = suggestion.relation
             ? `<span class="suggestion-category">${this._escapeHtml(this._relationLabel(suggestion.relation))}</span>`
             : ''
-        const { origHtml, sugHtml } = this._renderDiff(suggestion.original_text, suggestion.suggested_text)
+        // Reflect an already-accepted first-sentence rewrite in both strings, so
+        // the popup shows the current first clause, not the stale original.
+        const before = this._editor.connectiveOriginalPair
+            ? this._editor.connectiveOriginalPair(suggestion) : suggestion.original_text
+        const after = this._editor._composedMergeText
+            ? this._editor._composedMergeText(suggestion) : suggestion.suggested_text
+        const { origHtml, sugHtml } = this._renderDiff(before, after)
 
         return `
             <div class="suggestion-popup-content">
