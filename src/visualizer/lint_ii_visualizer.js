@@ -3,7 +3,7 @@ import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
 import { EditorController } from './core/editor.js?v=20'
-import { SuggestionPopupController } from './core/suggestion-popup.js?v=9'
+import { SuggestionPopupController } from './core/suggestion-popup.js?v=10'
 import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './core/word-diff.js?v=2'
 
 
@@ -486,11 +486,16 @@ export class LintIIVisualizer extends HTMLElement {
             }
 
             const after = this._editorController.computeUpdatedScore()
-            // Suppress the delta flash for a connective merge: fusing sentences
-            // raises the score (a longer sentence), which the flash would read as
-            // "you made it worse". Coherence isn't captured by the LiNT metrics;
-            // the popup explains this instead. Ordinary rewrites still flash.
-            if (status === 'accepted' && suggestion?.type !== 'connective'
+            // Suppress the WORSENING flash for edits that raise the score by
+            // design — a connective merge or a compound split both lengthen the
+            // sentence, which the red flash would misread as "you made it worse".
+            // The popup explains the trade-off. An improving (green) flash still
+            // shows, and ordinary rewrites are unaffected.
+            const raisesByDesign = suggestion
+                && (suggestion.type === 'connective' || this._isCompoundSplit(suggestion))
+            const suppressFlash = raisesByDesign && after.score != null
+                && beforeScore != null && (after.score - beforeScore) > 0
+            if (status === 'accepted' && !suppressFlash
                 && beforeScore != null && after.score != null
                 && Math.abs(after.score - beforeScore) >= 0.05) {
                 try {
@@ -975,6 +980,15 @@ export class LintIIVisualizer extends HTMLElement {
             ` data-suggestion-status="pending"` +
             ` title="Verbind met de vorige zin met &quot;${this._escapeHtml(word)}&quot;">` +
             `↰&nbsp;${this._escapeHtml(word)}</span>`
+    }
+
+    /** A word-frequency suggestion that splits a long compound into a word group
+     *  (multi-word replacement) rather than a single-word swap. Like a merge, it
+     *  lengthens the sentence, so it can raise the LiNT score. */
+    _isCompoundSplit(suggestion) {
+        return !!(suggestion && suggestion.type === 'word_frequency'
+            && typeof suggestion.replacement_word === 'string'
+            && suggestion.replacement_word.trim().includes(' '))
     }
 
     /** The connective the merge inserts: the first suggested word that is not in

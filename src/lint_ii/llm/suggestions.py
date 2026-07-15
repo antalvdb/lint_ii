@@ -985,6 +985,34 @@ class SuggestionEngine:
         """
         return round(candidate_freq) > round(original_freq)
 
+    # A single-token word at least this long is treated as a likely compound that
+    # may be split into a clearer word group (see _replacement_passes_band).
+    _COMPOUND_MIN_LEN = 15
+
+    def _replacement_passes_band(
+        self, trigger_word: str, replacement_word: str | None, original_freq: float
+    ) -> bool:
+        """Whether a word_frequency replacement is worth keeping.
+
+        A single-word replacement must sit in a higher Zipf band than the
+        original (a marginal or equal-band swap isn't worth the risk). A
+        MULTI-word replacement is a rephrasing, not a swap — a phrase has no
+        single frequency to band-check — and is accepted only when the original
+        is a long compound with no simple synonym, which is exactly the case a
+        split ("levensmiddelendistributiecentrum" -> "centrum voor de distributie
+        van levensmiddelen") is meant to solve. Other backstops (misspelling,
+        clause-join, URL) still apply to the rewrite."""
+        if not replacement_word:
+            return True
+        rep = replacement_word.strip()
+        if " " in rep:
+            return len(trigger_word or "") >= self._COMPOUND_MIN_LEN
+        from lint_ii.linguistic_data.wordlists import FREQ_DATA
+        zero_count_freq = 1.359228547196266
+        return self._in_higher_freq_band(
+            FREQ_DATA.get(rep.lower(), zero_count_freq), original_freq
+        )
+
     # Split a rewrite into word tokens, stripping surrounding punctuation.
     _TOKEN_TRIM_RE = re.compile(r"^[^0-9A-Za-zÀ-ſ]+|[^0-9A-Za-zÀ-ſ]+$")
 
@@ -1563,16 +1591,14 @@ class SuggestionEngine:
         if "niet toegepast" in suggested_text.lower():
             return None
 
-        if replacement_word:
-            from lint_ii.linguistic_data.wordlists import FREQ_DATA
-            zero_count_freq = 1.359228547196266
-            replacement_freq = FREQ_DATA.get(replacement_word.lower(), zero_count_freq)
-            if not self._in_higher_freq_band(replacement_freq, trigger.feature_value):
-                logger.info(
-                    "Dropping bundled word_frequency suggestion: %r -> %r not in a higher band",
-                    trigger.word, replacement_word,
-                )
-                return None
+        if replacement_word and not self._replacement_passes_band(
+            trigger.word, replacement_word, trigger.feature_value
+        ):
+            logger.info(
+                "Dropping bundled word_frequency suggestion: %r -> %r not in a higher band",
+                trigger.word, replacement_word,
+            )
+            return None
 
         if self._breaks_clause_conjunction(original, suggested_text):
             return None
@@ -1681,19 +1707,15 @@ class SuggestionEngine:
             # slightly-more-common swap (e.g. "uitstoot" → "uitlaat"), and an
             # equally-rare swap (e.g. "beslistermijnen" → "beslissingstermijnen")
             # is worthless.
-            if trigger.type == SuggestionType.WORD_FREQUENCY and replacement_word:
-                from lint_ii.linguistic_data.wordlists import FREQ_DATA
-                zero_count_freq = 1.359228547196266
-                replacement_freq = FREQ_DATA.get(replacement_word.lower(), zero_count_freq)
-                original_freq = trigger.feature_value
-                if not self._in_higher_freq_band(replacement_freq, original_freq):
-                    logger.info(
-                        "Dropping word_frequency suggestion: replacement '%s' (%.2f, band %d) "
-                        "not in a higher frequency band than original '%s' (%.2f, band %d)",
-                        replacement_word, replacement_freq, round(replacement_freq),
-                        trigger.word, original_freq, round(original_freq),
-                    )
-                    return None
+            if (trigger.type == SuggestionType.WORD_FREQUENCY and replacement_word
+                    and not self._replacement_passes_band(
+                        trigger.word, replacement_word, trigger.feature_value)):
+                logger.info(
+                    "Dropping word_frequency suggestion: replacement '%s' for '%s' (%.2f) "
+                    "not in a higher frequency band (and not a compound split)",
+                    replacement_word, trigger.word, trigger.feature_value,
+                )
+                return None
 
             if not suggested_text:
                 logger.warning(

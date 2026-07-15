@@ -343,6 +343,14 @@ export class SuggestionPopupController {
                     Samenvoegen maakt de zin langer, waardoor de LiNT-score iets kan stijgen; een verbindingswoord verbetert de samenhang, en dat meet de LiNT-score niet.
                 </div>`
         }
+        if (suggestion.type === 'word_frequency'
+            && typeof suggestion.replacement_word === 'string'
+            && suggestion.replacement_word.trim().includes(' ')) {
+            return `
+                <div class="suggestion-note">
+                    Let op: een lange samenstelling opsplitsen maakt de zin langer, waardoor de LiNT-score iets kan stijgen; toch wordt de tekst begrijpelijker doordat een zeldzaam woord plaatsmaakt voor gewone woorden.
+                </div>`
+        }
         return ''
     }
 

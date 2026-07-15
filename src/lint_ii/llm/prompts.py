@@ -41,6 +41,8 @@ Tekstfragment: "{context}"
 
 Het woord "{word}" heeft een lage woordfrequentie ({frequency:.2f} Zipf), wat betekent dat veel lezers dit woord mogelijk niet kennen.
 
+Is "{word}" een lange samenstelling zonder eenvoudig synoniem? Splits het dan in een begrijpelijker woordgroep in plaats van \u00e9\u00e9n zeldzaam woord te zoeken (bijv. "levensmiddelendistributiecentrum" \u2192 "centrum voor de distributie van levensmiddelen"). Geef die woordgroep als VERVANGING en verwerk hem in de HERSCHRIJVING. Voeg geen nieuwe inhoud toe die niet al in het woord besloten ligt.
+
 Belangrijk: als de vervanging gevolgen heeft voor de grammaticale context (bijv. adjectief\u00adverbuiging, lidwoord de/het, meervoud/enkelvoud, werkwoordsvervoeging), pas dan ook de omringende woorden aan zodat de zin grammaticaal correct blijft.
 
 Geef je antwoord in het volgende formaat:
@@ -187,6 +189,8 @@ UITLEG: [hoogstens tien woorden: wat er is veranderd — geen vakjargon]"""
 
 Je richt je specifiek op het vervangen van infrequente of moeilijke woorden door meer gangbare synoniemen.""",
         user="""Hieronder staan {n_items} genummerde tekstfragmenten. In elk fragment is één woord aangegeven dat een lage woordfrequentie heeft, wat betekent dat veel lezers dit woord mogelijk niet kennen. Vervang in elk fragment het aangegeven woord door een frequenter, begrijpelijker synoniem.
+
+Is het aangegeven woord een lange samenstelling zonder eenvoudig synoniem? Splits het dan in een begrijpelijker woordgroep in plaats van één zeldzaam woord te zoeken (bijv. "levensmiddelendistributiecentrum" → "centrum voor de distributie van levensmiddelen"). Geef die woordgroep als VERVANGING en verwerk hem in de HERSCHRIJVING. Voeg geen nieuwe inhoud toe die niet al in het woord besloten ligt.
 
 Belangrijk: als de vervanging gevolgen heeft voor de grammaticale context (bijv. adjectief­verbuiging, lidwoord de/het, meervoud/enkelvoud, werkwoordsvervoeging), pas dan ook de omringende woorden aan zodat de zin grammaticaal correct blijft.
 
