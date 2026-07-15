@@ -59,6 +59,10 @@ class SuggestionType(str, Enum):
     # sentences (may merge them). Detected per paragraph, LLM-driven. Gated
     # behind LINT_II_CONNECTIVES; frontend accept path is not wired yet.
     CONNECTIVE = "connective"
+    # Re-present a long in-sentence enumeration as a bulleted list (lead-in +
+    # items). Structural output, not an inline rewrite. Gated behind
+    # LINT_II_ENUMERATIONS; frontend block-accept path is not wired yet (phase 1).
+    ENUMERATION = "enumeration"
 
 
 # Default thresholds for triggering suggestions
@@ -69,7 +73,14 @@ DEFAULT_THRESHOLDS: dict[str, float] = {
     "abstract_noun_ratio": 0.7,      # Abstract ratio above this (concrete < 30%)
     "sentence_length": 25,           # Words above this triggers suggestion
     "n_subordinate_clauses": 1,      # More than this many subordinate clauses triggers
+    "enumeration_min_items": 3,      # Coordinated items needed to suggest a bullet list
+    "enumeration_min_span_words": 12, # Token span the enumeration must cover
 }
+
+
+def _enumerations_enabled() -> bool:
+    """Whether the enumeration→bullet-list pass is on (LINT_II_ENUMERATIONS)."""
+    return os.environ.get("LINT_II_ENUMERATIONS", "0").lower() in ("1", "true", "yes", "on")
 
 
 @dataclass
@@ -117,6 +128,10 @@ class Suggestion:
     # accepted full rewrite of the first sentence, keyed by that rewrite's id. Lets
     # the UI score a composed merge precisely instead of reusing new_sentence_metrics.
     composed_metrics: dict[str, Any] = field(default_factory=dict)
+    # For an enumeration: the lead-in (ending ":") and the list items. suggested_text
+    # carries a plain-text rendering for the copy/export fallback.
+    list_intro: str | None = None
+    list_items: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         """Serialize suggestion to dictionary."""
@@ -146,6 +161,10 @@ class Suggestion:
             result["new_sentence_metrics"] = self.new_sentence_metrics
         if self.composed_metrics:
             result["composed_metrics"] = self.composed_metrics
+        if self.list_intro is not None:
+            result["list_intro"] = self.list_intro
+        if self.list_items:
+            result["list_items"] = self.list_items
         return result
 
 
@@ -291,6 +310,12 @@ class SuggestionEngine:
             trigger = self._check_sentence_length(sent_analysis, sent_idx, sentence_text)
             if trigger:
                 triggers.append(trigger)
+
+            # Check for a long in-sentence enumeration (gated, off by default).
+            if _enumerations_enabled():
+                trigger = self._check_enumeration(sent_analysis, sent_idx, sentence_text)
+                if trigger:
+                    triggers.append(trigger)
 
         return triggers
 
@@ -452,6 +477,67 @@ class SuggestionEngine:
             )
         return None
 
+    def _check_enumeration(
+        self,
+        sent_analysis: "SentenceAnalysis",
+        sent_idx: int,
+        sentence_text: str,
+    ) -> SuggestionTrigger | None:
+        """Detect a long in-sentence enumeration: a coordination of >= N phrase-
+        level conjuncts spanning a meaningful part of the sentence. Precise by
+        design (short natural lists like "koffie, thee en water" are skipped via
+        the item-count and span gates). Fail-open on any parse issue."""
+        min_items = int(self._thresholds["enumeration_min_items"])
+        min_span = int(self._thresholds["enumeration_min_span_words"])
+        try:
+            doc = sent_analysis.doc
+            # Group conjuncts by the base (first) member of their coordination.
+            chains: dict[int, list] = {}
+            for tok in doc:
+                if tok.dep_ != "conj":
+                    continue
+                base = tok.head
+                guard = 0
+                while base.dep_ == "conj" and guard < 50:
+                    base = base.head
+                    guard += 1
+                chains.setdefault(base.i, []).append(tok)
+
+            best = None  # (n_items, span_words)
+            for base_i, conjs in chains.items():
+                members = [doc[base_i]] + conjs
+                n_items = len(members)
+                if n_items < min_items:
+                    continue
+                # Phrase-level only: reject if any conjunct head is a FINITE verb
+                # (coordinated clauses are max_sdl / subordinate_clause's job). A
+                # nominalized infinitive ("het voorkomen van ...") is nominal and
+                # stays eligible.
+                if any(
+                    m.pos_ in ("VERB", "AUX") and "Fin" in m.morph.get("VerbForm")
+                    for m in members
+                ):
+                    continue
+                idxs = [m.i for m in members]
+                span_words = max(idxs) - min(idxs) + 1
+                if span_words < min_span:
+                    continue
+                if best is None or n_items > best[0]:
+                    best = (n_items, span_words)
+
+            if best is None:
+                return None
+            return SuggestionTrigger(
+                type=SuggestionType.ENUMERATION,
+                sentence_index=sent_idx,
+                sentence_text=sentence_text,
+                feature_value=float(best[0]),
+                threshold=float(min_items),
+            )
+        except Exception as e:  # never break trigger detection
+            logger.warning("Enumeration check failed on sentence %d: %s", sent_idx, e)
+            return None
+
     @staticmethod
     def _prioritize_triggers(
         triggers: list[SuggestionTrigger],
@@ -547,11 +633,15 @@ class SuggestionEngine:
         # Consolidated mode: separate sentence-level rewrites from word_frequency
         rewrite_by_sentence: dict[int, list[SuggestionTrigger]] = {}
         wordfreq_by_sentence: dict[int, list[SuggestionTrigger]] = {}
+        enumeration_triggers: list[SuggestionTrigger] = []
         for trigger in triggers:
             if trigger.type in SENTENCE_LEVEL_TRIGGER_TYPES:
                 rewrite_by_sentence.setdefault(trigger.sentence_index, []).append(trigger)
             elif trigger.type == SuggestionType.WORD_FREQUENCY:
                 wordfreq_by_sentence.setdefault(trigger.sentence_index, []).append(trigger)
+            elif trigger.type == SuggestionType.ENUMERATION:
+                # Structural output (a list), never consolidated into a prose rewrite.
+                enumeration_triggers.append(trigger)
             # other types (e.g. spelling) are handled outside this planner
 
         # Order each sentence's rewrite triggers by type priority — this only
@@ -583,6 +673,14 @@ class SuggestionEngine:
                     sentence_index=sent_idx,
                     triggers=[sent_triggers[0]],
                 ))
+
+        # Round 1b: one single job per enumeration (its own structured prompt).
+        for trigger in sorted(enumeration_triggers, key=lambda t: t.sentence_index):
+            if len(jobs) >= cap:
+                break
+            jobs.append(SuggestionJob(
+                kind="single", sentence_index=trigger.sentence_index, triggers=[trigger],
+            ))
 
         # Round 2+: word_frequency triggers, round-robin across sentences.
         # Selection (and the cap, which counts SUGGESTIONS) is unchanged, but
@@ -1350,6 +1448,99 @@ class SuggestionEngine:
             composed_metrics=composed,
         )
 
+    # ── Enumeration (bullet-list) pass ────────────────────────────────────
+
+    @staticmethod
+    def _parse_enumeration_response(content: str) -> tuple[str | None, list[str], str]:
+        """Parse an enumeration response into (intro, items, uitleg). Collects the
+        repeated ITEM: lines in order; tolerant of stray list markers."""
+        intro: str | None = None
+        items: list[str] = []
+        uitleg = ""
+        for raw in content.splitlines():
+            line = raw.strip()
+            if not line or line.startswith("---"):
+                continue
+            low = line.lower()
+            if low.startswith("inleiding:"):
+                intro = line.split(":", 1)[1].strip().strip('"“”')
+            elif low.startswith("item:"):
+                it = line.split(":", 1)[1].strip().lstrip("-•*").strip().strip('"“”')
+                if it:
+                    items.append(it)
+            elif low.startswith("uitleg:"):
+                uitleg = line.split(":", 1)[1].strip()
+        return intro, items, uitleg
+
+    @classmethod
+    def _enumeration_adds_content(
+        cls, original: str, intro: str, items: list[str]
+    ) -> str | None:
+        """Return a content word the list introduced that is not in the original
+        sentence (mirrors the connective containment guard), else None. The list
+        must only re-present existing content."""
+        orig = {t.lower() for t in cls._word_tokens(original)}
+        for text in [intro, *items]:
+            for raw in cls._word_tokens(text):
+                low = raw.lower()
+                if low in orig:
+                    continue
+                if len(raw) < 4 or not raw.isalpha():
+                    continue
+                if raw[0].isupper():
+                    continue
+                if cls._is_recompound(low, orig):
+                    continue
+                return raw
+        return None
+
+    def _generate_enumeration_suggestion(
+        self, trigger: SuggestionTrigger, provider: LLMProvider
+    ) -> Suggestion | None:
+        """Re-present a long enumeration as a bullet list. Fail-open; a containment
+        backstop rejects any invented content."""
+        try:
+            system_prompt, user_prompt = format_prompt(
+                "enumeration", sentence=trigger.sentence_text,
+            )
+            response = provider.complete(user_prompt, system_prompt)
+        except LLMTimeoutError:
+            raise
+        except Exception as e:
+            logger.warning("Enumeration generation failed: %s", e)
+            return None
+
+        intro, items, uitleg = self._parse_enumeration_response(response.content)
+        min_items = int(self._thresholds["enumeration_min_items"])
+        if not intro or len(items) < min_items:
+            return None
+        if intro and not intro.rstrip().endswith(":"):
+            intro = intro.rstrip() + ":"
+
+        original = trigger.sentence_text or ""
+        invented = self._enumeration_adds_content(original, intro, items)
+        if invented:
+            logger.info(
+                "Enumeration discarded: introduced content (%r), sentence %d",
+                invented, trigger.sentence_index,
+            )
+            return None
+
+        plain = intro + "\n" + "\n".join(f"- {it}" for it in items)
+        flattened = intro + " " + " ".join(items)
+        return Suggestion(
+            id=str(uuid.uuid4())[:8],
+            type=SuggestionType.ENUMERATION,
+            sentence_index=trigger.sentence_index,
+            original_text=original,
+            suggested_text=plain,
+            explanation=uitleg,
+            model=response.model,
+            list_intro=intro,
+            list_items=items,
+            new_sentence_metrics=self._analyze_suggested_text(flattened),
+        )
+
     @staticmethod
     def _format_issue(trigger: SuggestionTrigger) -> str | None:
         """Render one sentence-level trigger as a Dutch bullet for the rewrite prompt."""
@@ -1388,6 +1579,8 @@ class SuggestionEngine:
         """Dispatch a planned job to the right generation path."""
         if job.kind == "consolidated":
             return self._generate_consolidated_suggestion(job, provider, document_level)
+        if job.triggers and job.triggers[0].type == SuggestionType.ENUMERATION:
+            return self._generate_enumeration_suggestion(job.triggers[0], provider)
         return self._generate_suggestion_for_trigger(job.triggers[0], provider, document_level)
 
     def _generate_consolidated_suggestion(

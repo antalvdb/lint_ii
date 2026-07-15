@@ -522,7 +522,11 @@ export class EditorController {
      * Get all suggestions
      */
     get suggestions() {
-        return this._data.suggestions?.suggestions || []
+        // Phase 1: enumeration→bullet-list suggestions are backend-only (the
+        // block-level accept path isn't built yet). Ignore them everywhere in the
+        // editor so enabling the flag can't disturb the per-sentence rendering;
+        // the raw analysis JSON still carries them for inspection.
+        return (this._data.suggestions?.suggestions || []).filter(s => s.type !== "enumeration")
     }
 
     /**

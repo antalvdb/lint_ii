@@ -231,6 +231,25 @@ Als geen enkele overgang een verbindingswoord nodig heeft, antwoord dan met:
 GEEN""",
     ),
 
+    "enumeration": PromptTemplate(
+        system=SYSTEM_PROMPT_BASE + """
+
+Je richt je op lange opsommingen binnen één zin. Zulke opsommingen worden vaak veel leesbaarder als puntsgewijze lijst, zodat de lezer de losse onderdelen makkelijk kan overzien.""",
+        user="""Herschrijf de opsomming in de volgende zin als een puntsgewijze lijst. Verzin geen nieuwe onderdelen, laat niets weg en verander de betekenis niet — je herschikt alleen de bestaande inhoud tot een aanloopzin en losse punten.
+
+Zin: "{sentence}"
+
+Geef je antwoord in dit formaat:
+INLEIDING: [de aanloopzin, eindigend op een dubbele punt]
+ITEM: [eerste onderdeel van de opsomming]
+ITEM: [tweede onderdeel]
+ITEM: [enzovoort — één ITEM-regel per onderdeel]
+UITLEG: [hoogstens tien woorden]
+
+Bevat de zin geen echte opsomming die baat heeft bij een lijst, antwoord dan met:
+GEEN""",
+    ),
+
     "spelling": PromptTemplate(
         system="""Je bent een expert Nederlandse taalkundige en corrector. Je taak is om suggesties te geven om Nederlandse tekst leesbaarder te maken, door spelfouten en contextuele zinsbouw- en grammaticafouten te identificeren.
 
