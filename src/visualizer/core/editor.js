@@ -30,6 +30,9 @@ export class EditorController {
         this._clusters = new Map()            // clusterId -> { suggestionIds, sentenceIdx, wordIndices }
         this._suggestionToCluster = new Map() // suggestionId -> clusterId
         this._wordToCluster = new Map()       // "sentIdx:wordIdx" -> clusterId
+        // accepterId -> Set(ids it auto-ignored) for connective conflicts, so
+        // undoing a merge-vs-rewrite choice reopens the alternative.
+        this._autoIgnored = new Map()
 
         // Initialize all suggestions as pending
         if (data.suggestions?.suggestions) {
@@ -591,6 +594,9 @@ export class EditorController {
      */
     accept(suggestionId) {
         if (!this._suggestionStates.has(suggestionId)) return
+        // Snapshot to detect which pending suggestions this accept auto-ignores,
+        // so a later undo can reopen a merge-vs-rewrite alternative.
+        const before = new Map(this._suggestionStates)
         this._suggestionStates.set(suggestionId, 'accepted')
 
         const cluster = this.getClusterForSuggestion(suggestionId)
@@ -622,6 +628,19 @@ export class EditorController {
             }
             this._applyConnectiveExclusivity(accepted)
         }
+
+        // Record connective-related auto-ignores (a merge and a rewrite of one
+        // of its sentences are alternatives). Scoped to connective conflicts so
+        // ordinary cluster/scoped exclusivity behaviour is unchanged.
+        const auto = new Set()
+        for (const [id, st] of this._suggestionStates) {
+            if (id === suggestionId) continue
+            if (before.get(id) === 'pending' && st === 'ignored') {
+                const other = this.getSuggestion(id)
+                if (accepted?.type === 'connective' || other?.type === 'connective') auto.add(id)
+            }
+        }
+        if (auto.size) this._autoIgnored.set(suggestionId, auto)
 
         this._dispatchChange(suggestionId, 'accepted')
     }
@@ -674,9 +693,22 @@ export class EditorController {
      * Reset a suggestion to pending
      */
     reset(suggestionId) {
-        if (this._suggestionStates.has(suggestionId)) {
-            this._suggestionStates.set(suggestionId, 'pending')
-            this._dispatchChange(suggestionId, 'pending')
+        if (!this._suggestionStates.has(suggestionId)) return
+        this._suggestionStates.set(suggestionId, 'pending')
+        this._dispatchChange(suggestionId, 'pending')
+
+        // Reopen alternatives this suggestion had auto-ignored (merge vs. rewrite),
+        // so undoing the choice restores the other option. Only revive ones still
+        // ignored — a user may have re-decided one in the meantime.
+        const revived = this._autoIgnored.get(suggestionId)
+        if (revived) {
+            this._autoIgnored.delete(suggestionId)
+            for (const otherId of revived) {
+                if (this._suggestionStates.get(otherId) === 'ignored') {
+                    this._suggestionStates.set(otherId, 'pending')
+                    this._dispatchChange(otherId, 'pending')
+                }
+            }
         }
     }
 

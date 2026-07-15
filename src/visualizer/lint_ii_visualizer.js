@@ -2,7 +2,7 @@ import { css } from './core/stylesheet.js?v=22'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
-import { EditorController } from './core/editor.js?v=16'
+import { EditorController } from './core/editor.js?v=17'
 import { SuggestionPopupController } from './core/suggestion-popup.js?v=7'
 import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './core/word-diff.js?v=2'
 
@@ -467,6 +467,12 @@ export class LintIIVisualizer extends HTMLElement {
             this.updateDocumentScore()
             const suggestion = this._editorController.getSuggestion(suggestionId)
             if (suggestion) this.updateSentenceScore(suggestion.sentence_index)
+            // Reconcile connective chips/merged views with current state: an
+            // accept elsewhere may have auto-ignored (or an undo revived) a
+            // connective whose own change wasn't dispatched to this sentence.
+            try { this._refreshConnectiveMarkers() } catch (err) {
+                console.error('connective refresh failed:', err)
+            }
 
             const after = this._editorController.computeUpdatedScore()
             if (status === 'accepted' && beforeScore != null && after.score != null
@@ -719,6 +725,46 @@ export class LintIIVisualizer extends HTMLElement {
                 .querySelectorAll(`[data-sentence-index="${second}"]`)
                 .forEach(el => el.classList.remove('connective-absorbed'))
             this._replaceSentenceEl(second)
+        }
+    }
+
+    /** Reconcile every connective's on-screen state with the editor state.
+     *  Handles cross-sentence side effects that the single dispatched change
+     *  can't reach: a connective auto-ignored by accepting a competing rewrite
+     *  (drop its chip / undo its merged view) or revived by an undo (restore its
+     *  chip). A connective the user is directly acting on is already handled by
+     *  _updateConnectiveStatus, so those cases are no-ops here. */
+    _refreshConnectiveMarkers() {
+        if (!this._editorController) return
+        const ec = this._editorController
+        for (const c of ec.connectiveSuggestions) {
+            const state = ec.getState(c.id)
+            const m = c.merges_sentences || []
+            const second = m.length >= 2 ? m[m.length - 1] : null
+            if (second == null) continue
+
+            const secondAbsorbed = this.shadowRoot.querySelector(
+                `[data-sentence-index="${second}"].connective-absorbed`)
+
+            if (state === 'accepted') {
+                // Ensure the merged view exists (normally applied on its own
+                // accept; restore if a revive/relayout dropped it).
+                if (!secondAbsorbed) this._updateConnectiveStatus(c, 'accepted')
+                continue
+            }
+
+            // pending / ignored must NOT be in the merged view.
+            if (secondAbsorbed) {
+                this._updateConnectiveStatus(c, state)  // restores both sentences
+                continue
+            }
+            const chip = this.shadowRoot.querySelector(
+                `.connective-marker[data-connective-id="${c.id}"]`)
+            if (state === 'pending' && !chip) {
+                this._replaceSentenceEl(second)          // bring the chip back
+            } else if (state === 'ignored' && chip) {
+                chip.remove()
+            }
         }
     }
 
