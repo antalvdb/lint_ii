@@ -1120,6 +1120,21 @@ class SuggestionEngine:
                 candidates.append(p)
         return candidates
 
+    @staticmethod
+    def _is_recompound(word: str, orig_tokens: set[str]) -> bool:
+        """True if ``word`` is exactly two original tokens concatenated — a
+        separable verb the merge glued back together ("kapot" + "ging" ->
+        "kapotging", "kapot" + "gemaakt" -> "kapotgemaakt"). Merging with a
+        subordinating connective forces verb-final order, which routinely
+        recompounds separable verbs; such a word introduces no new content, so
+        it must not trip the invented-content guard. Both halves must be real
+        original tokens of >=2 chars, keeping this from matching arbitrary
+        substrings of a genuinely new word."""
+        for i in range(2, len(word) - 1):
+            if word[:i] in orig_tokens and word[i:] in orig_tokens:
+                return True
+        return False
+
     @classmethod
     def _connective_adds_content(cls, original: str, suggested: str) -> str | None:
         """Return a content word the rewrite introduced that is neither in the
@@ -1133,6 +1148,8 @@ class SuggestionEngine:
             if len(raw) < 4 or not raw.isalpha():   # allow short function words
                 continue
             if raw[0].isupper():                     # proper noun / sentence start
+                continue
+            if cls._is_recompound(low, orig):        # separable verb re-glued
                 continue
             return raw
         return None

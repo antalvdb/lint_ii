@@ -1,9 +1,9 @@
-import { css } from './core/stylesheet.js?v=20'
+import { css } from './core/stylesheet.js?v=21'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
-import { EditorController } from './core/editor.js?v=15'
-import { SuggestionPopupController } from './core/suggestion-popup.js?v=6'
+import { EditorController } from './core/editor.js?v=16'
+import { SuggestionPopupController } from './core/suggestion-popup.js?v=7'
 import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './core/word-diff.js?v=2'
 
 
@@ -481,19 +481,24 @@ export class LintIIVisualizer extends HTMLElement {
             this._lastDocLevel = after.level
         })
 
-        // Suggestion hover handling (cluster-aware)
+        // Suggestion hover handling (cluster-aware, plus connective markers)
         const contentArea = this.shadowRoot.querySelector('#content-area')
         contentArea.addEventListener('mouseover', (e) => {
+            if (!this._suggestionPopupController) return
+            const connEl = e.target.closest('[data-connective-id]')
+            if (connEl) {
+                this._suggestionPopupController.showConnective(connEl.dataset.connectiveId, connEl)
+                return
+            }
             const wordEl = e.target.closest('[data-cluster-id]')
-            if (wordEl && this._suggestionPopupController) {
-                const clusterId = wordEl.dataset.clusterId
-                this._suggestionPopupController.showCluster(clusterId, wordEl)
+            if (wordEl) {
+                this._suggestionPopupController.showCluster(wordEl.dataset.clusterId, wordEl)
             }
         })
 
         contentArea.addEventListener('mouseout', (e) => {
-            const wordEl = e.target.closest('[data-cluster-id]')
-            if (wordEl && this._suggestionPopupController) {
+            const el = e.target.closest('[data-cluster-id],[data-connective-id]')
+            if (el && this._suggestionPopupController) {
                 this._suggestionPopupController.hide()
             }
         })
@@ -501,16 +506,23 @@ export class LintIIVisualizer extends HTMLElement {
         // Show popup on tap (touch devices) — click also fires on desktop so this
         // complements hover without breaking it.
         contentArea.addEventListener('click', (e) => {
+            if (!this._suggestionPopupController) return
+            const connEl = e.target.closest('[data-connective-id]')
+            if (connEl) {
+                this._suggestionPopupController.showConnective(connEl.dataset.connectiveId, connEl)
+                return
+            }
             const wordEl = e.target.closest('[data-cluster-id]')
-            if (wordEl && this._suggestionPopupController) {
+            if (wordEl) {
                 this._suggestionPopupController.showCluster(wordEl.dataset.clusterId, wordEl)
             }
         })
 
-        // Dismiss popup when tapping anywhere that is not a suggestion word or the popup itself.
+        // Dismiss popup when tapping anywhere that is not a suggestion word/marker or the popup itself.
         this.shadowRoot.addEventListener('click', (e) => {
             if (!this._suggestionPopupController) return
-            if (!e.target.closest('[data-cluster-id]') && !e.target.closest('.suggestion-popup')) {
+            if (!e.target.closest('[data-cluster-id]') && !e.target.closest('[data-connective-id]')
+                && !e.target.closest('.suggestion-popup')) {
                 this._suggestionPopupController._hideNow()
             }
         })
@@ -531,6 +543,11 @@ export class LintIIVisualizer extends HTMLElement {
     updateSuggestionStatus(suggestionId, status) {
         const suggestion = this._editorController.getSuggestion(suggestionId)
         if (!suggestion) return
+
+        if (suggestion.type === 'connective') {
+            this._updateConnectiveStatus(suggestion, status)
+            return
+        }
 
         const cluster = this._editorController.getClusterForSuggestion(suggestionId)
         if (!cluster) return
@@ -676,6 +693,67 @@ export class LintIIVisualizer extends HTMLElement {
         }
     }
 
+    /**
+     * Apply/undo a connective merge in the DOM. On accept, the first sentence
+     * is rebuilt to show the merged text and the second (absorbed) sentence is
+     * hidden. On ignore/reset, both sentences are re-rendered from current
+     * editor state (which drops the marker if ignored, restores it if pending).
+     * Kept separate from the per-sentence diff path, which can't span sentences.
+     */
+    _updateConnectiveStatus(suggestion, status) {
+        const m = suggestion.merges_sentences || []
+        if (m.length < 2) return
+        const first = m[0], second = m[m.length - 1]
+
+        if (status === 'accepted') {
+            this.shadowRoot
+                .querySelectorAll(`[data-sentence-index="${second}"]`)
+                .forEach(el => el.classList.add('connective-absorbed'))
+            this._renderMergedSentence(first, suggestion)
+        } else {
+            this._replaceSentenceEl(first)
+            this.shadowRoot
+                .querySelectorAll(`[data-sentence-index="${second}"][data-split-part]`)
+                .forEach(el => el.remove())
+            this.shadowRoot
+                .querySelectorAll(`[data-sentence-index="${second}"]`)
+                .forEach(el => el.classList.remove('connective-absorbed'))
+            this._replaceSentenceEl(second)
+        }
+    }
+
+    /** Replace a sentence element in place with a fresh render reflecting the
+     *  current editor state (used to restore after an undone merge). */
+    _replaceSentenceEl(idx) {
+        const el = this.shadowRoot.querySelector(
+            `[data-sentence-index="${idx}"]:not([data-split-part])`)
+        if (!el) return
+        const tmp = document.createElement('span')
+        tmp.innerHTML = this.renderSentence(this._data.sentences[idx], idx)
+        const fresh = tmp.firstElementChild
+        if (fresh) el.replaceWith(fresh)
+    }
+
+    /** Rebuild the first sentence's element to display the merged sentence text,
+     *  each word tagged as an accepted change so styling and the score flash
+     *  anchor correctly. The level badge is refined by updateSentenceScore. */
+    _renderMergedSentence(idx, suggestion) {
+        const el = this.shadowRoot.querySelector(
+            `[data-sentence-index="${idx}"]:not([data-split-part])`)
+        if (!el) return
+        const tokens = suggestion.suggested_text.trim().split(/\s+/).filter(Boolean)
+        const wordsHtml = tokens.map(t =>
+            `<span class="word suggestion-changed" data-suggestion-id="${suggestion.id}"` +
+            ` data-suggestion-status="accepted">${this._escapeHtml(t)}</span>`
+        ).join(' ')
+        const level = this._data.sentences[idx]?.difficulty_level ?? '?'
+        el.innerHTML =
+            `<span class="sent-start-group"><span class="sent-idx">${idx + 1}</span>` +
+            `<span class="sent-start"></span></span>${wordsHtml}` +
+            `<span class="sent-end-group"><span class="sent-end"></span>` +
+            `<span class="level-badge">${level}</span></span>`
+    }
+
     renderContent() {
         const contentArea = this.shadowRoot.querySelector('#content-area')
 
@@ -753,6 +831,7 @@ export class LintIIVisualizer extends HTMLElement {
                 <span class="sent-idx">${idx + 1}</span>
                 <span class="sent-start"></span>
             </span>
+            ${this._connectiveMarker(idx)}
             ${tokens.map((item, wordIdx) => this.renderWord(item, idx, wordIdx)).join('')}
             <span class="sent-end-group">
                 <span class="sent-end"></span>
@@ -805,6 +884,35 @@ export class LintIIVisualizer extends HTMLElement {
 
     _escapeHtml(s) {
         return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[c]))
+    }
+
+    /**
+     * A pending connective merge is rendered as a small clickable chip at the
+     * start of the SECOND sentence ("↰ want"), where the join would appear.
+     * Only shown while pending; on accept the two sentences are visually merged
+     * (see _updateConnectiveStatus), on ignore the chip is dropped.
+     */
+    _connectiveMarker(sentenceIdx) {
+        if (!this.isEditorMode || !this._editorController) return ''
+        const c = this._editorController.getConnectiveForSecondSentence(sentenceIdx)
+        if (!c || this._editorController.getState(c.id) !== 'pending') return ''
+        const word = this._connectiveWord(c)
+        return `<span class="connective-marker" data-connective-id="${c.id}"` +
+            ` data-suggestion-status="pending"` +
+            ` title="Verbind met de vorige zin met &quot;${this._escapeHtml(word)}&quot;">` +
+            `↰&nbsp;${this._escapeHtml(word)}</span>`
+    }
+
+    /** The connective the merge inserts: the first suggested word that is not in
+     *  the original sentence pair. Falls back to the relation label. */
+    _connectiveWord(suggestion) {
+        const strip = t => t.replace(/[.,;:!?()"'“”‘’]/g, '').toLowerCase()
+        const orig = new Set((suggestion.original_text || '').split(/\s+/).map(strip))
+        for (const tok of (suggestion.suggested_text || '').split(/\s+/)) {
+            const b = strip(tok)
+            if (b && !orig.has(b)) return b
+        }
+        return suggestion.relation || 'verbind'
     }
 
     renderWord(wf, sentenceIdx = null, wordIdx = null) {

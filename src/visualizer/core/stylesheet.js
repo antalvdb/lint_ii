@@ -561,6 +561,34 @@ export const css = `
        via data-suggestion-id on each .word element, using the
        same .word[data-suggestion-status] rules above. */
 
+    /* Connective (coherence) merge marker: a small clickable chip at the start
+       of the second sentence, proposing a verbindingswoord to join the pair. */
+    .connective-marker {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.1em;
+        margin-right: 0.35em;
+        padding: 0.05em 0.45em;
+        border-radius: 999px;
+        font-size: 0.82em;
+        font-style: italic;
+        white-space: nowrap;
+        cursor: pointer;
+        background: var(--color-suggestion-pending);
+        border: 1px solid color-mix(in oklch, var(--color-suggestion-pending) 70%, black);
+        color: color-mix(in oklch, var(--color-suggestion-pending) 30%, black);
+        transition: filter 0.12s ease;
+    }
+    .connective-marker:hover {
+        filter: brightness(0.94);
+    }
+
+    /* A sentence absorbed into the preceding one by an accepted merge is hidden;
+       its text now lives in the merged first sentence. */
+    .connective-absorbed {
+        display: none !important;
+    }
+
     /* Suggestion popup */
     .suggestion-popup {
         display: none;

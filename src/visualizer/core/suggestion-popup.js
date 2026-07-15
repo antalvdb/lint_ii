@@ -79,6 +79,77 @@ export class SuggestionPopupController {
     }
 
     /**
+     * Show the popup for a connective (coherence) suggestion. Connectives are
+     * not clustered — they merge two whole sentences — so they get their own
+     * entry point and a dedicated render that shows the sentence pair and the
+     * merged result directly (no per-sentence LCS relocation).
+     */
+    showConnective(suggestionId, targetElement) {
+        this._cancelHide()
+        const suggestion = this._editor.getSuggestion(suggestionId)
+        if (!suggestion) return
+
+        this._currentClusterId = null
+        this._popup.innerHTML = this._renderConnectiveSuggestion(suggestion)
+        this._popup.classList.add('visible')
+
+        const rect = targetElement.getBoundingClientRect()
+        this._popup.style.top = `${rect.bottom + 8}px`
+        this._popup.style.left = `${rect.left}px`
+
+        const popupRect = this._popup.getBoundingClientRect()
+        if (popupRect.right > window.innerWidth - 16) {
+            this._popup.style.left = `${window.innerWidth - popupRect.width - 16}px`
+        }
+        if (popupRect.bottom > window.innerHeight - 16) {
+            this._popup.style.top = `${Math.max(8, rect.top - popupRect.height - 8)}px`
+        }
+    }
+
+    _renderConnectiveSuggestion(suggestion) {
+        const status = this._editor.getState(suggestion.id)
+        const { statusHTML, buttonsHTML } = this._statusAndButtons(suggestion.id, status)
+        const relation = suggestion.relation
+            ? `<span class="suggestion-category">${this._escapeHtml(this._relationLabel(suggestion.relation))}</span>`
+            : ''
+        const { origHtml, sugHtml } = this._renderDiff(suggestion.original_text, suggestion.suggested_text)
+
+        return `
+            <div class="suggestion-popup-content">
+                <div class="suggestion-header">
+                    <span class="suggestion-type">Verbindingswoord</span>
+                    ${relation}
+                    ${statusHTML}
+                </div>
+
+                <div class="suggestion-comparison">
+                    <div class="original">
+                        <span class="label">Twee zinnen:</span>
+                        <span class="text">${origHtml}</span>
+                    </div>
+                    <div class="suggested">
+                        <span class="label">Samengevoegd:</span>
+                        <span class="text">${sugHtml}</span>
+                    </div>
+                </div>
+
+                ${suggestion.explanation ? `
+                    <div class="suggestion-explanation">
+                        <span class="label">Uitleg:</span>
+                        <span class="text">${this._escapeHtml(this._stripBrackets(suggestion.explanation))}</span>
+                    </div>
+                ` : ''}
+
+                ${this._suggestionNote(suggestion)}
+
+                <div class="suggestion-actions">
+                    ${buttonsHTML}
+                </div>
+            </div>
+        `
+    }
+
+    /**
      * Backwards-compatible: show popup for a single suggestion ID.
      */
     show(suggestionId, targetElement) {
@@ -259,6 +330,12 @@ export class SuggestionPopupController {
                     Let op: een passieve vorm kan een bewuste keuze zijn — beoordeel zelf of herschrijven hier nodig is.
                 </div>`
         }
+        if (suggestion.type === 'connective') {
+            return `
+                <div class="suggestion-note">
+                    Let op: het verband tussen de zinnen is een interpretatie — beoordeel zelf of het klopt voordat je samenvoegt.
+                </div>`
+        }
         return ''
     }
 
@@ -273,8 +350,18 @@ export class SuggestionPopupController {
             'subordinate_clause': 'Bijzinsstructuur',
             'sentence_length': 'Lange zin',
             'sentence_rewrite': 'Zinsverbetering',
+            'connective': 'Verbindingswoord',
         }
         return typeLabels[type] || type
+    }
+
+    _relationLabel(relation) {
+        const labels = {
+            'reden': 'reden', 'oorzaak': 'oorzaak', 'gevolg': 'gevolg',
+            'tegenstelling': 'tegenstelling', 'toelichting': 'toelichting',
+            'opsomming': 'opsomming',
+        }
+        return labels[relation] || relation
     }
 
     _errorCategoryLabel(category) {

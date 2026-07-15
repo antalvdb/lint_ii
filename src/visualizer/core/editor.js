@@ -13,6 +13,7 @@ const SENTENCE_SCOPED_TYPES = new Set([
     'passive',
     'subordinate_clause',
     'sentence_length',
+    'connective',
 ])
 
 /**
@@ -54,7 +55,9 @@ export class EditorController {
      * merged into a single cluster using union-find.
      */
     _buildClusters() {
-        const suggestions = this.suggestions
+        // Connectives are cross-sentence merges; the word-level cluster/diff
+        // path is per-sentence and can't represent them, so exclude them here.
+        const suggestions = this.suggestions.filter(s => s.type !== "connective")
         if (!suggestions.length) return
 
         // Step 1: compute affected word indices via diff for each suggestion
@@ -457,6 +460,11 @@ export class EditorController {
      * when available, otherwise original.
      */
     _getEffectiveMetrics(sentenceIndex) {
+        // Absorbed second half of an accepted merge: its metrics are already
+        // folded into the first sentence's new_sentence_metrics, so it must
+        // contribute nothing of its own (else it double-counts).
+        if (this._absorbedSentences().has(sentenceIndex)) return this._emptyMetrics()
+
         const accepted = this.getSuggestionsForSentence(sentenceIndex)
             .filter(s => this._suggestionStates.get(s.id) === 'accepted')
 
@@ -493,10 +501,41 @@ export class EditorController {
      * Get all suggestions
      */
     get suggestions() {
-        // Phase 1: connective suggestions are backend-only (no accept path yet).
-        // Ignore them everywhere in the editor until phase 2 wires their rendering;
-        // the raw analysis JSON still carries them for inspection.
-        return (this._data.suggestions?.suggestions || []).filter(s => s.type !== "connective")
+        return this._data.suggestions?.suggestions || []
+    }
+
+    /**
+     * Connective (coherence) suggestions merge two adjacent sentences with a
+     * verbindingswoord. They span two sentences/blocks, so they are handled by
+     * a dedicated path — kept OUT of the per-sentence cluster/diff machinery
+     * (see _buildClusters) and reconstructed specially (see _sentenceOutputText
+     * and _getEffectiveMetrics). merges_sentences = [firstIdx, secondIdx].
+     */
+    get connectiveSuggestions() {
+        return this.suggestions.filter(s => s.type === "connective")
+    }
+
+    /**
+     * Second-sentence indices absorbed by an ACCEPTED connective merge. Their
+     * text and metrics are folded into the first sentence, so they must emit no
+     * output and contribute no metrics of their own.
+     */
+    _absorbedSentences() {
+        const set = new Set()
+        for (const s of this.connectiveSuggestions) {
+            if (this._suggestionStates.get(s.id) !== "accepted") continue
+            const m = s.merges_sentences
+            if (Array.isArray(m) && m.length >= 2) set.add(m[m.length - 1])
+        }
+        return set
+    }
+
+    _emptyMetrics() {
+        return {
+            word_freq_sum: 0, word_freq_count: 0,
+            sdl_values: [], cwpc_values: [],
+            n_concrete: 0, n_abstract: 0, n_undefined: 0,
+        }
     }
 
     /**
@@ -523,6 +562,12 @@ export class EditorController {
         for (const [clusterId, cluster] of this._clusters) {
             if (cluster.wordIndices.size === 0) continue
             counts[this.getClusterState(clusterId)]++
+            counts.total++
+        }
+        // Connectives aren't clustered (they're cross-sentence), but each is one
+        // actionable unit the user sees and decides on, so count them here too.
+        for (const s of this.connectiveSuggestions) {
+            counts[this.getState(s.id)]++
             counts.total++
         }
         return counts
@@ -575,9 +620,44 @@ export class EditorController {
                     }
                 }
             }
+            this._applyConnectiveExclusivity(accepted)
         }
 
         this._dispatchChange(suggestionId, 'accepted')
+    }
+
+    /**
+     * A connective merge fuses two sentences, so it conflicts with any other
+     * edit on EITHER sentence (the per-sentence scoped exclusivity above only
+     * covers one sentence_index). Accepting the connective drops pending edits
+     * on both halves; accepting an edit on either half drops a pending
+     * connective that spans it. Only pending suggestions are touched, so a
+     * user's earlier explicit choice is never overridden.
+     */
+    _applyConnectiveExclusivity(accepted) {
+        const dropPendingOnSentence = (idx, exceptId) => {
+            for (const other of this.getSuggestionsForSentence(idx)) {
+                if (other.id === exceptId) continue
+                if (this._suggestionStates.get(other.id) === 'pending') {
+                    this._suggestionStates.set(other.id, 'ignored')
+                }
+            }
+        }
+
+        if (accepted.type === 'connective') {
+            const m = accepted.merges_sentences || []
+            for (const idx of m) dropPendingOnSentence(idx, accepted.id)
+            return
+        }
+
+        // A non-connective edit was accepted: drop any pending connective that
+        // merges the sentence it touches.
+        for (const c of this.connectiveSuggestions) {
+            if (this._suggestionStates.get(c.id) !== 'pending') continue
+            if ((c.merges_sentences || []).includes(accepted.sentence_index)) {
+                this._suggestionStates.set(c.id, 'ignored')
+            }
+        }
     }
 
     /**
@@ -624,6 +704,18 @@ export class EditorController {
      */
     getSuggestionsForSentence(sentenceIndex) {
         return this.suggestions.filter(s => s.sentence_index === sentenceIndex)
+    }
+
+    /**
+     * The connective whose merge would absorb this sentence as its SECOND half
+     * (the join is rendered at the start of that sentence), or null. Used by the
+     * renderer to place the merge marker.
+     */
+    getConnectiveForSecondSentence(sentenceIndex) {
+        return this.connectiveSuggestions.find(s => {
+            const m = s.merges_sentences
+            return Array.isArray(m) && m.length >= 2 && m[m.length - 1] === sentenceIndex
+        }) || null
     }
 
     /**
@@ -790,7 +882,7 @@ export class EditorController {
             for (let i = 0; i < this._data.sentences.length; i++) {
                 out.push(this._sentenceOutputText(i))
             }
-            return out.join(" ")
+            return out.filter(Boolean).join(" ")
         }
 
         // Reconstruct the document preserving structure (H3): headings and
@@ -799,7 +891,11 @@ export class EditorController {
         const lines = []
         let paragraph = []
         const flush = () => {
-            if (paragraph.length) { lines.push(paragraph.join(" ")); paragraph = [] }
+            // Drop empties: an absorbed second sentence emits "" and must not
+            // leave a double space in the joined paragraph.
+            const kept = paragraph.filter(Boolean)
+            if (kept.length) lines.push(kept.join(" "))
+            paragraph = []
         }
         for (const block of blocks) {
             if (block.type === "sentence") {
@@ -808,7 +904,7 @@ export class EditorController {
                 flush()
                 const marker = block.ordered ? `${block.number}. ` : "- "
                 const body = block.sentence_indices
-                    .map(i => this._sentenceOutputText(i)).join(" ")
+                    .map(i => this._sentenceOutputText(i)).filter(Boolean).join(" ")
                 lines.push(marker + body)
             } else if (block.type === "quote") {
                 flush()
@@ -830,6 +926,10 @@ export class EditorController {
      * rewrite if any, otherwise the reconstructed original.
      */
     _sentenceOutputText(idx) {
+        // Absorbed into the preceding sentence by an accepted merge: emit
+        // nothing (the merged text is carried by the first sentence).
+        if (this._absorbedSentences().has(idx)) return ""
+
         const sentence = this._data.sentences[idx]
         const accepted = this.getSuggestionsForSentence(idx).filter(
             s => this._suggestionStates.get(s.id) === "accepted"
