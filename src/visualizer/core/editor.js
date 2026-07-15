@@ -477,11 +477,19 @@ export class EditorController {
             .filter(s => this._suggestionStates.get(s.id) === 'accepted')
 
         if (accepted.length > 0) {
-            // A merge dominates: its metrics describe the whole merged sentence
-            // (approximate when composed with a first-sentence rewrite — the
-            // rewrite's own metric change is not separately reflected).
+            // A merge dominates: its metrics describe the whole merged sentence.
             const conn = accepted.find(s => s.type === 'connective' && s.new_sentence_metrics)
-            if (conn) return conn.new_sentence_metrics
+            if (conn) {
+                // If a first-sentence rewrite is also accepted and the backend
+                // precomputed exact metrics for that composition, use them;
+                // otherwise fall back to the (original-based) merge metrics.
+                const r0 = accepted.find(s =>
+                    s.type !== 'connective' && SENTENCE_SCOPED_TYPES.has(s.type))
+                if (r0 && conn.composed_metrics && conn.composed_metrics[r0.id]) {
+                    return conn.composed_metrics[r0.id]
+                }
+                return conn.new_sentence_metrics
+            }
             // Otherwise use the first accepted suggestion that has metrics.
             const withMetrics = accepted.find(s => s.new_sentence_metrics)
             if (withMetrics) return withMetrics.new_sentence_metrics

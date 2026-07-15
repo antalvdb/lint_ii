@@ -113,6 +113,10 @@ class Suggestion:
     relation: str | None = None
     # Precomputed metrics for score recomputation
     new_sentence_metrics: dict[str, Any] | None = None
+    # For a connective: exact metrics of the merged sentence when composed with an
+    # accepted full rewrite of the first sentence, keyed by that rewrite's id. Lets
+    # the UI score a composed merge precisely instead of reusing new_sentence_metrics.
+    composed_metrics: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         """Serialize suggestion to dictionary."""
@@ -140,6 +144,8 @@ class Suggestion:
             result["relation"] = self.relation
         if self.new_sentence_metrics is not None:
             result["new_sentence_metrics"] = self.new_sentence_metrics
+        if self.composed_metrics:
+            result["composed_metrics"] = self.composed_metrics
         return result
 
 
@@ -858,7 +864,9 @@ class SuggestionEngine:
         # Step 4: cross-sentence coherence pass (gated behind LINT_II_CONNECTIVES,
         # fail-open). Adds connective suggestions that span sentence pairs.
         t_conn = time.perf_counter()
-        connective_suggestions = self.generate_connective_suggestions(analysis, provider)
+        connective_suggestions = self.generate_connective_suggestions(
+            analysis, provider, existing=suggestions,
+        )
         if connective_suggestions:
             logger.info(
                 "TIMING connective_pass=%.2fs (%d suggestions)",
@@ -1158,11 +1166,16 @@ class SuggestionEngine:
         self,
         analysis: "ReadabilityAnalysis",
         provider: LLMProvider,
+        existing: list[Suggestion] | None = None,
     ) -> list[Suggestion]:
         """Cross-sentence coherence pass: per paragraph, one LLM call proposes
         connectives for the candidate boundaries. Gated behind LINT_II_CONNECTIVES
         (default off) and fail-open — any error yields no connective suggestions
-        rather than breaking the main pass."""
+        rather than breaking the main pass.
+
+        ``existing`` are the suggestions already generated this run; a connective
+        uses them to precompute exact metrics for composing with a first-sentence
+        rewrite (see _build_connective_suggestion)."""
         if os.environ.get("LINT_II_CONNECTIVES", "0").lower() not in ("1", "true", "yes", "on"):
             return []
 
@@ -1195,7 +1208,8 @@ class SuggestionEngine:
                 )
                 for block in blocks:
                     sug = self._build_connective_suggestion(
-                        analysis, para, set(candidates), block, response.model
+                        analysis, para, set(candidates), block, response.model,
+                        existing or [],
                     )
                     if sug:
                         suggestions.append(sug)
@@ -1207,6 +1221,48 @@ class SuggestionEngine:
 
         return suggestions
 
+    # Full-sentence rewrite types a connective can compose with (mirrors the
+    # frontend SENTENCE_SCOPED_TYPES). A rewrite of the first sentence carries
+    # the connective, so its composed merge can be scored exactly.
+    _FULL_REWRITE_TYPES = frozenset({
+        SuggestionType.SENTENCE_REWRITE,
+        SuggestionType.MAX_SDL,
+        SuggestionType.CONTENT_WORDS_PER_CLAUSE,
+        SuggestionType.ABSTRACT_NOUNS,
+        SuggestionType.PASSIVE,
+        SuggestionType.SUBORDINATE_CLAUSE,
+        SuggestionType.SENTENCE_LENGTH,
+    })
+
+    @classmethod
+    def _connective_inserted_word(cls, original_pair: str, suggested: str) -> str | None:
+        """The word the connective inserts: the first word of the merge not in the
+        original pair (mirrors the frontend _connectiveWord)."""
+        strip = lambda t: cls._TOKEN_TRIM_RE.sub("", t).lower()
+        orig = {strip(t) for t in original_pair.split()}
+        for tok in suggested.split():
+            b = strip(tok)
+            if b and b not in orig:
+                return b
+        return None
+
+    @classmethod
+    def _compose_merge_text(
+        cls, original_pair: str, suggested: str, rewrite_text: str
+    ) -> str | None:
+        """Graft a first-sentence rewrite onto the connective: rewritten first
+        clause (minus terminal punctuation) + the connective tail. Mirrors the
+        frontend _composedMergeText. Returns None when the join can't be located."""
+        cw = cls._connective_inserted_word(original_pair, suggested)
+        if not cw:
+            return None
+        sep = suggested.lower().find(", " + cw + " ")
+        if sep < 0:
+            return None
+        tail = suggested[sep:]
+        first_clause = re.sub(r"[.!?]+$", "", rewrite_text.strip())
+        return first_clause + tail
+
     def _build_connective_suggestion(
         self,
         analysis: "ReadabilityAnalysis",
@@ -1214,6 +1270,7 @@ class SuggestionEngine:
         candidate_positions: set[int],
         block: dict[str, str],
         model: str | None,
+        existing: list[Suggestion],
     ) -> Suggestion | None:
         """Validate one parsed connective block and build a Suggestion, or None."""
         m = re.search(r"\d+", block.get("NA_ZIN", ""))
@@ -1237,6 +1294,20 @@ class SuggestionEngine:
         if self._dehet_disagreement(suggested):
             return None
 
+        # Precompute exact metrics for composing with each full rewrite of the
+        # FIRST sentence, so the UI scores that combination precisely rather than
+        # reusing the (original-based) merge metrics.
+        composed: dict[str, Any] = {}
+        for s in existing:
+            if s.sentence_index != n or s.type not in self._FULL_REWRITE_TYPES:
+                continue
+            composed_text = self._compose_merge_text(original_pair, suggested, s.suggested_text)
+            if not composed_text:
+                continue
+            metrics = self._analyze_suggested_text(composed_text)
+            if metrics is not None:
+                composed[s.id] = metrics
+
         return Suggestion(
             id=str(uuid.uuid4())[:8],
             type=SuggestionType.CONNECTIVE,
@@ -1248,6 +1319,7 @@ class SuggestionEngine:
             merges_sentences=[n, n1],
             relation=(block.get("RELATIE") or None),
             new_sentence_metrics=self._analyze_suggested_text(suggested),
+            composed_metrics=composed,
         )
 
     @staticmethod
