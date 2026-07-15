@@ -156,6 +156,79 @@ export class SuggestionPopupController {
     }
 
     /**
+     * Show the popup for an enumeration (bullet-list) suggestion. Like a
+     * connective it is block-level, not clustered, so it gets its own entry
+     * point and a render that previews the lead-in + bullet items.
+     */
+    showEnumeration(suggestionId, targetElement) {
+        this._cancelHide()
+        const suggestion = this._editor.getSuggestion(suggestionId)
+        if (!suggestion) return
+
+        this._currentClusterId = null
+        this._popup.innerHTML = this._renderEnumerationSuggestion(suggestion)
+        this._popup.classList.add('visible')
+
+        const rect = targetElement.getBoundingClientRect()
+        this._popup.style.top = `${rect.bottom + 8}px`
+        this._popup.style.left = `${rect.left}px`
+
+        const popupRect = this._popup.getBoundingClientRect()
+        if (popupRect.right > window.innerWidth - 16) {
+            this._popup.style.left = `${window.innerWidth - popupRect.width - 16}px`
+        }
+        if (popupRect.bottom > window.innerHeight - 16) {
+            this._popup.style.top = `${Math.max(8, rect.top - popupRect.height - 8)}px`
+        }
+    }
+
+    _renderEnumerationSuggestion(suggestion) {
+        const status = this._editor.getState(suggestion.id)
+        const { statusHTML, buttonsHTML } = this._statusAndButtons(suggestion.id, status)
+        const intro = this._escapeHtml(suggestion.list_intro || '')
+        const items = (suggestion.list_items || [])
+            .map(it => `<li>${this._escapeHtml(it)}</li>`).join('')
+
+        return `
+            <div class="suggestion-popup-content">
+                <div class="suggestion-header">
+                    <span class="suggestion-type">Opsomming als lijst</span>
+                    ${statusHTML}
+                </div>
+
+                <div class="suggestion-comparison">
+                    <div class="original">
+                        <span class="label">Origineel:</span>
+                        <span class="text">${this._escapeHtml(suggestion.original_text)}</span>
+                    </div>
+                    <div class="suggested">
+                        <span class="label">Als lijst:</span>
+                        <span class="text">
+                            <span class="enum-preview-intro">${intro}</span>
+                            <ul class="enum-preview">${items}</ul>
+                        </span>
+                    </div>
+                </div>
+
+                ${suggestion.explanation ? `
+                    <div class="suggestion-explanation">
+                        <span class="label">Uitleg:</span>
+                        <span class="text">${this._escapeHtml(this._stripBrackets(suggestion.explanation))}</span>
+                    </div>
+                ` : ''}
+
+                <div class="suggestion-note">
+                    Let op: een opsomming als lijst verandert de zinslengte, dus de LiNT-score kan iets stijgen of dalen; de lezer overziet de losse punten wel makkelijker.
+                </div>
+
+                <div class="suggestion-actions">
+                    ${buttonsHTML}
+                </div>
+            </div>
+        `
+    }
+
+    /**
      * Backwards-compatible: show popup for a single suggestion ID.
      */
     show(suggestionId, targetElement) {
@@ -366,6 +439,7 @@ export class SuggestionPopupController {
             'sentence_length': 'Lange zin',
             'sentence_rewrite': 'Zinsverbetering',
             'connective': 'Verbindingswoord',
+            'enumeration': 'Opsomming als lijst',
         }
         return typeLabels[type] || type
     }

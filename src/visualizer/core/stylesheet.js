@@ -595,6 +595,53 @@ export const css = `
         display: none !important;
     }
 
+    /* Enumeration → bullet-list. Pending chip mirrors the connective marker. */
+    .enum-marker {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.1em;
+        margin-right: 0.35em;
+        padding: 0.05em 0.45em;
+        border-radius: 999px;
+        font-size: 0.82em;
+        font-style: italic;
+        white-space: nowrap;
+        cursor: pointer;
+        background: var(--color-suggestion-pending);
+        border: 1px solid color-mix(in oklch, var(--color-suggestion-pending) 70%, black);
+        color: color-mix(in oklch, var(--color-suggestion-pending) 30%, black);
+        transition: filter 0.12s ease;
+    }
+    .enum-marker:hover { filter: brightness(0.94); }
+
+    /* An accepted enumeration: a lead-in line + an indented bullet list. */
+    .enum-accepted {
+        display: block;
+        margin: 0.35em 0;
+        cursor: pointer;
+    }
+    .enum-accepted .enum-intro {
+        display: inline-block;
+        background: var(--color-suggestion-accepted);
+        border-bottom: 2px solid hsl(120, 60%, 40%);
+        padding: 0 0.15em;
+    }
+    .enum-accepted .enum-list {
+        margin: 0.25em 0 0;
+        padding-left: 1.5em;
+        list-style: disc;
+    }
+    .enum-accepted .enum-item { margin: 0.1em 0; }
+
+    /* Bullet-list preview inside the popup. */
+    .enum-preview-intro { display: block; font-weight: 600; }
+    .enum-preview {
+        margin: 0.2em 0 0;
+        padding-left: 1.3em;
+        list-style: disc;
+    }
+    .enum-preview li { margin: 0.1em 0; }
+
     /* Suggestion popup */
     .suggestion-popup {
         display: none;

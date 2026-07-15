@@ -1,9 +1,9 @@
-import { css } from './core/stylesheet.js?v=22'
+import { css } from './core/stylesheet.js?v=23'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
-import { EditorController } from './core/editor.js?v=21'
-import { SuggestionPopupController } from './core/suggestion-popup.js?v=10'
+import { EditorController } from './core/editor.js?v=22'
+import { SuggestionPopupController } from './core/suggestion-popup.js?v=11'
 import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './core/word-diff.js?v=2'
 
 
@@ -492,7 +492,8 @@ export class LintIIVisualizer extends HTMLElement {
             // The popup explains the trade-off. An improving (green) flash still
             // shows, and ordinary rewrites are unaffected.
             const raisesByDesign = suggestion
-                && (suggestion.type === 'connective' || this._isCompoundSplit(suggestion))
+                && (suggestion.type === 'connective' || suggestion.type === 'enumeration'
+                    || this._isCompoundSplit(suggestion))
             const suppressFlash = raisesByDesign && after.score != null
                 && beforeScore != null && (after.score - beforeScore) > 0
             if (status === 'accepted' && !suppressFlash
@@ -510,21 +511,31 @@ export class LintIIVisualizer extends HTMLElement {
 
         // Suggestion hover handling (cluster-aware, plus connective markers)
         const contentArea = this.shadowRoot.querySelector('#content-area')
-        contentArea.addEventListener('mouseover', (e) => {
-            if (!this._suggestionPopupController) return
-            const connEl = e.target.closest('[data-connective-id]')
+        const showFor = (target) => {
+            const connEl = target.closest('[data-connective-id]')
             if (connEl) {
                 this._suggestionPopupController.showConnective(connEl.dataset.connectiveId, connEl)
-                return
+                return true
             }
-            const wordEl = e.target.closest('[data-cluster-id]')
+            const enumEl = target.closest('[data-enum-id]')
+            if (enumEl) {
+                this._suggestionPopupController.showEnumeration(enumEl.dataset.enumId, enumEl)
+                return true
+            }
+            const wordEl = target.closest('[data-cluster-id]')
             if (wordEl) {
                 this._suggestionPopupController.showCluster(wordEl.dataset.clusterId, wordEl)
+                return true
             }
+            return false
+        }
+
+        contentArea.addEventListener('mouseover', (e) => {
+            if (this._suggestionPopupController) showFor(e.target)
         })
 
         contentArea.addEventListener('mouseout', (e) => {
-            const el = e.target.closest('[data-cluster-id],[data-connective-id]')
+            const el = e.target.closest('[data-cluster-id],[data-connective-id],[data-enum-id]')
             if (el && this._suggestionPopupController) {
                 this._suggestionPopupController.hide()
             }
@@ -533,23 +544,14 @@ export class LintIIVisualizer extends HTMLElement {
         // Show popup on tap (touch devices) — click also fires on desktop so this
         // complements hover without breaking it.
         contentArea.addEventListener('click', (e) => {
-            if (!this._suggestionPopupController) return
-            const connEl = e.target.closest('[data-connective-id]')
-            if (connEl) {
-                this._suggestionPopupController.showConnective(connEl.dataset.connectiveId, connEl)
-                return
-            }
-            const wordEl = e.target.closest('[data-cluster-id]')
-            if (wordEl) {
-                this._suggestionPopupController.showCluster(wordEl.dataset.clusterId, wordEl)
-            }
+            if (this._suggestionPopupController) showFor(e.target)
         })
 
         // Dismiss popup when tapping anywhere that is not a suggestion word/marker or the popup itself.
         this.shadowRoot.addEventListener('click', (e) => {
             if (!this._suggestionPopupController) return
             if (!e.target.closest('[data-cluster-id]') && !e.target.closest('[data-connective-id]')
-                && !e.target.closest('.suggestion-popup')) {
+                && !e.target.closest('[data-enum-id]') && !e.target.closest('.suggestion-popup')) {
                 this._suggestionPopupController._hideNow()
             }
         })
@@ -573,6 +575,11 @@ export class LintIIVisualizer extends HTMLElement {
 
         if (suggestion.type === 'connective') {
             this._updateConnectiveStatus(suggestion, status)
+            return
+        }
+
+        if (suggestion.type === 'enumeration') {
+            this._updateEnumerationStatus(suggestion, status)
             return
         }
 
@@ -789,6 +796,40 @@ export class LintIIVisualizer extends HTMLElement {
         }
     }
 
+    /** Apply/undo an enumeration in the DOM. On accept, the sentence element is
+     *  replaced by a lead-in line + a bulleted list (all clickable to undo). On
+     *  ignore/reset, the original sentence is restored (dropping the chip if
+     *  ignored, keeping it if pending). getEditedText/export use _effectiveBlocks
+     *  independently, so this only handles the on-screen view. */
+    _updateEnumerationStatus(suggestion, status) {
+        if (status === 'accepted') {
+            this._renderEnumerationBlock(suggestion.sentence_index, suggestion)
+        } else {
+            this._replaceSentenceEl(suggestion.sentence_index)
+        }
+    }
+
+    /** Replace the sentence element with the accepted enumeration: a lead-in line
+     *  and a <ul> of items. Every part carries data-enum-id so any click reopens
+     *  the popup (and its "Ongedaan maken"). */
+    _renderEnumerationBlock(idx, suggestion) {
+        const el = this.shadowRoot.querySelector(
+            `[data-sentence-index="${idx}"]:not([data-split-part])`)
+        if (!el) return
+        const eid = suggestion.id
+        const intro = this._escapeHtml(suggestion.list_intro || '')
+        const items = (suggestion.list_items || []).map(it =>
+            `<li class="enum-item" data-enum-id="${eid}">${this._escapeHtml(it)}</li>`).join('')
+        const tmp = document.createElement('div')
+        tmp.innerHTML =
+            `<div class="enum-accepted" data-sentence-index="${idx}" data-suggestion-id="${eid}">` +
+            `<div class="enum-intro suggestion-changed" data-enum-id="${eid}"` +
+            ` data-suggestion-id="${eid}" data-suggestion-status="accepted">${intro}</div>` +
+            `<ul class="enum-list">${items}</ul></div>`
+        const fresh = tmp.firstElementChild
+        if (fresh) el.replaceWith(fresh)
+    }
+
     /** Replace a sentence element in place with a fresh render reflecting the
      *  current editor state (used to restore after an undone merge). */
     _replaceSentenceEl(idx) {
@@ -911,6 +952,7 @@ export class LintIIVisualizer extends HTMLElement {
                 <span class="sent-start"></span>
             </span>
             ${this._connectiveMarker(idx)}
+            ${this._enumerationMarker(idx)}
             ${tokens.map((item, wordIdx) => this.renderWord(item, idx, wordIdx)).join('')}
             <span class="sent-end-group">
                 <span class="sent-end"></span>
@@ -980,6 +1022,17 @@ export class LintIIVisualizer extends HTMLElement {
             ` data-suggestion-status="pending"` +
             ` title="Verbind met de vorige zin met &quot;${this._escapeHtml(word)}&quot;">` +
             `↰&nbsp;${this._escapeHtml(word)}</span>`
+    }
+
+    /** A pending enumeration renders a clickable chip ("☰ lijst") at the start of
+     *  the sentence; on accept the sentence becomes a lead-in + bullet list. */
+    _enumerationMarker(sentenceIdx) {
+        if (!this.isEditorMode || !this._editorController) return ''
+        const e = this._editorController.getEnumerationForSentence(sentenceIdx)
+        if (!e || this._editorController.getState(e.id) !== 'pending') return ''
+        return `<span class="enum-marker" data-enum-id="${e.id}"` +
+            ` data-suggestion-status="pending" title="Toon als puntsgewijze lijst">` +
+            `☰&nbsp;lijst</span>`
     }
 
     /** A word-frequency suggestion that splits a long compound into a word group

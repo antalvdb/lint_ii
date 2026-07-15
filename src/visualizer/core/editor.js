@@ -13,6 +13,22 @@ const SENTENCE_SCOPED_TYPES = new Set([
     'passive',
     'subordinate_clause',
     'sentence_length',
+    'enumeration',
+])
+
+// Prose rewrites of a whole sentence that a connective merge can COMPOSE with
+// (the rewritten first clause carries the connective). This is SENTENCE_SCOPED_TYPES
+// minus 'enumeration' — a bulleted list is structural and can't be grafted into a
+// merged prose sentence, so a connective and an enumeration on the same sentence
+// stay mutually exclusive. See _composedMergeText / _applyConnectiveExclusivity.
+const COMPOSABLE_REWRITE_TYPES = new Set([
+    'sentence_rewrite',
+    'max_sdl',
+    'content_words_per_clause',
+    'abstract_nouns',
+    'passive',
+    'subordinate_clause',
+    'sentence_length',
 ])
 
 // A connective merge is NOT in SENTENCE_SCOPED_TYPES: it does not rewrite a
@@ -63,9 +79,11 @@ export class EditorController {
      * merged into a single cluster using union-find.
      */
     _buildClusters() {
-        // Connectives are cross-sentence merges; the word-level cluster/diff
-        // path is per-sentence and can't represent them, so exclude them here.
-        const suggestions = this.suggestions.filter(s => s.type !== "connective")
+        // Connectives (cross-sentence merges) and enumerations (block-level lists)
+        // are not word-level edits, so they get dedicated paths and are excluded
+        // from the per-word cluster/diff machinery here.
+        const suggestions = this.suggestions.filter(
+            s => s.type !== "connective" && s.type !== "enumeration")
         if (!suggestions.length) return
 
         // Step 1: compute affected word indices via diff for each suggestion
@@ -483,8 +501,7 @@ export class EditorController {
                 // If a first-sentence rewrite is also accepted and the backend
                 // precomputed exact metrics for that composition, use them;
                 // otherwise fall back to the (original-based) merge metrics.
-                const r0 = accepted.find(s =>
-                    s.type !== 'connective' && SENTENCE_SCOPED_TYPES.has(s.type))
+                const r0 = accepted.find(s => COMPOSABLE_REWRITE_TYPES.has(s.type))
                 if (r0 && conn.composed_metrics && conn.composed_metrics[r0.id]) {
                     return conn.composed_metrics[r0.id]
                 }
@@ -522,11 +539,25 @@ export class EditorController {
      * Get all suggestions
      */
     get suggestions() {
-        // Phase 1: enumeration→bullet-list suggestions are backend-only (the
-        // block-level accept path isn't built yet). Ignore them everywhere in the
-        // editor so enabling the flag can't disturb the per-sentence rendering;
-        // the raw analysis JSON still carries them for inspection.
-        return (this._data.suggestions?.suggestions || []).filter(s => s.type !== "enumeration")
+        return this._data.suggestions?.suggestions || []
+    }
+
+    /** Enumeration→bullet-list suggestions. Like connectives they use a dedicated
+     *  path (block-level, not per-word), kept out of clustering. */
+    get enumerationSuggestions() {
+        return this.suggestions.filter(s => s.type === "enumeration")
+    }
+
+    /** The accepted enumeration for a sentence, or null. */
+    _acceptedEnumerationFor(sentenceIndex) {
+        return this.enumerationSuggestions.find(s =>
+            s.sentence_index === sentenceIndex
+            && this._suggestionStates.get(s.id) === "accepted") || null
+    }
+
+    /** The enumeration attached to a sentence (any state), or null. */
+    getEnumerationForSentence(sentenceIndex) {
+        return this.enumerationSuggestions.find(s => s.sentence_index === sentenceIndex) || null
     }
 
     /**
@@ -589,9 +620,13 @@ export class EditorController {
             counts[this.getClusterState(clusterId)]++
             counts.total++
         }
-        // Connectives aren't clustered (they're cross-sentence), but each is one
+        // Connectives and enumerations aren't clustered, but each is one
         // actionable unit the user sees and decides on, so count them here too.
         for (const s of this.connectiveSuggestions) {
+            counts[this.getState(s.id)]++
+            counts.total++
+        }
+        for (const s of this.enumerationSuggestions) {
             counts[this.getState(s.id)]++
             counts.total++
         }
@@ -694,7 +729,7 @@ export class EditorController {
             // can't be grafted (word-level edits) conflicts.
             for (const other of this.getSuggestionsForSentence(first)) {
                 if (other.id === accepted.id) continue
-                if (!SENTENCE_SCOPED_TYPES.has(other.type)) dropPending(other.id)
+                if (!COMPOSABLE_REWRITE_TYPES.has(other.type)) dropPending(other.id)
             }
             return
         }
@@ -709,7 +744,7 @@ export class EditorController {
             const first = m[0], second = m[m.length - 1]
             if (accepted.sentence_index === second) {
                 this._suggestionStates.set(c.id, 'ignored')
-            } else if (accepted.sentence_index === first && !SENTENCE_SCOPED_TYPES.has(accepted.type)) {
+            } else if (accepted.sentence_index === first && !COMPOSABLE_REWRITE_TYPES.has(accepted.type)) {
                 this._suggestionStates.set(c.id, 'ignored')
             }
         }
@@ -820,7 +855,7 @@ export class EditorController {
         const first = m[0]
         const r0 = this.getSuggestionsForSentence(first).find(s =>
             s.id !== connective.id
-            && SENTENCE_SCOPED_TYPES.has(s.type)
+            && COMPOSABLE_REWRITE_TYPES.has(s.type)
             && this._suggestionStates.get(s.id) === 'accepted')
         if (!r0) return connective.suggested_text
 
@@ -846,7 +881,7 @@ export class EditorController {
         const first = m[0], second = m[m.length - 1]
         const r0 = this.getSuggestionsForSentence(first).find(s =>
             s.id !== connective.id
-            && SENTENCE_SCOPED_TYPES.has(s.type)
+            && COMPOSABLE_REWRITE_TYPES.has(s.type)
             && this._suggestionStates.get(s.id) === 'accepted')
         if (!r0) return connective.original_text
         const secondText = this._data.sentences[second]
@@ -1007,10 +1042,43 @@ export class EditorController {
     }
 
     /**
+     * The block layout with accepted enumerations substituted: a sentence block
+     * whose enumeration is accepted becomes an `enum_intro` block plus one
+     * `enum_item` block per list item. The original blocks/sentences stay
+     * immutable, so reset is just recomputing this. Blocks are otherwise passed
+     * through unchanged.
+     */
+    _effectiveBlocks() {
+        const blocks = this._data.blocks
+        if (!Array.isArray(blocks)) return blocks
+        const hasAccepted = this.enumerationSuggestions.some(
+            s => this._suggestionStates.get(s.id) === 'accepted')
+        if (!hasAccepted) return blocks
+
+        const out = []
+        for (const block of blocks) {
+            if (block.type === 'sentence') {
+                const en = this._acceptedEnumerationFor(block.sentence_index)
+                if (en) {
+                    out.push({ type: 'enum_intro', text: en.list_intro || '',
+                        sentence_index: block.sentence_index, suggestion_id: en.id })
+                    for (const item of (en.list_items || [])) {
+                        out.push({ type: 'enum_item', text: item,
+                            sentence_index: block.sentence_index, suggestion_id: en.id })
+                    }
+                    continue
+                }
+            }
+            out.push(block)
+        }
+        return out
+    }
+
+    /**
      * Compute the edited text with accepted suggestions applied
      */
     getEditedText() {
-        const blocks = this._data.blocks
+        const blocks = this._effectiveBlocks()
 
         // Fallback (no block layout): original behaviour, sentences space-joined.
         if (!Array.isArray(blocks) || blocks.length === 0) {
@@ -1042,6 +1110,12 @@ export class EditorController {
                 const body = block.sentence_indices
                     .map(i => this._sentenceOutputText(i)).filter(Boolean).join(" ")
                 lines.push(marker + body)
+            } else if (block.type === "enum_intro") {
+                flush()
+                lines.push(block.text)
+            } else if (block.type === "enum_item") {
+                flush()
+                lines.push("- " + block.text)
             } else if (block.type === "quote") {
                 flush()
                 lines.push("> " + block.text)
