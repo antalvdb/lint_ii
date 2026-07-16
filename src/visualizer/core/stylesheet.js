@@ -617,6 +617,10 @@ export const css = `
     /* An accepted enumeration: a lead-in line + an indented bullet list. */
     .enum-accepted {
         display: block;
+        /* The sentences view is a flex-wrap row of words; take a full row so the
+           list stands on its own, with the previous sentence ending above it and
+           the next sentence starting below it (rather than wrapping alongside). */
+        flex: 0 0 100%;
         margin: 0.35em 0;
         cursor: pointer;
     }
