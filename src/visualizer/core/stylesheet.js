@@ -624,17 +624,30 @@ export const css = `
         margin: 0.35em 0;
         cursor: pointer;
     }
-    .enum-accepted .enum-head {
-        display: flex;
-        align-items: center;
-    }
-    /* The sentence index inside the block flows inline (the .sentence rule that
-       absolutely-positions it into the gutter does not apply here); it still
-       inherits its colour from the block's data-level. */
+    /* Bracket the whole block like a sentence: the index and opening bracket lead
+       the intro line, and a foot carries the closing bracket followed by the
+       level badge. The .sent-start/.sent-end glyph and .sent-idx rules are scoped
+       to .sentence, so re-declare them here; colours still come from data-level. */
     .enum-accepted .sent-idx {
         font-size: .7em;
         font-family: monospace;
-        margin-right: .4em;
+        margin-right: .3em;
+        vertical-align: middle;
+    }
+    .enum-accepted .enum-intro { vertical-align: middle; }
+    .enum-accepted .sent-start::before { content: '['; padding-right: 0.2em; }
+    .enum-accepted .sent-end::after { content: ']'; padding-left: 0.2em; }
+    .enum-accepted .sent-start::before,
+    .enum-accepted .sent-end::after {
+        font-family: monospace;
+        font-size: 2.4em;
+        vertical-align: middle;
+        line-height: 0;
+    }
+    .enum-accepted .enum-foot {
+        display: flex;
+        align-items: center;
+        margin-top: 0.15em;
     }
     .enum-accepted .enum-intro {
         display: inline-block;

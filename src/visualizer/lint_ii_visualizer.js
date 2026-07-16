@@ -1,4 +1,4 @@
-import { css } from './core/stylesheet.js?v=26'
+import { css } from './core/stylesheet.js?v=27'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
@@ -867,11 +867,16 @@ export class LintIIVisualizer extends HTMLElement {
             ` data-level="${level ?? ''}">` +
             `<div class="enum-head">` +
             `<span class="sent-idx">${idx + 1}</span>` +
-            `<span class="level-badge">${level ?? '?'}</span>` +
+            `<span class="sent-start"></span>` +
             `<div class="enum-intro suggestion-changed" data-enum-id="${eid}"` +
             ` data-suggestion-id="${eid}" data-suggestion-status="accepted">${intro}</div>` +
             `</div>` +
-            `<ul class="enum-list">${items}</ul></div>`
+            `<ul class="enum-list">${items}</ul>` +
+            `<div class="enum-foot">` +
+            `<span class="sent-end"></span>` +
+            `<span class="level-badge">${level ?? '?'}</span>` +
+            `</div>` +
+            `</div>`
         const fresh = tmp.firstElementChild
         if (fresh) el.replaceWith(fresh)
     }
