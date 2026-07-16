@@ -678,6 +678,18 @@ export class EditorController {
             for (const other of this.getSuggestionsForSentence(accepted.sentence_index)) {
                 if (other.id === suggestionId) continue
                 if (other.type === 'connective') continue  // composes; handled below
+                // A whole-sentence enumeration (bulleted list) is the more
+                // valuable offer, so a word-level edit must NOT eliminate it:
+                // keep a pending enumeration available so the user can still
+                // switch to the list. Accepting the enumeration itself is
+                // scoped and still drops the word-level edits below, so the two
+                // never co-apply. Only skip while the enumeration is pending; an
+                // already-accepted one is still dropped to avoid a broken
+                // list-plus-inline-edit state.
+                if (other.type === 'enumeration' && !acceptedScoped
+                    && this._suggestionStates.get(other.id) !== 'accepted') {
+                    continue
+                }
                 if (acceptedScoped || SENTENCE_SCOPED_TYPES.has(other.type)) {
                     if (this._suggestionStates.get(other.id) !== 'ignored') {
                         this._suggestionStates.set(other.id, 'ignored')
