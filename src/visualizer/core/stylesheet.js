@@ -624,6 +624,10 @@ export const css = `
         margin: 0.35em 0;
         cursor: pointer;
     }
+    .enum-accepted .enum-head {
+        display: flex;
+        align-items: center;
+    }
     .enum-accepted .enum-intro {
         display: inline-block;
         background: var(--color-suggestion-accepted);

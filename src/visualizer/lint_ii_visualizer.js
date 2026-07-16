@@ -1,4 +1,4 @@
-import { css } from './core/stylesheet.js?v=24'
+import { css } from './core/stylesheet.js?v=25'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
@@ -857,11 +857,19 @@ export class LintIIVisualizer extends HTMLElement {
         const intro = this._escapeHtml(suggestion.list_intro || '')
         const items = (suggestion.list_items || []).map(it =>
             `<li class="enum-item" data-enum-id="${eid}">${this._escapeHtml(it)}</li>`).join('')
+        // The list keeps the sentence's LiNT level (it reformats, not simplifies);
+        // show its badge so the block stays visibly part of the analysis.
+        const lvl = this._editorController.getEffectiveSentenceLevels(idx)[0]
+        const level = lvl && lvl.level != null ? lvl.level : null
         const tmp = document.createElement('div')
         tmp.innerHTML =
-            `<div class="enum-accepted" data-sentence-index="${idx}" data-suggestion-id="${eid}">` +
+            `<div class="enum-accepted" data-sentence-index="${idx}" data-suggestion-id="${eid}"` +
+            ` data-level="${level ?? ''}">` +
+            `<div class="enum-head">` +
+            `<span class="level-badge">${level ?? '?'}</span>` +
             `<div class="enum-intro suggestion-changed" data-enum-id="${eid}"` +
             ` data-suggestion-id="${eid}" data-suggestion-status="accepted">${intro}</div>` +
+            `</div>` +
             `<ul class="enum-list">${items}</ul></div>`
         const fresh = tmp.firstElementChild
         if (fresh) el.replaceWith(fresh)
