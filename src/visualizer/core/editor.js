@@ -507,6 +507,14 @@ export class EditorController {
                 }
                 return conn.new_sentence_metrics
             }
+            // An accepted enumeration only reformats the sentence into a bulleted
+            // list; the content (and thus its linguistic complexity) is unchanged,
+            // and its flattened nominal text is an unscoreable fragment (empty
+            // metrics). Keep the sentence's ORIGINAL metrics so it stays in the
+            // document score instead of dropping out and warping it.
+            if (accepted.some(s => s.type === 'enumeration')) {
+                return this._originalSentenceMetrics[sentenceIndex]
+            }
             // Otherwise use the first accepted suggestion that has metrics.
             const withMetrics = accepted.find(s => s.new_sentence_metrics)
             if (withMetrics) return withMetrics.new_sentence_metrics
