@@ -601,6 +601,19 @@ export class LintIIVisualizer extends HTMLElement {
         )
         if (!sentenceEl) return
 
+        // If an enumeration is accepted on this sentence it owns the whole
+        // sentence as a bulleted block. Render that and stop, so a co-accepted
+        // word-level edit can never word-diff the enumeration's flat
+        // suggested_text into an inline dash list.
+        const acceptedEnum = this._editorController
+            .getSuggestionsForSentence(cluster.sentenceIdx)
+            .find(s => s.type === 'enumeration'
+                && this._editorController.getState(s.id) === 'accepted')
+        if (acceptedEnum) {
+            this._renderEnumerationBlock(cluster.sentenceIdx, acceptedEnum)
+            return
+        }
+
         // Store original HTML on first modification
         if (!sentenceEl.dataset.originalHtml) {
             sentenceEl.dataset.originalHtml = sentenceEl.innerHTML
@@ -627,6 +640,7 @@ export class LintIIVisualizer extends HTMLElement {
             .getSuggestionsForSentence(cluster.sentenceIdx)
         const accepted = allSuggestions.filter(s =>
             this._editorController.getState(s.id) === 'accepted'
+            && s.type !== 'enumeration' && s.type !== 'connective'
         )
 
         if (accepted.length === 0) {
@@ -650,6 +664,10 @@ export class LintIIVisualizer extends HTMLElement {
         // Collect all change regions from all accepted suggestions
         const allRegions = []
         for (const suggestion of acceptedSuggestions) {
+            // Enumeration/connective are rendered by their own dedicated paths
+            // (a bulleted block / a merged sentence), never as an inline word
+            // diff of their flat suggested_text.
+            if (suggestion.type === 'enumeration' || suggestion.type === 'connective') continue
             const sugTokens = suggestionTokens(suggestion.suggested_text)
             const sugBare = sugTokens.map(stripToken)
 
