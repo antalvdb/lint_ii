@@ -2,9 +2,19 @@ import { css } from './core/stylesheet.js?v=23'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
-import { EditorController } from './core/editor.js?v=22'
+import { EditorController } from './core/editor.js?v=23'
 import { SuggestionPopupController } from './core/suggestion-popup.js?v=11'
 import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './core/word-diff.js?v=2'
+
+// Suggestion types whose suggested_text is a complete, self-punctuated rewrite
+// of the whole sentence. For these the diff is a visualization only, so the
+// original's boundary punctuation must not be grafted onto the new tokens.
+// Mirrors editor.js COMPOSABLE_REWRITE_TYPES (enumeration accepts as a block,
+// not via word diff, so it is not listed here).
+const FULL_REWRITE_TYPES = new Set([
+    'sentence_rewrite', 'max_sdl', 'content_words_per_clause',
+    'abstract_nouns', 'passive', 'subordinate_clause', 'sentence_length',
+])
 
 
 export class LintIIVisualizer extends HTMLElement {
@@ -672,16 +682,25 @@ export class LintIIVisualizer extends HTMLElement {
             // Preserve punctuation and capitalization from deleted original words.
             const texts = [...region.newTexts]
             if (region.origIndices.length > 0 && texts.length > 0) {
-                const lastOrig = wordEls[region.origIndices.at(-1)].textContent
-                const trailMatch = lastOrig.match(/([.,;:!?]+)$/)
-                if (trailMatch && !texts.at(-1).match(/[.,;:!?]$/)) {
-                    texts[texts.length - 1] += trailMatch[1]
+                // Grafting the removed span's boundary punctuation onto the new
+                // text is right for a localized word swap, but a full-sentence
+                // rewrite already carries its own complete punctuation: the
+                // original's internal commas (e.g. an in-line enumeration) must
+                // NOT be stapled onto a word mid-rewrite. Skip the graft there.
+                const graftPunct = !FULL_REWRITE_TYPES.has(region.suggestion.type)
+                if (graftPunct) {
+                    const lastOrig = wordEls[region.origIndices.at(-1)].textContent
+                    const trailMatch = lastOrig.match(/([.,;:!?]+)$/)
+                    if (trailMatch && !texts.at(-1).match(/[.,;:!?]$/)) {
+                        texts[texts.length - 1] += trailMatch[1]
+                    }
+                    const firstOrig = wordEls[region.origIndices[0]].textContent
+                    const leadMatch = firstOrig.match(/^([("'\u201c]+)/)
+                    if (leadMatch && !texts[0].match(/^[("'\u201c]/)) {
+                        texts[0] = leadMatch[1] + texts[0]
+                    }
                 }
                 const firstOrig = wordEls[region.origIndices[0]].textContent
-                const leadMatch = firstOrig.match(/^([("'\u201c]+)/)
-                if (leadMatch && !texts[0].match(/^[("'\u201c]/)) {
-                    texts[0] = leadMatch[1] + texts[0]
-                }
 
                 // Preserve capitalization only at the sentence start: if the
                 // FIRST word of the sentence is being replaced and it was

@@ -1177,7 +1177,9 @@ export class EditorController {
         for (const suggestion of accepted) {
             const sugTokens = suggestionTokens(suggestion.suggested_text)
             const sugBare = sugTokens.map(stripToken)
-            allRegions.push(...computeWordDiff(origBare, sugBare, sugTokens, tokens))
+            const regions = computeWordDiff(origBare, sugBare, sugTokens, tokens)
+            for (const region of regions) region.suggestion = suggestion
+            allRegions.push(...regions)
         }
         allRegions.sort((a, b) => b.insertBeforeIdx - a.insertBeforeIdx)
 
@@ -1188,17 +1190,24 @@ export class EditorController {
             const texts = [...region.newTexts]
             if (region.origIndices.length > 0 && texts.length > 0) {
                 // Preserve punctuation from the replaced original words, as
-                // the display path does.
-                const lastOrig = tokens[region.origIndices.at(-1)]
-                const trailMatch = lastOrig.match(/([.,;:!?]+)$/)
-                if (trailMatch && !texts.at(-1).match(/[.,;:!?]$/)) {
-                    texts[texts.length - 1] += trailMatch[1]
+                // the display path does — but not for a full-sentence rewrite,
+                // whose suggested_text already carries its own punctuation
+                // (grafting the original's internal enumeration commas onto a
+                // word mid-rewrite is exactly the bug this avoids).
+                const graftPunct = !COMPOSABLE_REWRITE_TYPES.has(region.suggestion.type)
+                if (graftPunct) {
+                    const lastOrig = tokens[region.origIndices.at(-1)]
+                    const trailMatch = lastOrig.match(/([.,;:!?]+)$/)
+                    if (trailMatch && !texts.at(-1).match(/[.,;:!?]$/)) {
+                        texts[texts.length - 1] += trailMatch[1]
+                    }
+                    const leadOrig = tokens[region.origIndices[0]]
+                    const leadMatch = leadOrig.match(/^([("'“]+)/)
+                    if (leadMatch && !texts[0].match(/^[("'“]/)) {
+                        texts[0] = leadMatch[1] + texts[0]
+                    }
                 }
                 const firstOrig = tokens[region.origIndices[0]]
-                const leadMatch = firstOrig.match(/^([("'“]+)/)
-                if (leadMatch && !texts[0].match(/^[("'“]/)) {
-                    texts[0] = leadMatch[1] + texts[0]
-                }
                 // Only re-capitalize at the true sentence start; mid-sentence
                 // this would undo a deliberate LLM lowercasing (Henk, zin 8).
                 const firstOrigLetter = firstOrig.replace(/^[("'“]+/, '').charAt(0)
