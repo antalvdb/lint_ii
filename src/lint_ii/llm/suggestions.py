@@ -959,6 +959,37 @@ class SuggestionEngine:
             logger.info("TIMING job_%s=%.2fs", label, time.perf_counter() - t_job)
             suggestions.extend(new_suggestions)
 
+        # An enumeration suggestion IS the rewrite for its sentence: a bulleted
+        # list. Drop competing full-sentence prose rewrites for the same
+        # sentence so the list is the single clear offer -- the alternative
+        # ("Ten eerste... Ten tweede...") reads as wordy and tends to raise the
+        # LiNT score. Only sentences where the enumeration LLM actually produced
+        # a list are affected; a detector that fired but returned no list
+        # (SuggestionType.ENUMERATION absent) leaves the prose rewrite intact.
+        # Runs before the connective pass so it never composes with a rewrite
+        # that is about to be removed.
+        enum_sentences = {
+            s.sentence_index
+            for s in suggestions
+            if s.type == SuggestionType.ENUMERATION
+        }
+        if enum_sentences:
+            before = len(suggestions)
+            suggestions = [
+                s
+                for s in suggestions
+                if not (
+                    s.type in self._FULL_REWRITE_TYPES
+                    and s.sentence_index in enum_sentences
+                )
+            ]
+            if len(suggestions) != before:
+                logger.info(
+                    "enumeration suppressed %d full-rewrite suggestion(s) on sentence(s) %s",
+                    before - len(suggestions),
+                    sorted(enum_sentences),
+                )
+
         # Step 4: cross-sentence coherence pass (gated behind LINT_II_CONNECTIVES,
         # fail-open). Adds connective suggestions that span sentence pairs.
         t_conn = time.perf_counter()
