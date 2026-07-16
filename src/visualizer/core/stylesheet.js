@@ -628,6 +628,14 @@ export const css = `
         display: flex;
         align-items: center;
     }
+    /* The sentence index inside the block flows inline (the .sentence rule that
+       absolutely-positions it into the gutter does not apply here); it still
+       inherits its colour from the block's data-level. */
+    .enum-accepted .sent-idx {
+        font-size: .7em;
+        font-family: monospace;
+        margin-right: .4em;
+    }
     .enum-accepted .enum-intro {
         display: inline-block;
         background: var(--color-suggestion-accepted);

@@ -1,4 +1,4 @@
-import { css } from './core/stylesheet.js?v=25'
+import { css } from './core/stylesheet.js?v=26'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
@@ -866,6 +866,7 @@ export class LintIIVisualizer extends HTMLElement {
             `<div class="enum-accepted" data-sentence-index="${idx}" data-suggestion-id="${eid}"` +
             ` data-level="${level ?? ''}">` +
             `<div class="enum-head">` +
+            `<span class="sent-idx">${idx + 1}</span>` +
             `<span class="level-badge">${level ?? '?'}</span>` +
             `<div class="enum-intro suggestion-changed" data-enum-id="${eid}"` +
             ` data-suggestion-id="${eid}" data-suggestion-status="accepted">${intro}</div>` +
