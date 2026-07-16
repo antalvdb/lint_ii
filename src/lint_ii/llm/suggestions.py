@@ -492,7 +492,10 @@ class SuggestionEngine:
         try:
             doc = sent_analysis.doc
             # Group conjuncts by the base (first) member of their coordination.
-            chains: dict[int, list] = {}
+            # Key by the base Token itself, not token.i: sent_analysis.doc is a
+            # Span whose tokens carry document-global indices, so doc[token.i]
+            # overflows the span for any sentence after the first ([E1002]).
+            chains: dict = {}
             for tok in doc:
                 if tok.dep_ != "conj":
                     continue
@@ -501,11 +504,11 @@ class SuggestionEngine:
                 while base.dep_ == "conj" and guard < 50:
                     base = base.head
                     guard += 1
-                chains.setdefault(base.i, []).append(tok)
+                chains.setdefault(base, []).append(tok)
 
             best = None  # (n_items, span_words)
-            for base_i, conjs in chains.items():
-                members = [doc[base_i]] + conjs
+            for base, conjs in chains.items():
+                members = [base] + conjs
                 n_items = len(members)
                 if n_items < min_items:
                     continue
@@ -1507,22 +1510,22 @@ class SuggestionEngine:
     def _enumeration_adds_content(
         cls, original: str, intro: str, items: list[str]
     ) -> str | None:
-        """Return a content word the list introduced that is not in the original
-        sentence (mirrors the connective containment guard), else None. The list
-        must only re-present existing content."""
+        """Guard against a fabricated list ITEM, while allowing the paraphrasing
+        the tool exists to do. Each item must stay anchored to the original by
+        sharing at least one content word (>= 4 letters) with it; an item with no
+        such anchor is treated as invented and returned. The intro is a lead-in
+        that legitimately rephrases ("... richt zich op vier punten:") and light
+        synonym simplification inside an anchored item ("periodiek" -> "regelmatig")
+        is fine, so neither is word-for-word contained. Returns the first
+        unanchored item, else None."""
         orig = {t.lower() for t in cls._word_tokens(original)}
-        for text in [intro, *items]:
-            for raw in cls._word_tokens(text):
-                low = raw.lower()
-                if low in orig:
-                    continue
-                if len(raw) < 4 or not raw.isalpha():
-                    continue
-                if raw[0].isupper():
-                    continue
-                if cls._is_recompound(low, orig):
-                    continue
-                return raw
+        for item in items:
+            anchored = any(
+                len(raw) >= 4 and raw.isalpha() and raw.lower() in orig
+                for raw in cls._word_tokens(item)
+            )
+            if not anchored:
+                return item
         return None
 
     def _generate_enumeration_suggestion(
