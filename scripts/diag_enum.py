@@ -16,13 +16,17 @@ import urllib.request
 
 BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "https://lint-ii.valkuil.net"
 
-TEXT = (
+BASE_TEXT = (
     "De inspectie heeft het verbeterplan van de instelling beoordeeld. "
     "Het plan draait om het aanscherpen van de interne controles, het "
     "bijscholen van het personeel op het gebied van privacy, het vastleggen "
     "van heldere afspraken met onderaannemers en het periodiek evalueren van "
     "de gemaakte keuzes. De inspectie verwacht de eerste resultaten na een halfjaar."
 )
+# The server caches results by input text (written through to disk, survives
+# restarts). Append a unique trailing sentence so each run is a genuine cache
+# miss that re-runs the analysis; it does not touch the enumeration sentence.
+TEXT = BASE_TEXT + f" De rapportage heeft volgnummer {int(time.time())}."
 
 
 def _get(url):
