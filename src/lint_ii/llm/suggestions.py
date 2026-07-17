@@ -1449,7 +1449,7 @@ class SuggestionEngine:
             return None
 
         n, n1 = para[pos], para[pos + 1]
-        suggested = block.get("HERSCHRIJVING", "").strip().strip('"“”')
+        suggested = self._strip_list_marker(block.get("HERSCHRIJVING", "").strip()).strip('"“”')
         if not suggested or "niet toegepast" in suggested.lower():
             return None
 
@@ -1625,12 +1625,22 @@ class SuggestionEngine:
             return self._generate_enumeration_suggestion(job.triggers[0], provider)
         return self._generate_suggestion_for_trigger(job.triggers[0], provider, document_level)
 
-    @staticmethod
-    def _clean_variant(sentence_text: str, raw: str) -> str:
-        """Strip wrapping quotes/markdown emphasis the LLM may add, unless the
-        original had them (e.g. a VOLLEDIG value returned as *...* )."""
+    # A leading list/enumeration marker the LLM sometimes prefixes to a single
+    # rewritten sentence ("1. ...", "1) ...", "- ...").
+    _LIST_MARKER_RE = re.compile(r"^\s*(?:\d+[.)]|[-\u2022*])\s+")
+
+    @classmethod
+    def _strip_list_marker(cls, text: str) -> str:
+        """Remove a spurious leading list marker from a single rewritten sentence."""
+        return cls._LIST_MARKER_RE.sub("", text or "", count=1)
+
+    @classmethod
+    def _clean_variant(cls, sentence_text: str, raw: str) -> str:
+        """Strip a leading list marker and wrapping quotes/markdown emphasis the
+        LLM may add, unless the original had them (a VOLLEDIG value returned as
+        *...* or prefixed with '1. ')."""
         quotes = "\"\u201c\u201d\u2018\u2019\u0027*_"
-        text = (raw or "").strip()
+        text = cls._strip_list_marker((raw or "").strip())
         if text and not sentence_text.startswith(tuple(quotes)):
             text = text.lstrip(quotes)
         if text and not sentence_text.endswith(tuple(quotes)):
