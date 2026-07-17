@@ -668,14 +668,21 @@ export const css = `
         margin: 0.5em 0 0.25em;
     }
     .variant {
-        border: 1px solid hsl(0, 0%, 82%);
+        /* Both options are equal green cards; hover emphasises the one under the
+           cursor, and the accepted one gets a stronger fill (.variant-chosen). */
+        border: 1px solid hsl(145, 45%, 58%);
         border-radius: 6px;
         padding: 0.4em 0.55em;
         margin-bottom: 0.45em;
+        transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .variant:hover {
+        border-color: hsl(145, 55%, 40%);
+        background: color-mix(in oklch, hsl(145, 50%, 45%) 13%, transparent);
     }
     .variant-chosen {
-        border-color: hsl(145, 50%, 45%);
-        background: color-mix(in oklch, hsl(145, 50%, 45%) 10%, transparent);
+        border-color: hsl(145, 55%, 40%);
+        background: color-mix(in oklch, hsl(145, 50%, 45%) 18%, transparent);
     }
     .variant-head {
         display: flex;
@@ -687,7 +694,7 @@ export const css = `
     .variant-descr { font-size: 0.82em; opacity: 0.65; }
     .variant-action { margin-top: 0.4em; }
     @media (prefers-color-scheme: dark) {
-        .variant { border-color: hsl(0, 0%, 32%); }
+        .variant { border-color: hsl(145, 35%, 42%); }
     }
 
     /* Bullet-list preview inside the popup. */

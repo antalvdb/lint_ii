@@ -356,11 +356,14 @@ export class SuggestionPopupController {
         const variantsHtml = suggestion.variants.map(v => {
             const { sugHtml } = this._renderDiff(currentOriginal, v.suggested_text)
             const isChosen = v.key === chosen
+            // Only mark a variant as "chosen" once accepted; while pending both
+            // options are equal (styled the same, emphasised on hover).
+            const markChosen = isChosen && status === 'accepted'
             const action = status === 'pending'
                 ? `<button class="accept-btn" data-suggestion-id="${suggestion.id}" data-variant-key="${v.key}" title="Deze herschrijving kiezen">Kies deze</button>`
                 : (isChosen ? '<span class="status-badge accepted">Gekozen</span>' : '')
             return `
-                <div class="variant${isChosen ? ' variant-chosen' : ''}">
+                <div class="variant${markChosen ? ' variant-chosen' : ''}">
                     <div class="variant-head">
                         <span class="variant-label">${this._escapeHtml(v.label)}</span>
                         <span class="variant-descr">${descr[v.key] || ''}</span>
