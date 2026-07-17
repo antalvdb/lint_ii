@@ -662,6 +662,34 @@ export const css = `
     }
     .enum-accepted .enum-item { margin: 0.1em 0; }
 
+    /* Two-variant sentence rewrite: a conservative vs full choice. */
+    .variant-choice-label {
+        font-weight: 600;
+        margin: 0.5em 0 0.25em;
+    }
+    .variant {
+        border: 1px solid hsl(0, 0%, 82%);
+        border-radius: 6px;
+        padding: 0.4em 0.55em;
+        margin-bottom: 0.45em;
+    }
+    .variant-chosen {
+        border-color: hsl(145, 50%, 45%);
+        background: color-mix(in oklch, hsl(145, 50%, 45%) 10%, transparent);
+    }
+    .variant-head {
+        display: flex;
+        align-items: baseline;
+        gap: 0.5em;
+        margin-bottom: 0.2em;
+    }
+    .variant-label { font-weight: 600; }
+    .variant-descr { font-size: 0.82em; opacity: 0.65; }
+    .variant-action { margin-top: 0.4em; }
+    @media (prefers-color-scheme: dark) {
+        .variant { border-color: hsl(0, 0%, 32%); }
+    }
+
     /* Bullet-list preview inside the popup. */
     .enum-preview-intro { display: block; font-weight: 600; }
     .enum-preview {

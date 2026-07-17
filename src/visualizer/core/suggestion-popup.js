@@ -24,6 +24,10 @@ export class SuggestionPopupController {
             if (!suggestionId) return
 
             if (button.classList.contains('accept-btn')) {
+                // A variant rewrite: pick the chosen alternative, then accept.
+                if (button.dataset.variantKey) {
+                    this._editor.chooseVariant(suggestionId, button.dataset.variantKey)
+                }
                 this._editor.accept(suggestionId)
                 this._hideNow()
             } else if (button.classList.contains('ignore-btn')) {
@@ -289,6 +293,9 @@ export class SuggestionPopupController {
      * Render a single suggestion (no cluster header).
      */
     _renderSingleSuggestion(suggestion) {
+        if (this._editor.constructor.hasVariants?.(suggestion)) {
+            return this._renderVariantChoice(suggestion)
+        }
         const status = this._editor.getState(suggestion.id)
         const typeLabel = this._suggestionLabel(suggestion)
         const categoryLabel = suggestion.error_category ? this._errorCategoryLabel(suggestion.error_category) : null
@@ -333,9 +340,77 @@ export class SuggestionPopupController {
     }
 
     /**
+     * Render a sentence rewrite offered as a choice between a conservative
+     * (one-sentence) and a full (possibly split) variant. Each variant shows its
+     * own diff and a "Kies deze" button; the whole suggestion has one Negeren /
+     * Ongedaan maken. Choosing a variant points the suggestion at that rewrite.
+     */
+    _renderVariantChoice(suggestion) {
+        const status = this._editor.getState(suggestion.id)
+        const typeLabel = this._suggestionLabel(suggestion)
+        const currentOriginal = this._editor.getCurrentOriginalForSuggestion(suggestion.id)
+        const origLabel = currentOriginal !== suggestion.original_text ? 'Huidig:' : 'Origineel:'
+        const chosen = this._editor.getChosenVariantKey(suggestion.id)
+        const descr = { conservative: 'Eén zin, niet gesplitst', full: 'Opgesplitst waar dat helpt' }
+
+        const variantsHtml = suggestion.variants.map(v => {
+            const { sugHtml } = this._renderDiff(currentOriginal, v.suggested_text)
+            const isChosen = v.key === chosen
+            const action = status === 'pending'
+                ? `<button class="accept-btn" data-suggestion-id="${suggestion.id}" data-variant-key="${v.key}" title="Deze herschrijving kiezen">Kies deze</button>`
+                : (isChosen ? '<span class="status-badge accepted">Gekozen</span>' : '')
+            return `
+                <div class="variant${isChosen ? ' variant-chosen' : ''}">
+                    <div class="variant-head">
+                        <span class="variant-label">${this._escapeHtml(v.label)}</span>
+                        <span class="variant-descr">${descr[v.key] || ''}</span>
+                    </div>
+                    <span class="text">${sugHtml}</span>
+                    <div class="variant-action">${action}</div>
+                </div>`
+        }).join('')
+
+        const statusHTML = status === 'accepted'
+            ? '<span class="status-badge accepted">Geaccepteerd</span>'
+            : status === 'ignored'
+                ? '<span class="status-badge ignored">Genegeerd</span>'
+                : '<span class="status-badge pending">In behandeling</span>'
+        const footer = status === 'pending'
+            ? `<button class="ignore-btn" data-suggestion-id="${suggestion.id}" title="Suggestie negeren">Negeren</button>`
+            : `<button class="reset-btn" data-suggestion-id="${suggestion.id}" title="Ongedaan maken">Ongedaan maken</button>`
+
+        return `
+            <div class="suggestion-popup-content">
+                <div class="suggestion-header">
+                    <span class="suggestion-type">${typeLabel}</span>
+                    ${statusHTML}
+                </div>
+                <div class="suggestion-comparison">
+                    <div class="original">
+                        <span class="label">${origLabel}</span>
+                        <span class="text">${this._escapeHtml(currentOriginal)}</span>
+                    </div>
+                </div>
+                <div class="variant-choice">
+                    <div class="variant-choice-label">Kies een herschrijving:</div>
+                    ${variantsHtml}
+                </div>
+                ${suggestion.explanation ? `
+                    <div class="suggestion-explanation">
+                        <span class="label">Uitleg:</span>
+                        <span class="text">${this._escapeHtml(this._stripBrackets(suggestion.explanation))}</span>
+                    </div>` : ''}
+                <div class="suggestion-actions">${footer}</div>
+            </div>`
+    }
+
+    /**
      * Render one section within a multi-suggestion cluster popup.
      */
     _renderSuggestionSection(suggestion, index, total) {
+        if (this._editor.constructor.hasVariants?.(suggestion)) {
+            return this._renderVariantChoice(suggestion)
+        }
         const status = this._editor.getState(suggestion.id)
         const typeLabel = this._suggestionLabel(suggestion)
         const categoryLabel = suggestion.error_category ? this._errorCategoryLabel(suggestion.error_category) : null

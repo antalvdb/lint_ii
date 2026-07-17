@@ -54,12 +54,17 @@ export class EditorController {
         // accepterId -> Set(ids it auto-ignored) for connective conflicts, so
         // undoing a merge-vs-rewrite choice reopens the alternative.
         this._autoIgnored = new Map()
+        // suggestionId -> chosen variant key for a two-variant sentence_rewrite.
+        this._chosenVariant = new Map()
 
         // Initialize all suggestions as pending
         if (data.suggestions?.suggestions) {
             for (const suggestion of this.suggestions) {
                 this._suggestionStates.set(suggestion.id, 'pending')
             }
+            // Default a variant rewrite to the conservative (one-sentence) option
+            // before clustering so the pending highlight reflects that choice.
+            this._initVariantDefaults()
             this._buildClusters()
         }
 
@@ -554,6 +559,44 @@ export class EditorController {
      *  path (block-level, not per-word), kept out of clustering. */
     get enumerationSuggestions() {
         return this.suggestions.filter(s => s.type === "enumeration")
+    }
+
+    /** True if a suggestion is a sentence rewrite offered as a conservative-vs-full
+     *  choice (>= 2 variants). */
+    static hasVariants(suggestion) {
+        return Array.isArray(suggestion?.variants) && suggestion.variants.length >= 2
+    }
+
+    /** Point a variant suggestion's suggested_text + metrics at one of its variants,
+     *  so the existing diff/score/output machinery uses the chosen rewrite. */
+    _applyVariant(suggestion, key) {
+        const v = (suggestion.variants || []).find(x => x.key === key)
+        if (!v) return
+        suggestion.suggested_text = v.suggested_text
+        suggestion.new_sentence_metrics = v.new_sentence_metrics
+        this._chosenVariant.set(suggestion.id, key)
+    }
+
+    /** Default every two-variant rewrite to the conservative (one-sentence) option. */
+    _initVariantDefaults() {
+        for (const s of this.suggestions) {
+            if (EditorController.hasVariants(s)) this._applyVariant(s, 'conservative')
+        }
+    }
+
+    /** Choose which variant of a rewrite is applied. Re-clusters so the pending
+     *  highlight tracks the newly chosen text. */
+    chooseVariant(suggestionId, key) {
+        const s = this.getSuggestion(suggestionId)
+        if (!EditorController.hasVariants(s)) return
+        if (this._chosenVariant.get(suggestionId) === key) return
+        this._applyVariant(s, key)
+        this._buildClusters()
+    }
+
+    /** The chosen variant key for a suggestion (null if not a variant rewrite). */
+    getChosenVariantKey(suggestionId) {
+        return this._chosenVariant.get(suggestionId) || null
     }
 
     /** The accepted enumeration for a sentence, or null. */
