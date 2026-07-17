@@ -222,6 +222,8 @@ HERSCHRIJVING: [het volledige herschreven tekstfragment met alle noodzakelijke g
 Je richt je op de samenhang tussen opeenvolgende zinnen: waar een relatie tussen twee zinnen impliciet blijft, kan een verbindingswoord die relatie verduidelijken. Je voegt alleen een verbindingswoord toe als de relatie al in de tekst besloten ligt; je verzint nooit een relatie en voegt geen inhoud toe.""",
         user="""Hieronder staat één alinea met genummerde zinnen. Beoordeel of de samenhang tussen bepaalde opeenvolgende zinnen duidelijker wordt door een verbindingswoord toe te voegen — uitsluitend als die relatie al in de tekst besloten ligt.
 
+Voeg ALLEEN een verbindingswoord toe bij een duidelijke oorzakelijke relatie (reden of gevolg) of een duidelijke tegenstelling. Een losse thematische samenhang, een simpele opeenvolging of een toelichting is NIET genoeg — laat zulke overgangen met rust. In de meeste alinea's is geen verbindingswoord nodig; antwoord dan met GEEN.
+
 Voorkeur: voeg twee zinnen die duidelijk oorzakelijk of contrastief samenhangen samen tot één zin met een natuurlijk voegwoord ("want", "omdat", "doordat", "maar", "dus"). Gebruik alleen een vooropgeplaatst bijwoord ("daarom", "hierdoor") als samenvoegen niet natuurlijk is. Vermijd formele of ouderwetse verbindingswoorden zoals "namelijk", "immers" of "derhalve". Verzin geen relatie en voeg geen inhoud toe; twijfel je, laat de overgang dan ongemoeid.
 
 Alinea:
@@ -232,7 +234,7 @@ Bekijk uitsluitend deze overgangen (na welke zin de overgang valt): {boundaries}
 Geef per verbetering één blok in dit formaat:
 ---
 NA_ZIN: [nummer van de zin waarna de overgang valt]
-RELATIE: [reden, gevolg, tegenstelling, toelichting of opsomming]
+RELATIE: [reden, gevolg of tegenstelling]
 HERSCHRIJVING: [de betrokken zin(nen), herschreven met het verbindingswoord; verander verder niets aan de inhoud]
 UITLEG: [hoogstens tien woorden: welk verband is verduidelijkt]
 ---

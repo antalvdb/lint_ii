@@ -1431,6 +1431,10 @@ class SuggestionEngine:
         first_clause = re.sub(r"[.!?]+$", "", rewrite_text.strip())
         return first_clause + tail
 
+    # Strong coherence relations the connective pass is allowed to mark; the
+    # weak "toelichting"/"opsomming" catch-alls are dropped (see the guard).
+    _CONNECTIVE_STRONG_RELATIONS = frozenset({"reden", "gevolg", "tegenstelling"})
+
     def _build_connective_suggestion(
         self,
         analysis: "ReadabilityAnalysis",
@@ -1449,6 +1453,21 @@ class SuggestionEngine:
             return None
 
         n, n1 = para[pos], para[pos + 1]
+
+        # Keep only the strong, evidence-based coherence relations (causal /
+        # contrastive). "toelichting"/"opsomming" are vague catch-alls under
+        # which the model merges loosely-related sentences and invents a
+        # relation (eval run 1: 6 of ~11 spurious merges were "toelichting",
+        # vs 1 of 16 good ones). Deterministic because prompt guidance alone
+        # does not hold.
+        relation = (block.get("RELATIE") or "").strip().lower()
+        if relation not in self._CONNECTIVE_STRONG_RELATIONS:
+            logger.info(
+                "Connective discarded: weak/absent relation %r, sentences %d-%d",
+                relation, n, n1,
+            )
+            return None
+
         suggested = self._strip_list_marker(block.get("HERSCHRIJVING", "").strip()).strip('"“”')
         if not suggested or "niet toegepast" in suggested.lower():
             return None
