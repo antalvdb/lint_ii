@@ -71,6 +71,8 @@ DEFAULT_THRESHOLDS: dict[str, float] = {
     "max_sdl": 5,                    # SDL above this triggers suggestion
     "content_words_per_clause": 7,   # Content words/clause above this triggers
     "abstract_noun_ratio": 0.7,      # Abstract ratio above this (concrete < 30%)
+    "abstract_noun_min_count": 2,    # Need >= this many abstract nouns (a single common
+                                     # noun in a short sentence is not naamwoordstijl)
     "sentence_length": 25,           # Words above this triggers suggestion
     "n_subordinate_clauses": 1,      # More than this many subordinate clauses triggers
     "enumeration_min_items": 3,      # Coordinated items needed to suggest a bullet list
@@ -414,7 +416,12 @@ class SuggestionEngine:
         # High abstract ratio means low concrete proportion
         if proportion_concrete < (1 - threshold):
             abstract_nouns = [wf.text for wf in sent_analysis.abstract_nouns]
-            if abstract_nouns:  # Only trigger if there are actually abstract nouns
+            # Need several abstract nouns: a single common noun in a short
+            # sentence ("De betaling is gelukt") drives proportion to 0% but is
+            # not naamwoordstijl. Eval run 3: every abstract_nouns false positive
+            # had exactly 1 abstract noun; genuine cases had 5+.
+            min_count = int(self._thresholds["abstract_noun_min_count"])
+            if len(abstract_nouns) >= min_count:
                 return SuggestionTrigger(
                     type=SuggestionType.ABSTRACT_NOUNS,
                     sentence_index=sent_idx,
