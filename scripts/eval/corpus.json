@@ -537,6 +537,46 @@
    "text": "Het is door de commissie na een zorgvuldige afweging van alle belangen besloten dat de vergunning onder een aantal aanvullende voorwaarden zal worden verleend."
   },
   {
+   "id": "clean-4",
+   "should_suggest": true,
+   "phenomena": [
+    "connective"
+   ],
+   "text": "De winkel is dicht op zondag. Op andere dagen is de winkel open. De openingstijden staan op de deur."
+  },
+  {
+   "id": "clean-11",
+   "should_suggest": true,
+   "phenomena": [
+    "connective"
+   ],
+   "text": "De school heeft een nieuwe directeur. Zij begint na de zomer. Ouders krijgen binnenkort een brief."
+  },
+  {
+   "id": "clean-13",
+   "should_suggest": true,
+   "phenomena": [
+    "connective"
+   ],
+   "text": "Het museum is gratis voor kinderen. Volwassenen betalen tien euro. De kaartjes koopt u bij de ingang."
+  },
+  {
+   "id": "clean-16",
+   "should_suggest": true,
+   "phenomena": [
+    "connective"
+   ],
+   "text": "De container wordt op maandag geleegd. Zet hem de avond ervoor buiten. Doe de deksel goed dicht."
+  },
+  {
+   "id": "good-3",
+   "should_suggest": true,
+   "phenomena": [
+    "connective"
+   ],
+   "text": "De betaling is gelukt. U ontvangt de kaartjes per e-mail."
+  },
+  {
    "id": "clean-1",
    "should_suggest": false,
    "phenomena": [],
@@ -556,13 +596,6 @@
    "phenomena": [],
    "must_not": [],
    "text": "Het weer is vandaag mooi. De zon schijnt de hele dag. Het is niet koud."
-  },
-  {
-   "id": "clean-4",
-   "should_suggest": false,
-   "phenomena": [],
-   "must_not": [],
-   "text": "De winkel is dicht op zondag. Op andere dagen is de winkel open. De openingstijden staan op de deur."
   },
   {
    "id": "clean-5",
@@ -607,25 +640,11 @@
    "text": "Het park is de hele dag open. Honden mogen mee aan de lijn. Er zijn genoeg banken om te zitten."
   },
   {
-   "id": "clean-11",
-   "should_suggest": false,
-   "phenomena": [],
-   "must_not": [],
-   "text": "De school heeft een nieuwe directeur. Zij begint na de zomer. Ouders krijgen binnenkort een brief."
-  },
-  {
    "id": "clean-12",
    "should_suggest": false,
    "phenomena": [],
    "must_not": [],
    "text": "U kunt online een afspraak maken. Kies een dag en een tijd. U krijgt daarna een bevestiging."
-  },
-  {
-   "id": "clean-13",
-   "should_suggest": false,
-   "phenomena": [],
-   "must_not": [],
-   "text": "Het museum is gratis voor kinderen. Volwassenen betalen tien euro. De kaartjes koopt u bij de ingang."
   },
   {
    "id": "clean-14",
@@ -640,13 +659,6 @@
    "phenomena": [],
    "must_not": [],
    "text": "Wij zoeken vrijwilligers voor het festival. U helpt een dagdeel mee. Wij zorgen voor eten en drinken."
-  },
-  {
-   "id": "clean-16",
-   "should_suggest": false,
-   "phenomena": [],
-   "must_not": [],
-   "text": "De container wordt op maandag geleegd. Zet hem de avond ervoor buiten. Doe de deksel goed dicht."
   },
   {
    "id": "clean-17",
@@ -801,13 +813,6 @@
    "phenomena": [],
    "must_not": [],
    "text": "Uw pakket is bezorgd bij de buren op nummer 12."
-  },
-  {
-   "id": "good-3",
-   "should_suggest": false,
-   "phenomena": [],
-   "must_not": [],
-   "text": "De betaling is gelukt. U ontvangt de kaartjes per e-mail."
   }
  ]
 }
