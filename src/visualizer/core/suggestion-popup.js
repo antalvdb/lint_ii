@@ -351,7 +351,8 @@ export class SuggestionPopupController {
         const currentOriginal = this._editor.getCurrentOriginalForSuggestion(suggestion.id)
         const origLabel = currentOriginal !== suggestion.original_text ? 'Huidig:' : 'Origineel:'
         const chosen = this._editor.getChosenVariantKey(suggestion.id)
-        const descr = { conservative: 'Eén zin, niet gesplitst', full: 'Opgesplitst waar dat helpt' }
+        // Plain, transparent labels (not the jargon "Behoudend"/"Volledig").
+        const descr = { conservative: 'Eén zin, niet gesplitst', full: 'Opgesplitst' }
 
         const variantsHtml = suggestion.variants.map(v => {
             const { sugHtml } = this._renderDiff(currentOriginal, v.suggested_text)
@@ -365,8 +366,7 @@ export class SuggestionPopupController {
             return `
                 <div class="variant${markChosen ? ' variant-chosen' : ''}">
                     <div class="variant-head">
-                        <span class="variant-label">${this._escapeHtml(v.label)}</span>
-                        <span class="variant-descr">${descr[v.key] || ''}</span>
+                        <span class="variant-label">${descr[v.key] || this._escapeHtml(v.label)}</span>
                     </div>
                     <span class="text">${sugHtml}</span>
                     <div class="variant-action">${action}</div>
