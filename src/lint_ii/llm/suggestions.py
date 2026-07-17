@@ -1627,8 +1627,9 @@ class SuggestionEngine:
 
     @staticmethod
     def _clean_variant(sentence_text: str, raw: str) -> str:
-        """Strip wrapping quotes the LLM may add, unless the original had them."""
-        quotes = "\"\u201c\u201d\u2018\u2019\u0027"
+        """Strip wrapping quotes/markdown emphasis the LLM may add, unless the
+        original had them (e.g. a VOLLEDIG value returned as *...* )."""
+        quotes = "\"\u201c\u201d\u2018\u2019\u0027*_"
         text = (raw or "").strip()
         if text and not sentence_text.startswith(tuple(quotes)):
             text = text.lstrip(quotes)
