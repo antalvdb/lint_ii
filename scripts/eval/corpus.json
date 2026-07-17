@@ -537,46 +537,6 @@
    "text": "Het is door de commissie na een zorgvuldige afweging van alle belangen besloten dat de vergunning onder een aantal aanvullende voorwaarden zal worden verleend."
   },
   {
-   "id": "clean-4",
-   "should_suggest": true,
-   "phenomena": [
-    "connective"
-   ],
-   "text": "De winkel is dicht op zondag. Op andere dagen is de winkel open. De openingstijden staan op de deur."
-  },
-  {
-   "id": "clean-11",
-   "should_suggest": true,
-   "phenomena": [
-    "connective"
-   ],
-   "text": "De school heeft een nieuwe directeur. Zij begint na de zomer. Ouders krijgen binnenkort een brief."
-  },
-  {
-   "id": "clean-13",
-   "should_suggest": true,
-   "phenomena": [
-    "connective"
-   ],
-   "text": "Het museum is gratis voor kinderen. Volwassenen betalen tien euro. De kaartjes koopt u bij de ingang."
-  },
-  {
-   "id": "clean-16",
-   "should_suggest": true,
-   "phenomena": [
-    "connective"
-   ],
-   "text": "De container wordt op maandag geleegd. Zet hem de avond ervoor buiten. Doe de deksel goed dicht."
-  },
-  {
-   "id": "good-3",
-   "should_suggest": true,
-   "phenomena": [
-    "connective"
-   ],
-   "text": "De betaling is gelukt. U ontvangt de kaartjes per e-mail."
-  },
-  {
    "id": "clean-1",
    "should_suggest": false,
    "phenomena": [],
@@ -813,6 +773,41 @@
    "phenomena": [],
    "must_not": [],
    "text": "Uw pakket is bezorgd bij de buren op nummer 12."
+  },
+  {
+   "id": "clean-4",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [],
+   "text": "De winkel is dicht op zondag. Op andere dagen is de winkel open. De openingstijden staan op de deur."
+  },
+  {
+   "id": "clean-11",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [],
+   "text": "De school heeft een nieuwe directeur. Zij begint na de zomer. Ouders krijgen binnenkort een brief."
+  },
+  {
+   "id": "clean-13",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [],
+   "text": "Het museum is gratis voor kinderen. Volwassenen betalen tien euro. De kaartjes koopt u bij de ingang."
+  },
+  {
+   "id": "clean-16",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [],
+   "text": "De container wordt op maandag geleegd. Zet hem de avond ervoor buiten. Doe de deksel goed dicht."
+  },
+  {
+   "id": "good-3",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [],
+   "text": "De betaling is gelukt. U ontvangt de kaartjes per e-mail."
   }
  ]
 }

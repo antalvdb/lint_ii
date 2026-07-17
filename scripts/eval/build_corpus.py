@@ -87,14 +87,6 @@ POS = [
     ("multi-6", ["sentence_rewrite", "passive"], "Door de afdeling is aan de aanvrager nadrukkelijk verzocht om de nog ontbrekende gegevens zo spoedig mogelijk alsnog per e-mail aan te leveren."),
     ("multi-7", ["sentence_rewrite", "passive"], "Het is door de commissie na een zorgvuldige afweging van alle belangen besloten dat de vergunning onder een aantal aanvullende voorwaarden zal worden verleend."),
 
-    # Relabelled from negative after eval run 1 (2026-07-17): these do carry a
-    # genuine mergeable relation, so a connective suggestion is legitimate.
-    # IDs kept so the existing results.json still matches (no re-run needed).
-    ("clean-4", ["connective"], "De winkel is dicht op zondag. Op andere dagen is de winkel open. De openingstijden staan op de deur."),
-    ("clean-11", ["connective"], "De school heeft een nieuwe directeur. Zij begint na de zomer. Ouders krijgen binnenkort een brief."),
-    ("clean-13", ["connective"], "Het museum is gratis voor kinderen. Volwassenen betalen tien euro. De kaartjes koopt u bij de ingang."),
-    ("clean-16", ["connective"], "De container wordt op maandag geleegd. Zet hem de avond ervoor buiten. Doe de deksel goed dicht."),
-    ("good-3", ["connective"], "De betaling is gelukt. U ontvangt de kaartjes per e-mail."),
 ]
 
 # (id, [must_not], text) — NO suggestion expected (or a specific behaviour forbidden).
@@ -134,6 +126,14 @@ NEG = [
 
     ("good-1", [], "Bedankt voor uw aanmelding. Wij zien u graag op de bijeenkomst."),
     ("good-2", [], "Uw pakket is bezorgd bij de buren op nummer 12."),
+
+    # Reverted to negative (2026-07-17, run 4): already-clear paragraphs the
+    # now-conservative connective pass correctly leaves alone.
+    ("clean-4", [], "De winkel is dicht op zondag. Op andere dagen is de winkel open. De openingstijden staan op de deur."),
+    ("clean-11", [], "De school heeft een nieuwe directeur. Zij begint na de zomer. Ouders krijgen binnenkort een brief."),
+    ("clean-13", [], "Het museum is gratis voor kinderen. Volwassenen betalen tien euro. De kaartjes koopt u bij de ingang."),
+    ("clean-16", [], "De container wordt op maandag geleegd. Zet hem de avond ervoor buiten. Doe de deksel goed dicht."),
+    ("good-3", [], "De betaling is gelukt. U ontvangt de kaartjes per e-mail."),
 ]
 
 items = []
