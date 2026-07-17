@@ -22,8 +22,6 @@ import urllib.request
 
 BASE = "https://lint-ii.valkuil.net"
 HERE = os.path.dirname(__file__)
-CORPUS = os.path.join(HERE, "corpus.json")
-RESULTS = os.path.join(HERE, "results.json")
 
 # Fields worth keeping per suggestion for judging.
 KEEP = ("type", "sentence_index", "original_text", "suggested_text",
@@ -63,7 +61,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--fresh", action="store_true")
+    ap.add_argument("--corpus", default=os.path.join(HERE, "corpus.json"))
+    ap.add_argument("--results", default=os.path.join(HERE, "results.json"))
     args = ap.parse_args()
+    CORPUS, RESULTS = args.corpus, args.results
 
     corpus = json.load(open(CORPUS, encoding="utf-8"))["items"]
     if args.limit:

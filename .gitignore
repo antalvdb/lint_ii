@@ -147,5 +147,5 @@ regression_analysis/
 environment_full.yml
 test_suggestions_output.json
 henk-email-draft.md
-scripts/eval/results.json
+scripts/eval/results*.json
 scripts/eval/run.log
