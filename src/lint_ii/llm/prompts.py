@@ -25,6 +25,7 @@ Belangrijke richtlijnen:
 - Voeg geen nieuwe informatie, voorbeelden, metaforen of vergelijkingen toe
 - Herschrijf niet creatief — pas aan, vervang of splits waar nodig, maar verzin niets nieuws
 - Splits geen zinsdelen die met een nevenschikkend voegwoord ('maar', 'want', 'dus', 'en', 'of') zijn verbonden; zo'n voegwoord drukt een betekenisrelatie uit (tegenstelling, reden, gevolg) die verloren gaat bij opsplitsen. Houd die zinsdelen verbonden en vervang een informeel voegwoord als 'maar' niet door een formeler alternatief als 'echter'
+- Als je een zin opsplitst, vermijd houterige herhaling met een aanwijzend voornaamwoord ('Deze/Die X ... Deze/Die X ...'). Gebruik liever een betrekkelijke bijzin (bijvoorbeeld 'die illegaal zijn verkregen') of houd de zin heel wanneer dat natuurlijker leest. Een aanwijzend voornaamwoord dat vloeiend verwijst, is wel toegestaan
 - Laat URLs, webadressen en e-mailadressen exact ongewijzigd staan; verander er niets aan en verwijder ze niet. Voeg geen leestekens toe die in het origineel niet voorkwamen — eindigt een zin op een URL zonder punt, laat dat dan zo
 - Gebruik gangbaar Nederlands, maar pas het taalniveau aan aan de originele tekst
 - Schrijf uitleg in eenvoudige taal en houd die heel kort: hoogstens tien woorden — vermijd vakjargon
