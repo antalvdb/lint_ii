@@ -170,17 +170,24 @@ UITLEG: [hoogstens tien woorden: wat er structureel is gedaan, zoals opsplitsen 
         system=SYSTEM_PROMPT_BASE + """
 
 Je richt je op zinnen die om meerdere redenen tegelijk moeilijk leesbaar zijn. Pak alle genoemde knelpunten in één samenhangende herschrijving aan: splits lange of informatiedichte zinnen op, zet passieve constructies actief, vereenvoudig bijzinsstructuren en maak abstracte taal concreter — maar uitsluitend waar nodig, en zonder meer te veranderen dan de genoemde knelpunten vragen.""",
-        user="""Herschrijf de volgende zin zodat deze beter leesbaar wordt. Pak daarbij alle onderstaande knelpunten in één keer aan.
+        user="""Herschrijf de volgende zin zodat deze beter leesbaar wordt. Pak daarbij alle onderstaande knelpunten aan.
 
 Zin: "{sentence}"
 
 Knelpunten:
 {issues}
 
+Geef TWEE varianten, zodat de gebruiker zelf kan kiezen:
+- BEHOUDEND: los de knelpunten op maar houd het één zin — splits NIET en herstructureer zo min mogelijk. Vervang moeilijke woorden en maak passief actief voor zover dat kan zonder de zin op te splitsen.
+- VOLLEDIG: de best leesbare herschrijving; splits de zin op in kortere zinnen als dat de leesbaarheid duidelijk verbetert.
+
+Als de twee varianten inhoudelijk hetzelfde zouden zijn (er valt niets te splitsen), geef dan bij beide dezelfde tekst.
+
 Houd je aan de richtlijnen: behoud de betekenis, de toon en de vakinhoud, voeg niets nieuws toe, en verander niet meer dan nodig is om de genoemde knelpunten op te lossen.
 
 Geef je antwoord in het volgende formaat:
-HERSCHRIJVING: [de verbeterde zin of zinnen]
+BEHOUDEND: [de herschreven zin, niet gesplitst]
+VOLLEDIG: [de herschreven zin of zinnen]
 UITLEG: [hoogstens tien woorden: wat er is veranderd — geen vakjargon]"""
     ),
 
@@ -345,7 +352,7 @@ def parse_llm_response(response: str, template_name: str) -> dict[str, str]:
         "passive": ["PROBLEEM", "HERSCHRIJVING", "UITLEG"],
         "subordinate_clause": ["PROBLEEM", "HERSCHRIJVING", "UITLEG"],
         "sentence_length": ["PROBLEEM", "HERSCHRIJVING", "UITLEG"],
-        "sentence_rewrite": ["HERSCHRIJVING", "UITLEG"],
+        "sentence_rewrite": ["BEHOUDEND", "VOLLEDIG", "HERSCHRIJVING", "UITLEG"],
     }
 
     fields = expected_fields.get(template_name, [])

@@ -132,6 +132,12 @@ class Suggestion:
     # carries a plain-text rendering for the copy/export fallback.
     list_intro: str | None = None
     list_items: list[str] = field(default_factory=list)
+    # For a consolidated sentence_rewrite offered as a choice: the alternative
+    # rewrites, each {key, label, suggested_text, new_sentence_metrics}. Present
+    # (>=2) only when a conservative one-sentence variant and a fuller (possibly
+    # split) variant meaningfully differ; the top-level suggested_text mirrors the
+    # full variant so variant-unaware code still works.
+    variants: list[dict[str, Any]] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         """Serialize suggestion to dictionary."""
@@ -165,6 +171,8 @@ class Suggestion:
             result["list_intro"] = self.list_intro
         if self.list_items:
             result["list_items"] = self.list_items
+        if self.variants:
+            result["variants"] = self.variants
         return result
 
 
@@ -1617,6 +1625,38 @@ class SuggestionEngine:
             return self._generate_enumeration_suggestion(job.triggers[0], provider)
         return self._generate_suggestion_for_trigger(job.triggers[0], provider, document_level)
 
+    @staticmethod
+    def _clean_variant(sentence_text: str, raw: str) -> str:
+        """Strip wrapping quotes the LLM may add, unless the original had them."""
+        quotes = "\"\u201c\u201d\u2018\u2019\u0027"
+        text = (raw or "").strip()
+        if text and not sentence_text.startswith(tuple(quotes)):
+            text = text.lstrip(quotes)
+        if text and not sentence_text.endswith(tuple(quotes)):
+            text = text.rstrip(quotes)
+        return text.strip()
+
+    def _rewrite_backstop_failure(self, sentence_text: str, candidate: str) -> str | None:
+        """The first hard-backstop reason a rewrite candidate fails, else None.
+        Shared by both consolidated variants so each is validated independently."""
+        if not candidate:
+            return "empty"
+        if "niet toegepast" in candidate.lower():
+            return "placeholder marker"
+        conj = self._breaks_clause_conjunction(sentence_text, candidate)
+        if conj:
+            return f"broke ', {conj} ' clause join"
+        url = self._alters_url(sentence_text, candidate)
+        if url:
+            return f"URL not preserved ({url})"
+        typo = self._introduces_misspelling(sentence_text, candidate)
+        if typo:
+            return f"introduced misspelling '{typo}'"
+        disagreement = self._dehet_disagreement(candidate)
+        if disagreement:
+            return f"de/het disagreement '{disagreement}'"
+        return None
+
     def _generate_consolidated_suggestion(
         self,
         job: "SuggestionJob",
@@ -1648,76 +1688,72 @@ class SuggestionEngine:
                 job.sentence_index, response.content,
             )
             parsed = parse_llm_response(response.content, "sentence_rewrite")
-
-            suggested_text = parsed.get("HERSCHRIJVING", "")
-            original = sentence_text or ""
-            _quotes = '"""''\''
-            if suggested_text and not original.startswith(tuple(_quotes)):
-                suggested_text = suggested_text.lstrip(_quotes)
-            if suggested_text and not original.endswith(tuple(_quotes)):
-                suggested_text = suggested_text.rstrip(_quotes)
             explanation = parsed.get("UITLEG", "")
 
-            if not suggested_text:
+            # Two offered rewrites: BEHOUDEND (one sentence, no split) and
+            # VOLLEDIG (may split). Fall back to the old single HERSCHRIJVING
+            # field when the model does not produce the pair.
+            conservative = self._clean_variant(sentence_text or "", parsed.get("BEHOUDEND", ""))
+            full = self._clean_variant(
+                sentence_text or "", parsed.get("VOLLEDIG") or parsed.get("HERSCHRIJVING", ""))
+
+            def _norm(t):
+                return " ".join(t.lower().split())
+
+            survivors = []
+            seen = set()
+            for key, label, text in (
+                ("full", "Volledig", full),
+                ("conservative", "Behoudend", conservative),
+            ):
+                if not text:
+                    continue
+                reason = self._rewrite_backstop_failure(sentence_text, text)
+                if reason:
+                    logger.info(
+                        "Consolidated %s variant discarded (%s) for sentence %d",
+                        key, reason, job.sentence_index,
+                    )
+                    continue
+                norm = _norm(text)
+                if norm in seen:
+                    continue
+                seen.add(norm)
+                survivors.append({
+                    "key": key,
+                    "label": label,
+                    "suggested_text": text,
+                    "new_sentence_metrics": self._analyze_suggested_text(text),
+                })
+
+            if not survivors:
                 logger.warning(
-                    "No HERSCHRIJVING in consolidated rewrite for sentence %d. Raw:\n%s",
+                    "Consolidated rewrite: no usable variant for sentence %d. Raw:\n%s",
                     job.sentence_index, response.content,
                 )
                 return None
 
-            if "niet toegepast" in suggested_text.lower():
-                logger.info(
-                    "Consolidated rewrite discarded: placeholder marker for sentence %d",
-                    job.sentence_index,
-                )
-                return None
-
-            broken_conj = self._breaks_clause_conjunction(sentence_text, suggested_text)
-            if broken_conj:
-                logger.info(
-                    "Consolidated rewrite discarded: broke ', %s ' clause join for sentence %d",
-                    broken_conj, job.sentence_index,
-                )
-                return None
-
-            altered_url = self._alters_url(sentence_text, suggested_text)
-            if altered_url:
-                logger.info(
-                    "Consolidated rewrite discarded: URL not preserved (%s) for sentence %d",
-                    altered_url, job.sentence_index,
-                )
-                return None
-
-            typo = self._introduces_misspelling(sentence_text, suggested_text)
-            if typo:
-                logger.info(
-                    "Consolidated rewrite discarded: introduced misspelling '%s' for sentence %d",
-                    typo, job.sentence_index,
-                )
-                return None
-
-            disagreement = self._dehet_disagreement(suggested_text)
-            if disagreement:
-                logger.info(
-                    "Consolidated rewrite discarded: de/het disagreement '%s' for sentence %d",
-                    disagreement, job.sentence_index,
-                )
-                return None
-
-            new_metrics = self._analyze_suggested_text(suggested_text)
+            # Primary (applied by variant-unaware code / accept-all) = the full
+            # variant when present, else the sole survivor. Offer a choice only
+            # when both a conservative and a full variant survived and differ.
+            primary = next((s for s in survivors if s["key"] == "full"), survivors[0])
+            variants = (
+                sorted(survivors, key=lambda s: 0 if s["key"] == "conservative" else 1)
+                if len(survivors) >= 2 else []
+            )
 
             return Suggestion(
                 id=str(uuid.uuid4())[:8],
                 type=SuggestionType.SENTENCE_REWRITE,
                 sentence_index=job.sentence_index,
                 original_text=sentence_text,
-                suggested_text=suggested_text,
+                suggested_text=primary["suggested_text"],
                 explanation=explanation,
                 model=response.model,
                 component_types=list(dict.fromkeys(t.type.value for t in job.triggers)),
-                new_sentence_metrics=new_metrics,
+                new_sentence_metrics=primary["new_sentence_metrics"],
+                variants=variants,
             )
-
         except LLMTimeoutError:
             raise
         except Exception as e:
