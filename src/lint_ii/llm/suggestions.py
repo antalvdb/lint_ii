@@ -439,8 +439,15 @@ class SuggestionEngine:
         sent_idx: int,
         sentence_text: str,
     ) -> SuggestionTrigger | None:
-        """Check for passive constructions."""
+        """Check for passive constructions with a recoverable agent."""
         if not sent_analysis.has_passive:
+            return None
+        # Only convert a passive whose agent is explicit ("door X"): an agentless
+        # passive ("De brief is verstuurd", "De hekken zijn geverfd") cannot be
+        # made active without inventing a subject (Wij/De gemeente/Iemand ...),
+        # which fabricates content. spaCy marks the agent as obl:agent. Eval set 2:
+        # 8 of 19 false positives were agentless passives forced active.
+        if not any(tok.dep_ == "obl:agent" for tok in sent_analysis.doc):
             return None
         passives = [span.text for span in sent_analysis.passives]
         return SuggestionTrigger(
