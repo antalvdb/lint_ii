@@ -20,6 +20,7 @@ SYSTEM_PROMPT_BASE = """Je bent een expert in begrijpelijk Nederlands schrijven.
 Belangrijke richtlijnen:
 - Blijf zo dicht mogelijk bij de originele zin — verander alleen wat echt nodig is
 - Behoud de oorspronkelijke betekenis volledig
+- Vervang vakspecifieke of precieze termen niet door een vager of anders betekenend bijna-synoniem (bijvoorbeeld 'onderzoek' niet door 'studie', 'uitstoot' niet door 'uitlaat', 'uitslag' niet door 'resultaat'); behoud zulke termen ongewijzigd
 - Behoud de formele schrijfstijl en het register van de originele tekst
 - Voeg geen nieuwe informatie, voorbeelden, metaforen of vergelijkingen toe
 - Herschrijf niet creatief — pas aan, vervang of splits waar nodig, maar verzin niets nieuws
