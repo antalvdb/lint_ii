@@ -69,6 +69,9 @@ class SuggestionType(str, Enum):
 DEFAULT_THRESHOLDS: dict[str, float] = {
     "word_frequency": 3.0,           # Zipf frequency below this triggers suggestion
     "max_sdl": 5,                    # SDL above this triggers suggestion
+    "max_sdl_min_words": 12,         # ...but only in a sentence of at least this many
+                                     # words (a long dependency in a short sentence
+                                     # is read as a whole; not worth restructuring)
     "content_words_per_clause": 7,   # Content words/clause above this triggers
     "abstract_noun_ratio": 0.7,      # Abstract ratio above this (concrete < 30%)
     "abstract_noun_min_count": 2,    # Need >= this many abstract nouns (a single common
@@ -365,19 +368,24 @@ class SuggestionEngine:
         sent_idx: int,
         sentence_text: str,
     ) -> SuggestionTrigger | None:
-        """Check for high syntactic dependency length."""
+        """Check for high syntactic dependency length in a long-enough sentence."""
         threshold = self._thresholds["max_sdl"]
         max_sdl = sent_analysis.max_sdl
-
-        if max_sdl is not None and max_sdl > threshold:
-            return SuggestionTrigger(
-                type=SuggestionType.MAX_SDL,
-                sentence_index=sent_idx,
-                sentence_text=sentence_text,
-                feature_value=max_sdl,
-                threshold=threshold,
-            )
-        return None
+        if max_sdl is None or max_sdl <= threshold:
+            return None
+        # A long dependency only taxes readability in a long-enough sentence; a
+        # short one is read as a whole (eval set 2: max_sdl false positives were
+        # 8-14 word sentences with max_sdl 6-8, genuine cases 31+ words / sdl 14+).
+        min_words = int(self._thresholds["max_sdl_min_words"])
+        if sum(1 for tok in sent_analysis.doc if tok.is_alpha) < min_words:
+            return None
+        return SuggestionTrigger(
+            type=SuggestionType.MAX_SDL,
+            sentence_index=sent_idx,
+            sentence_text=sentence_text,
+            feature_value=max_sdl,
+            threshold=threshold,
+        )
 
     def _check_content_density(
         self,
@@ -1680,6 +1688,14 @@ class SuggestionEngine:
             text = text.rstrip(quotes)
         return text.strip()
 
+    @staticmethod
+    def _is_noop_rewrite(original: str, candidate: str) -> bool:
+        """True if the rewrite is effectively identical to the original (only
+        case/whitespace/punctuation differ) and so adds no value."""
+        def norm(t: str) -> str:
+            return " ".join(re.sub(r"[^0-9A-Za-zÀ-ÿ ]", " ", t.lower()).split())
+        return norm(original) == norm(candidate)
+
     def _rewrite_backstop_failure(self, sentence_text: str, candidate: str) -> str | None:
         """The first hard-backstop reason a rewrite candidate fails, else None.
         Shared by both consolidated variants so each is validated independently."""
@@ -1687,6 +1703,8 @@ class SuggestionEngine:
             return "empty"
         if "niet toegepast" in candidate.lower():
             return "placeholder marker"
+        if self._is_noop_rewrite(sentence_text, candidate):
+            return "unchanged (no-op)"
         conj = self._breaks_clause_conjunction(sentence_text, candidate)
         if conj:
             return f"broke ', {conj} ' clause join"
@@ -2035,6 +2053,13 @@ class SuggestionEngine:
             if "niet toegepast" in suggested_text.lower():
                 logger.info(
                     "Trigger suggestion discarded: placeholder marker in HERSCHRIJVING for %s trigger",
+                    trigger.type.value,
+                )
+                return None
+
+            if self._is_noop_rewrite(trigger.sentence_text or "", suggested_text):
+                logger.info(
+                    "Trigger suggestion discarded: %s rewrite unchanged from original",
                     trigger.type.value,
                 )
                 return None
