@@ -5,8 +5,19 @@ dialing an SSH reverse tunnel into the Strato front) to a **single box**: the
 existing Strato front (85.215.105.128) runs the app directly under systemd,
 nginx proxies to it on loopback, and the tunnel is retired.
 
-Nothing about the LLM changes — it stays on the **Mistral API**
-(`LINT_PROVIDER=mistral`). MLX is Apple-only and is not used here.
+The LLM runs through a cloud provider (`LINT_PROVIDER`), currently the
+**Hetzner** or **Mistral** API — see [Switching the LLM provider](#switching-the-llm-provider).
+MLX is Apple-only and is not used here.
+
+> **Actual deployment (read this first).** The box was ultimately set up under
+> the existing **`antalb`** user with the repo at **`~/servers/lint_ii`**
+> (`/home/antalb/servers/lint_ii`), **not** the dedicated `lint` service user
+> and `/opt/lint_ii` path that the migration procedure below describes. The
+> systemd unit (`net.valkuil.lint-ii`) and env file (`/etc/lint-ii/lint-ii.env`)
+> names are correct. When re-running any command below, substitute the `antalb`
+> user and `~/servers/lint_ii` path. The step-by-step migration section is kept
+> as a historical record of the one-time Mac→Linux cutover (now complete, Mac
+> decommissioned).
 
 ## Target architecture
 
@@ -119,8 +130,11 @@ tail -f /var/log/lint-ii/app.log               # app log (INFO)
 sudo systemctl restart net.valkuil.lint-ii     # after a git pull
 ```
 
-Code update: `sudo -u lint git -C /opt/lint_ii pull --ff-only && sudo systemctl restart net.valkuil.lint-ii`
-(or re-run `setup.sh`, which also refreshes deps).
+Code update (as the `antalb` user, in `~/servers/lint_ii`):
+
+```bash
+git -C ~/servers/lint_ii pull --ff-only && sudo systemctl restart net.valkuil.lint-ii
+```
 
 ## Switching the LLM provider
 
