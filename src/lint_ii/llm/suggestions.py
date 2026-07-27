@@ -12,11 +12,21 @@ import logging
 import os
 import re
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 from lint_ii.llm.providers import LLMProvider, LLMTimeoutError, create_provider
 from lint_ii.llm.prompts import format_prompt, parse_block_response, parse_llm_response, parse_spelling_response
 
 logger = logging.getLogger(__name__)
+
+# Max independent rewrite jobs run concurrently per document, for providers that
+# allow it (remote APIs — see LLMProvider.supports_concurrency). The per-sentence
+# rewrite loop is otherwise serial, so latency scales with sentence count and a
+# long text can exceed the client timeout (observed on a 19-sentence text). On-
+# machine providers stay serial regardless. Kept modest so that N concurrent
+# analyses × this fan-out stay within provider rate limits (e.g. Hetzner's
+# 60k output-tokens/60s). Override with LINT_II_JOB_CONCURRENCY; 1 disables.
+_JOB_CONCURRENCY = max(1, int(os.environ.get("LINT_II_JOB_CONCURRENCY", "4")))
 
 
 def _levenshtein(a: str, b: str) -> int:
@@ -968,10 +978,15 @@ class SuggestionEngine:
             t2 - t1, len(triggers), len(jobs), self._consolidate_sentence_rewrites,
         )
 
-        # Step 3: Generate a readability suggestion for each planned job
+        # Step 3: Generate a readability suggestion for each planned job.
+        # Jobs are independent (each produces its own suggestion) and the engine
+        # is read-only after construction, so on providers that allow it they run
+        # concurrently; results are still collected in job order so the
+        # downstream dedup/enumeration/connective passes see the identical
+        # sequence the serial path would (parallelism changes only speed).
         document_level = getattr(analysis.lint, "level", None)
-        suggestions: list[Suggestion] = list(spelling_suggestions)
-        for job in jobs:
+
+        def _run_job(job) -> list[Suggestion]:
             t_job = time.perf_counter()
             try:
                 if job.kind == "wordfreq_bundle":
@@ -990,7 +1005,23 @@ class SuggestionEngine:
             else:
                 label = job.triggers[0].type.value
             logger.info("TIMING job_%s=%.2fs", label, time.perf_counter() - t_job)
-            suggestions.extend(new_suggestions)
+            return new_suggestions
+
+        suggestions: list[Suggestion] = list(spelling_suggestions)
+        workers = _JOB_CONCURRENCY if provider.supports_concurrency else 1
+        workers = min(workers, len(jobs)) if jobs else 1
+        if workers > 1:
+            t_par = time.perf_counter()
+            with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="llm-job") as ex:
+                # Gather in submission (job) order; the first job to raise
+                # re-raises here and the pool drains on __exit__.
+                for fut in [ex.submit(_run_job, job) for job in jobs]:
+                    suggestions.extend(fut.result())
+            logger.info("TIMING jobs_parallel=%.2fs (%d jobs, %d workers)",
+                        time.perf_counter() - t_par, len(jobs), workers)
+        else:
+            for job in jobs:
+                suggestions.extend(_run_job(job))
 
         # An enumeration suggestion IS the rewrite for its sentence: a bulleted
         # list. Drop competing full-sentence prose rewrites for the same

@@ -68,6 +68,13 @@ class LLMProvider(ABC):
     # this with a larger value since it enumerates every error in one call.
     DEFAULT_MAX_TOKENS = 512
 
+    # Whether independent completion calls may run concurrently for one
+    # document. True for remote HTTP APIs (many in-flight requests are fine and
+    # cut wall-clock on long texts); False for on-machine providers (MLX: one
+    # GPU/KV cache; Ollama: single local instance), where concurrent generation
+    # thrashes rather than helps. Read by SuggestionEngine to size its job pool.
+    supports_concurrency = False
+
     @abstractmethod
     def _complete(
         self, prompt: str, system_prompt: str | None = None, max_tokens: int | None = None
@@ -156,6 +163,7 @@ class OpenAIProvider(LLMProvider):
     """OpenAI API provider (GPT-4o-mini default)."""
 
     DEFAULT_MODEL = "gpt-4o-mini"
+    supports_concurrency = True
 
     def __init__(
         self,
@@ -234,6 +242,7 @@ class AnthropicProvider(LLMProvider):
     """Anthropic API provider (Claude Haiku default)."""
 
     DEFAULT_MODEL = "claude-3-5-haiku-latest"
+    supports_concurrency = True
 
     def __init__(
         self,
@@ -393,6 +402,7 @@ class MistralProvider(LLMProvider):
 
     DEFAULT_MODEL = "mistral-large-latest"
     BASE_URL = "https://api.mistral.ai/v1"
+    supports_concurrency = True
 
     def __init__(self, api_key: str | None = None, model: str | None = None):
         self._api_key = api_key or os.environ.get("MISTRAL_API_KEY")
@@ -497,6 +507,7 @@ class HetznerProvider(LLMProvider):
 
     DEFAULT_MODEL = "Qwen/Qwen3.6-35B-A3B-FP8"
     BASE_URL = "https://inference.hetzner.com/api/v1"
+    supports_concurrency = True
 
     def __init__(self, api_key: str | None = None, model: str | None = None):
         self._api_key = api_key or os.environ.get("HETZNER_API_KEY")
