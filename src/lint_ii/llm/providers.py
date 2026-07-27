@@ -481,12 +481,19 @@ def _strip_think(content: str) -> str:
 class HetznerProvider(LLMProvider):
     """Hetzner experimental inference API (inference.hetzner.com).
 
-    OpenAI-compatible chat-completions surface, selected with
+    OpenAI-compatible chat-completions surface (vLLM), selected with
     LINT_PROVIDER=hetzner; the key comes from the HETZNER_API_KEY environment
     variable (set in the systemd EnvironmentFile, never in the repo). A second
     cloud option alongside Mistral: sends tester text to an external service,
     with no local memory pressure or Metal wedge risk. The default model is the
-    one the endpoint currently serves; override with LINT_MODEL when it rotates."""
+    one the endpoint currently serves; override with LINT_MODEL when it rotates.
+
+    The served Qwen3 model runs in 'thinking' mode by default: it emits a long
+    reasoning trace (returned in a separate ``message.reasoning`` field) that
+    burns the whole token budget before the actual answer, so on our structured
+    prompts ``content`` comes back empty/truncated and nothing parses. We turn
+    thinking off with the vLLM chat-template kwarg ``enable_thinking=False``.
+    Set LINT_II_HETZNER_THINKING=1 to re-enable it (e.g. to compare quality)."""
 
     DEFAULT_MODEL = "Qwen/Qwen3.6-35B-A3B-FP8"
     BASE_URL = "https://inference.hetzner.com/api/v1"
@@ -498,6 +505,7 @@ class HetznerProvider(LLMProvider):
                 "Hetzner API key required. Pass api_key or set HETZNER_API_KEY env var."
             )
         self._model = model or os.environ.get("LINT_II_LLM_MODEL", self.DEFAULT_MODEL)
+        self._thinking = os.environ.get("LINT_II_HETZNER_THINKING", "0") != "0"
         self._client = None
 
     @property
@@ -530,15 +538,17 @@ class HetznerProvider(LLMProvider):
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
-        response = client.post(
-            "/chat/completions",
-            json={
-                "model": self._model,
-                "messages": messages,
-                "temperature": 0.7,
-                "max_tokens": max_tokens or self.DEFAULT_MAX_TOKENS,
-            },
-        )
+        body: dict[str, Any] = {
+            "model": self._model,
+            "messages": messages,
+            "temperature": 0.7,
+            "max_tokens": max_tokens or self.DEFAULT_MAX_TOKENS,
+        }
+        if not self._thinking:
+            # vLLM passes chat_template_kwargs into the Qwen chat template.
+            body["chat_template_kwargs"] = {"enable_thinking": False}
+
+        response = client.post("/chat/completions", json=body)
         response.raise_for_status()
         data = response.json()
 
