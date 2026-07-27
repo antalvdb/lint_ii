@@ -506,6 +506,11 @@ class HetznerProvider(LLMProvider):
             )
         self._model = model or os.environ.get("LINT_II_LLM_MODEL", self.DEFAULT_MODEL)
         self._thinking = os.environ.get("LINT_II_HETZNER_THINKING", "0") != "0"
+        # Qwen3 at 0.7 (Mistral's tuned value) produces noisier lexical swaps —
+        # occasional meaning/idiom errors on word_frequency replacements. A lower
+        # temperature makes it more conservative; 0.3 is the default, overridable
+        # via LINT_II_HETZNER_TEMPERATURE without a code change.
+        self._temperature = float(os.environ.get("LINT_II_HETZNER_TEMPERATURE", "0.3"))
         self._client = None
 
     @property
@@ -541,7 +546,7 @@ class HetznerProvider(LLMProvider):
         body: dict[str, Any] = {
             "model": self._model,
             "messages": messages,
-            "temperature": 0.7,
+            "temperature": self._temperature,
             "max_tokens": max_tokens or self.DEFAULT_MAX_TOKENS,
         }
         if not self._thinking:
