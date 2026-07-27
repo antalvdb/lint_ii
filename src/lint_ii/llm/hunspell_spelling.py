@@ -11,6 +11,18 @@ logger = logging.getLogger(__name__)
 
 _DICT_PATH = Path(__file__).parent.parent / "linguistic_data" / "hunspell" / "nl"
 
+# spylls' suggest() does combinatorial compound decomposition whose cost
+# explodes on long unknown words. On real tester text (Merel Scholman's reading
+# chapter) it spun for minutes on "zelfregulatievaardigheden" (26 chars) and
+# "neurocognitieve" (15), stalling the whole analysis with no error — pure
+# Python CPU spin, so neither the LLM watchdog nor the httpx timeout caught it,
+# and the job hung pending indefinitely. Long unknown tokens are almost always
+# legitimate compounds the dictionary merely lacks, so offering a "correction"
+# would be a false positive anyway. Skip suggest() above this length; the
+# shortest observed explosion was 15 chars, so 14 is the empirical safe ceiling.
+# The LLM spelling pass still covers genuine long-word typos.
+_SUGGEST_MAX_LEN = 14
+
 
 @lru_cache(maxsize=1)
 def _get_dictionary():
@@ -69,6 +81,16 @@ def generate_hunspell_suggestions(
                 continue
 
             if dictionary.lookup(word):
+                continue
+
+            # Guard against spylls' pathological blow-up on long compounds
+            # (see _SUGGEST_MAX_LEN). Only reached for words unknown to the
+            # dictionary, which above this length are compounds, not typos.
+            if len(word) > _SUGGEST_MAX_LEN:
+                logger.debug(
+                    "Hunspell: skipping suggest() for long unknown word '%s' (%d chars)",
+                    word, len(word),
+                )
                 continue
 
             hunspell_suggestions = list(dictionary.suggest(word))
