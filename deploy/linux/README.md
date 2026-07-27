@@ -122,6 +122,27 @@ sudo systemctl restart net.valkuil.lint-ii     # after a git pull
 Code update: `sudo -u lint git -C /opt/lint_ii pull --ff-only && sudo systemctl restart net.valkuil.lint-ii`
 (or re-run `setup.sh`, which also refreshes deps).
 
+## Switching the LLM provider
+
+The provider is chosen entirely through the env file (`/etc/lint-ii/lint-ii.env`);
+no code change is needed. To move from Mistral to the experimental Hetzner
+inference API:
+
+```bash
+sudoedit /etc/lint-ii/lint-ii.env
+#   LINT_PROVIDER=hetzner
+#   HETZNER_API_KEY=<the key>          # never in the repo; chmod 640 root:lint
+#   leave LINT_MODEL unset to use the served default (Qwen/Qwen3.6-35B-A3B-FP8)
+sudo systemctl restart net.valkuil.lint-ii
+curl -s http://127.0.0.1:8000/health   # "model" should read the Qwen model id
+```
+
+To go back, set `LINT_PROVIDER=mistral` (the `MISTRAL_API_KEY` line can stay) and
+restart. Both keys may coexist in the env file; only `LINT_PROVIDER` decides which
+is used. The Hetzner endpoint is OpenAI-compatible and serves a Qwen3 model, whose
+`<think>` reasoning (if the endpoint has it on) is stripped in the provider so it
+never reaches the suggestion parser.
+
 ## Rollback
 
 If anything is wrong, bring the Mac back:

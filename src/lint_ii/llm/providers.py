@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 import logging
 import os
+import re
 import threading
 import time
 
@@ -459,6 +460,103 @@ class MistralProvider(LLMProvider):
         )
 
 
+_THINK_BLOCK_RE = re.compile(r"(?s)\s*<think>.*?</think>\s*")
+
+
+def _strip_think(content: str) -> str:
+    """Remove Qwen3-style <think>...</think> reasoning from a completion.
+
+    Qwen3-family models (the Hetzner endpoint serves Qwen3.6-35B-A3B) may prefix
+    their answer with a reasoning block when 'thinking' mode is on. Our callers
+    parse structured fields (BEHOUDEND/VOLLEDIG/HERSCHRIJVING) out of the raw
+    text, so a stray reasoning block would break parsing. Strip well-formed
+    blocks; if only a closing tag survives (some servers omit the opener), keep
+    what follows the last one. A no-op when the model returns clean text."""
+    cleaned = _THINK_BLOCK_RE.sub("", content)
+    if "</think>" in cleaned:
+        cleaned = cleaned.rsplit("</think>", 1)[1]
+    return cleaned.strip()
+
+
+class HetznerProvider(LLMProvider):
+    """Hetzner experimental inference API (inference.hetzner.com).
+
+    OpenAI-compatible chat-completions surface, selected with
+    LINT_PROVIDER=hetzner; the key comes from the HETZNER_API_KEY environment
+    variable (set in the systemd EnvironmentFile, never in the repo). A second
+    cloud option alongside Mistral: sends tester text to an external service,
+    with no local memory pressure or Metal wedge risk. The default model is the
+    one the endpoint currently serves; override with LINT_MODEL when it rotates."""
+
+    DEFAULT_MODEL = "Qwen/Qwen3.6-35B-A3B-FP8"
+    BASE_URL = "https://inference.hetzner.com/api/v1"
+
+    def __init__(self, api_key: str | None = None, model: str | None = None):
+        self._api_key = api_key or os.environ.get("HETZNER_API_KEY")
+        if not self._api_key:
+            raise ValueError(
+                "Hetzner API key required. Pass api_key or set HETZNER_API_KEY env var."
+            )
+        self._model = model or os.environ.get("LINT_II_LLM_MODEL", self.DEFAULT_MODEL)
+        self._client = None
+
+    @property
+    def model_name(self) -> str:
+        return self._model
+
+    def _get_client(self) -> Any:
+        if self._client is None:
+            try:
+                import httpx
+            except ImportError:
+                raise ImportError(
+                    "httpx package not installed. Install with: pip install lint_ii[llm]"
+                )
+            self._client = httpx.Client(
+                base_url=self.BASE_URL,
+                headers={"Authorization": f"Bearer {self._api_key}"},
+                timeout=120.0,
+            )
+        return self._client
+
+    def _complete(
+        self, prompt: str, system_prompt: str | None = None, max_tokens: int | None = None
+    ) -> LLMResponse:
+        """Generate completion using the Hetzner (OpenAI-compatible) API."""
+        client = self._get_client()
+
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        response = client.post(
+            "/chat/completions",
+            json={
+                "model": self._model,
+                "messages": messages,
+                "temperature": 0.7,
+                "max_tokens": max_tokens or self.DEFAULT_MAX_TOKENS,
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        usage = None
+        if data.get("usage"):
+            usage = {
+                "prompt_tokens": data["usage"].get("prompt_tokens", 0),
+                "completion_tokens": data["usage"].get("completion_tokens", 0),
+                "total_tokens": data["usage"].get("total_tokens", 0),
+            }
+
+        return LLMResponse(
+            content=_strip_think(data["choices"][0]["message"]["content"] or ""),
+            model=data.get("model", self._model),
+            usage=usage,
+        )
+
+
 class MLXProvider(LLMProvider):
     """Apple Silicon MLX provider — loads model directly for fast on-device inference."""
 
@@ -629,6 +727,7 @@ def create_provider(
         "ollama": OllamaProvider,
         "mlx": MLXProvider,
         "mistral": MistralProvider,
+        "hetzner": HetznerProvider,
     }
 
     if provider not in providers:

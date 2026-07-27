@@ -11,6 +11,10 @@ Provider is selected via the LINT_PROVIDER env var (default: mlx).
                           key via MISTRAL_API_KEY. NOTE: sends tester text to
                           an external service, and LINT_MODEL must be changed
                           away from the MLX model path when switching.
+  LINT_PROVIDER=hetzner   Hetzner experimental inference API (OpenAI-compatible),
+                          model via LINT_MODEL (default: Qwen/Qwen3.6-35B-A3B-FP8);
+                          key via HETZNER_API_KEY. Same external-service caveat as
+                          Mistral; leave LINT_MODEL unset to use the served model.
 
 Usage (Mac):
     /Users/antalb/opt/miniconda3/envs/py311/bin/uvicorn api:app --host 0.0.0.0 --port 8443 ...
