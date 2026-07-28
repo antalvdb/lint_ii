@@ -1,8 +1,8 @@
-import { css } from './core/stylesheet.js?v=29'
+import { css } from './core/stylesheet.js?v=30'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
-import { EditorController } from './core/editor.js?v=26'
+import { EditorController } from './core/editor.js?v=27'
 import { SuggestionPopupController } from './core/suggestion-popup.js?v=14'
 import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './core/word-diff.js?v=2'
 
@@ -203,6 +203,7 @@ export class LintIIVisualizer extends HTMLElement {
                 </button>
             </header>
             ${this.isEditorMode ? this.renderEditorToolbar() : ''}
+            ${this.renderTextSummary()}
             <div id="content-area">
                 <div data-view="sentences">
                     ${this.renderBlocks()}
@@ -300,6 +301,7 @@ export class LintIIVisualizer extends HTMLElement {
             levelOrig.textContent = `was ${origLevel}`
             levelOrig.hidden = !(level != null && origLevel != null && level !== origLevel)
         }
+        this.updateTextSummary()
     }
 
     /**
@@ -943,6 +945,59 @@ export class LintIIVisualizer extends HTMLElement {
 
     _fmtScore(v) {
         return v != null ? v.toFixed(1).replace('.', ',') : '—'
+    }
+
+    /**
+     * Rank the four LiNT kernmaten by reducible difficulty. Uses the live
+     * editor controller when present (so it reflects accepted suggestions);
+     * otherwise a throwaway controller gives the baseline diagnosis.
+     */
+    _getTextDiagnosis() {
+        const ctrl = this._editorController || new EditorController(this._data)
+        return ctrl.diagnoseText()
+    }
+
+    /**
+     * Whole-text summary card: a "biggest opportunity" headline plus the four
+     * kernmaten as ranked bars. Educational at-a-glance overview of what makes
+     * the text hard. Returns '' when metrics are unavailable (non-prose input).
+     */
+    renderTextSummary() {
+        const dims = this._getTextDiagnosis()
+        if (!dims) return ''
+
+        const top = dims[0]
+        const maxPoints = Math.max(...dims.map(d => d.points), 1)
+        const bars = dims.map(d => {
+            const pct = Math.round((d.points / maxPoints) * 100)
+            return `
+                <div class="ts-row${d.isProblem ? '' : ' ts-ok'}" title="${d.tip}">
+                    <span class="ts-label">${d.label}</span>
+                    <span class="ts-bar"><span class="ts-bar-fill" style="width:${pct}%"></span></span>
+                    <span class="ts-points">${Math.round(d.points)}</span>
+                </div>`
+        }).join('')
+
+        const headline = top.points > 0
+            ? `<div class="ts-headline">
+                   <span class="ts-headline-label">Grootste kans op verbetering</span>
+                   <span class="ts-headline-dim">${top.label}</span>
+                   <span class="ts-headline-tip">${top.tip}</span>
+               </div>`
+            : `<div class="ts-headline ts-balanced">
+                   De tekst scoort evenwichtig — geen kernmaat springt eruit.
+               </div>`
+
+        return `<section class="text-summary">
+                    ${headline}
+                    <div class="ts-bars">${bars}</div>
+                </section>`
+    }
+
+    /** Refresh the summary card in place after a suggestion change. */
+    updateTextSummary() {
+        const el = this.shadowRoot.querySelector('.text-summary')
+        if (el) el.outerHTML = this.renderTextSummary()
     }
 
     renderDocumentScores() {

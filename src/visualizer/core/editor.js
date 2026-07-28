@@ -357,6 +357,36 @@ export class EditorController {
         proportion_concrete: 16.001231,
     }
 
+    // Whole-text summary: per-kernmaat "easy-text" reference values. A dimension
+    // is a "problem" only in its harder-than-reference direction (low frequency,
+    // long dependencies, dense clauses, abstract language). The reducible
+    // difficulty is the coefficient-weighted gap from this reference, so the four
+    // dimensions are compared in the same score-point units. SEED values —
+    // TUNABLE, pending confirmation against the LiNT corpus norms.
+    static REFERENCE_PROFILE = {
+        freq_log: 5.0,                  // mean content-word Zipf; higher = easier
+        max_sdl: 3.0,                   // mean max dependency length; lower = easier
+        content_words_per_clause: 4.0,  // lower = easier
+        proportion_concrete: 0.55,      // higher = easier
+    }
+
+    // Per-dimension display copy (placeholder — refine wording). `worseIsHigher`
+    // marks the direction in which the dimension makes the text harder.
+    static DIMENSIONS = [
+        { key: 'freq_log', worseIsHigher: false,
+          label: 'Moeilijke woorden',
+          tip: 'Vervang laagfrequente woorden door gangbaardere synoniemen.' },
+        { key: 'max_sdl', worseIsHigher: true,
+          label: 'Lange, complexe zinnen',
+          tip: 'Splits lange zinnen; houd samen wat bij elkaar hoort.' },
+        { key: 'content_words_per_clause', worseIsHigher: true,
+          label: 'Veel informatie per zin',
+          tip: 'Verdeel de informatie over meer, kortere zinnen.' },
+        { key: 'proportion_concrete', worseIsHigher: false,
+          label: 'Veel abstracte taal',
+          tip: 'Maak abstracte begrippen concreter en aanschouwelijker.' },
+    ]
+
     /**
      * Extract per-sentence metrics from the original token data.
      */
@@ -393,7 +423,12 @@ export class EditorController {
      * For sentences with accepted suggestions, their precomputed new_sentence_metrics
      * replace the original metrics.
      */
-    computeUpdatedScore() {
+    /**
+     * Aggregate the effective (live, suggestion-aware) document-level kernmaten.
+     * Shared by the score recomputation and the whole-text diagnosis so both
+     * reflect accepted suggestions identically.
+     */
+    _computeDocMetrics() {
         let totalFreqSum = 0, totalFreqCount = 0
         const allSdls = []
         const allCwpcs = []
@@ -410,15 +445,54 @@ export class EditorController {
             totalUndefined += metrics.n_undefined
         }
 
-        const meanFreq = totalFreqCount > 0 ? totalFreqSum / totalFreqCount : null
-        const meanSdl = allSdls.length > 0
-            ? allSdls.reduce((a, b) => a + b, 0) / allSdls.length : null
-        const meanCwpc = allCwpcs.length > 0
-            ? allCwpcs.reduce((a, b) => a + b, 0) / allCwpcs.length : null
         const totalNouns = totalConcrete + totalAbstract + totalUndefined
-        const propConcrete = totalNouns > 0 ? totalConcrete / totalNouns : null
+        return {
+            meanFreq: totalFreqCount > 0 ? totalFreqSum / totalFreqCount : null,
+            meanSdl: allSdls.length > 0
+                ? allSdls.reduce((a, b) => a + b, 0) / allSdls.length : null,
+            meanCwpc: allCwpcs.length > 0
+                ? allCwpcs.reduce((a, b) => a + b, 0) / allCwpcs.length : null,
+            propConcrete: totalNouns > 0 ? totalConcrete / totalNouns : null,
+        }
+    }
 
-        return this._lintScore(meanFreq, meanSdl, meanCwpc, propConcrete)
+    computeUpdatedScore() {
+        const m = this._computeDocMetrics()
+        return this._lintScore(m.meanFreq, m.meanSdl, m.meanCwpc, m.propConcrete)
+    }
+
+    /**
+     * Whole-text summary: rank the four kernmaten by how much difficulty each
+     * contributes beyond its easy-text reference, so the reader sees at a glance
+     * what to improve first. Uses the effective (suggestion-aware) metrics, so
+     * it updates live as suggestions are accepted. Returns an array of
+     * { key, label, tip, value, reference, points, isProblem } sorted by points
+     * descending, or null when metrics are unavailable (e.g. non-prose input).
+     */
+    diagnoseText() {
+        const m = this._computeDocMetrics()
+        if (m.meanFreq == null || m.meanSdl == null
+            || m.meanCwpc == null || m.propConcrete == null) return null
+
+        const C = EditorController.COEFFICIENTS
+        const R = EditorController.REFERENCE_PROFILE
+        const value = {
+            freq_log: m.meanFreq,
+            max_sdl: m.meanSdl,
+            content_words_per_clause: m.meanCwpc,
+            proportion_concrete: m.propConcrete,
+        }
+        const dims = EditorController.DIMENSIONS.map(d => {
+            const v = value[d.key], ref = R[d.key]
+            // Gap in the harder-than-reference direction only; scaled by the
+            // (absolute) LiNT coefficient so all four are in score-point units.
+            const gap = d.worseIsHigher ? Math.max(0, v - ref) : Math.max(0, ref - v)
+            const points = gap * Math.abs(C[d.key])
+            return { key: d.key, label: d.label, tip: d.tip,
+                     value: v, reference: ref, points, isProblem: points > 0 }
+        })
+        dims.sort((a, b) => b.points - a.points)
+        return dims
     }
 
     /**

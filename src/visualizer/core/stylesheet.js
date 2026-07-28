@@ -961,6 +961,72 @@ export const css = `
         padding-top: 0.75rem;
     }
 
+    /* Whole-text summary: "biggest opportunity" headline + ranked kernmaat bars. */
+    .text-summary {
+        display: grid;
+        gap: 0.85em;
+        padding: 0.9em 1.1em;
+        border-bottom: 1px solid currentColor;
+        background: light-dark(hsl(60, 60%, 96%), hsl(60, 3%, 11%));
+    }
+    .text-summary .ts-headline {
+        display: grid;
+        gap: 0.15em;
+    }
+    .text-summary .ts-headline-label {
+        font-size: 0.72em;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.65;
+    }
+    .text-summary .ts-headline-dim {
+        font-size: 1.15em;
+        font-weight: 600;
+    }
+    .text-summary .ts-headline-tip {
+        font-size: 0.9em;
+        opacity: 0.8;
+    }
+    .text-summary .ts-headline.ts-balanced {
+        font-size: 0.95em;
+        opacity: 0.8;
+    }
+    .text-summary .ts-bars {
+        display: grid;
+        gap: 0.3em;
+    }
+    .text-summary .ts-row {
+        display: grid;
+        grid-template-columns: 12em 1fr 2.2em;
+        align-items: center;
+        gap: 0.6em;
+        font-size: 0.85em;
+    }
+    .text-summary .ts-row.ts-ok {
+        opacity: 0.45;
+    }
+    .text-summary .ts-bar {
+        height: 0.55em;
+        border-radius: 0.3em;
+        background: light-dark(hsl(60, 15%, 88%), hsl(60, 5%, 22%));
+        overflow: hidden;
+    }
+    .text-summary .ts-bar-fill {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--color-level-3);
+        transition: width 0.3s ease;
+    }
+    .text-summary .ts-row:first-child .ts-bar-fill {
+        background: var(--color-level-4);
+    }
+    .text-summary .ts-points {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        opacity: 0.7;
+    }
+
     /* Narrow screens: the header, document scores and toolbar are flex rows
        with a large gap and no wrap, which overflow horizontally on a phone.
        Shrink the gap and let them wrap so everything stays within the viewport. */
@@ -978,6 +1044,8 @@ export const css = `
         header .level-badge { font-size: 1.4em; }
         .editor-toolbar { flex-wrap: wrap; gap: 0.5rem; }
         .suggestion-counts { gap: 0.6rem; }
+        .text-summary { padding: 0.75em 0.9em; }
+        .text-summary .ts-row { grid-template-columns: 8.5em 1fr 2em; font-size: 0.8em; gap: 0.4em; }
         [data-view="sentences"] { font-size: 0.95em; padding-inline: .25em; }
         .word { padding-inline: .4em; }
         /* The closing bracket + level badge are the widest trailing unit and
