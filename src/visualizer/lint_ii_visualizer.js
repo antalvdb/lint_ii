@@ -1,4 +1,4 @@
-import { css } from './core/stylesheet.js?v=30'
+import { css } from './core/stylesheet.js?v=31'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
@@ -248,9 +248,6 @@ export class LintIIVisualizer extends HTMLElement {
                         <span class="count-label">genegeerd</span>
                     </span>
                 </div>
-                <button class="sem-type-toggle" title="Toon/verberg woordsoorten">
-                    Woordsoorten
-                </button>
                 <button class="copy-result-btn" title="Kopieer bewerkte tekst">
                     Kopieer resultaat
                 </button>
@@ -415,20 +412,6 @@ export class LintIIVisualizer extends HTMLElement {
     }
 
     setupEditorEventListeners() {
-        // Semantic type toggle
-        const semToggle = this.shadowRoot.querySelector('.sem-type-toggle')
-        if (semToggle) {
-            semToggle.addEventListener('click', () => {
-                if (this.dataset.showSemTypes) {
-                    delete this.dataset.showSemTypes
-                    semToggle.classList.remove('active')
-                } else {
-                    this.dataset.showSemTypes = '1'
-                    semToggle.classList.add('active')
-                }
-            })
-        }
-
         // Copy result button
         const copyBtn = this.shadowRoot.querySelector('.copy-result-btn')
         if (copyBtn) {

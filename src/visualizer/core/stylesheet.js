@@ -427,28 +427,11 @@ export const css = `
         --color-suggestion-ignored: hsla(0, 0%, 50%, 0.1);
     }
 
-    /* Hide semantic type colors in editor mode by default */
+    /* Editor mode never shows the semantic-type colors (those belong to the
+       analysis view); suggestion highlights use the word background instead. */
     :host([mode="editor"]) .word[data-sem-type] {
         background-color: transparent;
         color: inherit;
-    }
-
-    /* Show them when toggled on */
-    :host([mode="editor"][data-show-sem-types]) .word[data-sem-type="concrete"] {
-        background-color: var(--color-concrete);
-        color: black;
-    }
-    :host([mode="editor"][data-show-sem-types]) .word[data-sem-type="abstract"] {
-        background-color: var(--color-abstract);
-        color: black;
-    }
-    :host([mode="editor"][data-show-sem-types]) .word[data-sem-type="undefined"] {
-        background-color: var(--color-undefined);
-        color: black;
-    }
-    :host([mode="editor"][data-show-sem-types]) .word[data-sem-type="unknown"] {
-        background-color: var(--color-unknown);
-        color: black;
     }
 
     .editor-toolbar {
@@ -484,27 +467,6 @@ export const css = `
                 border-radius: 0.75em;
                 font-family: monospace;
                 font-size: 0.875em;
-            }
-        }
-
-        .sem-type-toggle {
-            padding: 0.375rem 0.75rem;
-            font-size: 0.875em;
-            color: currentColor;
-            background: transparent;
-            border: 1px solid currentColor;
-            border-radius: 0.25rem;
-            cursor: pointer;
-            opacity: 0.5;
-            transition: all 0.2s;
-
-            &:hover {
-                opacity: 0.8;
-            }
-
-            &.active {
-                opacity: 1;
-                background: color-mix(in oklch, currentColor 10%, transparent);
             }
         }
 
