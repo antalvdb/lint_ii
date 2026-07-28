@@ -1,8 +1,8 @@
-import { css } from './core/stylesheet.js?v=31'
+import { css } from './core/stylesheet.js?v=32'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
-import { EditorController } from './core/editor.js?v=28'
+import { EditorController } from './core/editor.js?v=29'
 import { SuggestionPopupController } from './core/suggestion-popup.js?v=14'
 import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './core/word-diff.js?v=2'
 
@@ -949,27 +949,45 @@ export class LintIIVisualizer extends HTMLElement {
         const dims = this._getTextDiagnosis()
         if (!dims) return ''
 
-        const top = dims[0]
-        const maxPoints = Math.max(...dims.map(d => d.points), 1)
+        // Bars are anchored to the baseline (original-text) difficulty, so they
+        // do not rescale as suggestions are accepted. Each bar shows a grey
+        // baseline segment with the coloured "still remaining" part on top; the
+        // grey tail that shows through is the difficulty already resolved.
+        const maxBase = Math.max(...dims.map(d => d.basePoints), 1)
         const bars = dims.map(d => {
-            const pct = Math.round((d.points / maxPoints) * 100)
+            const baseW = Math.round((d.basePoints / maxBase) * 100)
+            const curW = Math.round((d.curPoints / maxBase) * 100)
             return `
                 <div class="ts-row${d.isProblem ? '' : ' ts-ok'}" title="${d.tip}">
                     <span class="ts-label">${d.label}</span>
-                    <span class="ts-bar"><span class="ts-bar-fill" style="width:${pct}%"></span></span>
-                    <span class="ts-points">${Math.round(d.points)}</span>
+                    <span class="ts-bar">
+                        <span class="ts-bar-base" style="width:${baseW}%"></span>
+                        <span class="ts-bar-fill" style="width:${curW}%"></span>
+                    </span>
+                    <span class="ts-points">${Math.round(d.curPoints)}</span>
                 </div>`
         }).join('')
 
-        const headline = top.points > 0
-            ? `<div class="ts-headline">
+        // Headline tracks the biggest *remaining* opportunity, so it stays useful
+        // as edits land; once everything is handled it acknowledges the progress.
+        const top = [...dims].sort((a, b) => b.curPoints - a.curPoints)[0]
+        const hadProblem = dims.some(d => d.basePoints > 0.5)
+        let headline
+        if (top.curPoints > 0.5) {
+            headline = `<div class="ts-headline">
                    <span class="ts-headline-label">Grootste kans op verbetering</span>
                    <span class="ts-headline-dim">${top.label}</span>
                    <span class="ts-headline-tip">${top.tip}</span>
                </div>`
-            : `<div class="ts-headline ts-balanced">
+        } else if (hadProblem) {
+            headline = `<div class="ts-headline ts-balanced">
+                   Goed bezig — de grootste punten zijn nu aangepakt.
+               </div>`
+        } else {
+            headline = `<div class="ts-headline ts-balanced">
                    Deze tekst is goed in balans. Geen onderdeel valt op als lastig.
                </div>`
+        }
 
         return `<section class="text-summary">
                     ${headline}

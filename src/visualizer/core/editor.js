@@ -421,23 +421,18 @@ export class EditorController {
     }
 
     /**
-     * Compute the document LiNT score and level using current suggestion states.
-     * For sentences with accepted suggestions, their precomputed new_sentence_metrics
-     * replace the original metrics.
+     * Aggregate document-level kernmaten from a per-sentence metrics getter.
+     * getMetrics(i) supplies each sentence's metrics — effective (live) or
+     * baseline — so the same aggregation serves the score and the diagnosis.
      */
-    /**
-     * Aggregate the effective (live, suggestion-aware) document-level kernmaten.
-     * Shared by the score recomputation and the whole-text diagnosis so both
-     * reflect accepted suggestions identically.
-     */
-    _computeDocMetrics() {
+    _aggregateMetrics(getMetrics) {
         let totalFreqSum = 0, totalFreqCount = 0
         const allSdls = []
         const allCwpcs = []
         let totalConcrete = 0, totalAbstract = 0, totalUndefined = 0
 
         for (let i = 0; i < this._originalSentenceMetrics.length; i++) {
-            const metrics = this._getEffectiveMetrics(i)
+            const metrics = getMetrics(i)
             totalFreqSum += metrics.word_freq_sum
             totalFreqCount += metrics.word_freq_count
             allSdls.push(...metrics.sdl_values)
@@ -458,42 +453,68 @@ export class EditorController {
         }
     }
 
+    /** Live (accepted-suggestion-aware) document metrics. */
+    _computeDocMetrics() {
+        return this._aggregateMetrics(i => this._getEffectiveMetrics(i))
+    }
+
+    /** Original document metrics, ignoring any accepted suggestions. */
+    _computeBaselineDocMetrics() {
+        return this._aggregateMetrics(i => this._originalSentenceMetrics[i])
+    }
+
     computeUpdatedScore() {
         const m = this._computeDocMetrics()
         return this._lintScore(m.meanFreq, m.meanSdl, m.meanCwpc, m.propConcrete)
     }
 
     /**
-     * Whole-text summary: rank the four kernmaten by how much difficulty each
-     * contributes beyond its easy-text reference, so the reader sees at a glance
-     * what to improve first. Uses the effective (suggestion-aware) metrics, so
-     * it updates live as suggestions are accepted. Returns an array of
-     * { key, label, tip, value, reference, points, isProblem } sorted by points
-     * descending, or null when metrics are unavailable (e.g. non-prose input).
+     * Reducible difficulty (in LiNT score points) that one kernmaat contributes
+     * beyond its easy-text reference, for the given aggregated metrics: the gap
+     * in the harder-than-reference direction, scaled by the (absolute) LiNT
+     * coefficient so all four dimensions compare in the same units.
      */
-    diagnoseText() {
-        const m = this._computeDocMetrics()
-        if (m.meanFreq == null || m.meanSdl == null
-            || m.meanCwpc == null || m.propConcrete == null) return null
-
-        const C = EditorController.COEFFICIENTS
-        const R = EditorController.REFERENCE_PROFILE
-        const value = {
+    static _dimensionPoints(dim, m) {
+        const valueByKey = {
             freq_log: m.meanFreq,
             max_sdl: m.meanSdl,
             content_words_per_clause: m.meanCwpc,
             proportion_concrete: m.propConcrete,
         }
+        const v = valueByKey[dim.key]
+        const ref = EditorController.REFERENCE_PROFILE[dim.key]
+        const gap = dim.worseIsHigher ? Math.max(0, v - ref) : Math.max(0, ref - v)
+        return gap * Math.abs(EditorController.COEFFICIENTS[dim.key])
+    }
+
+    /**
+     * Whole-text summary. For each kernmaat returns both its baseline reducible
+     * difficulty (original text) and its current value (after accepted
+     * suggestions), so the UI can anchor each bar to the baseline and grey out
+     * the part already resolved. The current value is capped at the baseline: an
+     * edit that worsens a dimension past its start still shows a full bar, never
+     * one longer than where it began. Sorted by baseline size (stable order, so
+     * bars grey in place rather than reshuffling). Returns an array of
+     * { key, label, tip, basePoints, curPoints, resolved, isProblem }, or null
+     * when metrics are unavailable (e.g. non-prose input).
+     */
+    diagnoseText() {
+        const cur = this._computeDocMetrics()
+        const base = this._computeBaselineDocMetrics()
+        const ready = m => m.meanFreq != null && m.meanSdl != null
+            && m.meanCwpc != null && m.propConcrete != null
+        if (!ready(cur) || !ready(base)) return null
+
         const dims = EditorController.DIMENSIONS.map(d => {
-            const v = value[d.key], ref = R[d.key]
-            // Gap in the harder-than-reference direction only; scaled by the
-            // (absolute) LiNT coefficient so all four are in score-point units.
-            const gap = d.worseIsHigher ? Math.max(0, v - ref) : Math.max(0, ref - v)
-            const points = gap * Math.abs(C[d.key])
-            return { key: d.key, label: d.label, tip: d.tip,
-                     value: v, reference: ref, points, isProblem: points > 0 }
+            const basePoints = EditorController._dimensionPoints(d, base)
+            const curPoints = Math.min(EditorController._dimensionPoints(d, cur), basePoints)
+            return {
+                key: d.key, label: d.label, tip: d.tip,
+                basePoints, curPoints, resolved: basePoints - curPoints,
+                isProblem: basePoints > 0,
+            }
         })
-        dims.sort((a, b) => b.points - a.points)
+        dims.sort((a, b) => b.basePoints - a.basePoints)
         return dims
     }
 

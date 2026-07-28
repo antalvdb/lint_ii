@@ -968,13 +968,25 @@ export const css = `
         opacity: 0.45;
     }
     .text-summary .ts-bar {
+        position: relative;
         height: 0.55em;
         border-radius: 0.3em;
-        background: light-dark(hsl(60, 15%, 88%), hsl(60, 5%, 22%));
+        background: light-dark(hsl(60, 15%, 92%), hsl(60, 5%, 16%));
         overflow: hidden;
     }
+    /* Grey baseline segment (whole original problem). The tail that shows
+       through behind the coloured fill is the difficulty already resolved. */
+    .text-summary .ts-bar-base {
+        position: absolute;
+        inset: 0 auto 0 0;
+        height: 100%;
+        border-radius: inherit;
+        background: light-dark(hsl(60, 8%, 76%), hsl(60, 4%, 34%));
+    }
+    /* Coloured "still remaining" segment, painted over the grey baseline. */
     .text-summary .ts-bar-fill {
-        display: block;
+        position: absolute;
+        inset: 0 auto 0 0;
         height: 100%;
         border-radius: inherit;
         background: var(--color-level-3);
