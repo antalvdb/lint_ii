@@ -372,19 +372,21 @@ export class EditorController {
 
     // Per-dimension display copy (placeholder — refine wording). `worseIsHigher`
     // marks the direction in which the dimension makes the text harder.
+    // Copy is deliberately plain and high-frequency: the tool should itself
+    // model the readable writing it recommends.
     static DIMENSIONS = [
         { key: 'freq_log', worseIsHigher: false,
           label: 'Moeilijke woorden',
-          tip: 'Vervang laagfrequente woorden door gangbaardere synoniemen.' },
+          tip: 'Kies vaker een gewoon woord dat veel mensen kennen.' },
         { key: 'max_sdl', worseIsHigher: true,
-          label: 'Lange, complexe zinnen',
-          tip: 'Splits lange zinnen; houd samen wat bij elkaar hoort.' },
+          label: 'Lange, ingewikkelde zinnen',
+          tip: 'Maak van een lange zin twee korte zinnen.' },
         { key: 'content_words_per_clause', worseIsHigher: true,
           label: 'Veel informatie per zin',
-          tip: 'Verdeel de informatie over meer, kortere zinnen.' },
+          tip: 'Zet niet te veel in één zin. Verdeel het over meer zinnen.' },
         { key: 'proportion_concrete', worseIsHigher: false,
           label: 'Veel abstracte taal',
-          tip: 'Maak abstracte begrippen concreter en aanschouwelijker.' },
+          tip: 'Gebruik woorden waar mensen zich iets bij kunnen voorstellen.' },
     ]
 
     /**

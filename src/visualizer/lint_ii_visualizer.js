@@ -2,7 +2,7 @@ import { css } from './core/stylesheet.js?v=30'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
-import { EditorController } from './core/editor.js?v=27'
+import { EditorController } from './core/editor.js?v=28'
 import { SuggestionPopupController } from './core/suggestion-popup.js?v=14'
 import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './core/word-diff.js?v=2'
 
@@ -985,7 +985,7 @@ export class LintIIVisualizer extends HTMLElement {
                    <span class="ts-headline-tip">${top.tip}</span>
                </div>`
             : `<div class="ts-headline ts-balanced">
-                   De tekst scoort evenwichtig — geen kernmaat springt eruit.
+                   Deze tekst is goed in balans. Geen onderdeel valt op als lastig.
                </div>`
 
         return `<section class="text-summary">
