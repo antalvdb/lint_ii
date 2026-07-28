@@ -72,6 +72,11 @@ export class EditorController {
         this._originalSentenceMetrics = this._computeOriginalMetrics()
         this._originalDocumentScore = data.document_lint_score
         this._originalDocumentLevel = data.document_difficulty_level
+        // Freeze the baseline (original-text) kernmaten now, so the whole-text
+        // summary measures resolved progress against a fixed reference. Accepting
+        // a split rewrites per-sentence metrics, so recomputing the baseline live
+        // would let it drift (bars could exceed their start, order could flip).
+        this._baselineDocMetrics = this._computeBaselineDocMetrics()
     }
 
     /**
@@ -500,7 +505,7 @@ export class EditorController {
      */
     diagnoseText() {
         const cur = this._computeDocMetrics()
-        const base = this._computeBaselineDocMetrics()
+        const base = this._baselineDocMetrics
         const ready = m => m.meanFreq != null && m.meanSdl != null
             && m.meanCwpc != null && m.propConcrete != null
         if (!ready(cur) || !ready(base)) return null
