@@ -72,11 +72,6 @@ export class EditorController {
         this._originalSentenceMetrics = this._computeOriginalMetrics()
         this._originalDocumentScore = data.document_lint_score
         this._originalDocumentLevel = data.document_difficulty_level
-        // Freeze the baseline (original-text) kernmaten now, so the whole-text
-        // summary measures resolved progress against a fixed reference. Accepting
-        // a split rewrites per-sentence metrics, so recomputing the baseline live
-        // would let it drift (bars could exceed their start, order could flip).
-        this._baselineDocMetrics = this._computeBaselineDocMetrics()
     }
 
     /**
@@ -362,37 +357,37 @@ export class EditorController {
         proportion_concrete: 16.001231,
     }
 
-    // Whole-text summary: per-kernmaat "easy-text" reference values. A dimension
-    // is a "problem" only in its harder-than-reference direction (low frequency,
-    // long dependencies, dense clauses, abstract language). The reducible
-    // difficulty is the coefficient-weighted gap from this reference, so the four
-    // dimensions are compared in the same score-point units. SEED values —
-    // TUNABLE, pending confirmation against the LiNT corpus norms.
-    static REFERENCE_PROFILE = {
-        freq_log: 5.0,                  // mean content-word Zipf; higher = easier
-        max_sdl: 3.0,                   // mean max dependency length; lower = easier
-        content_words_per_clause: 4.0,  // lower = easier
-        proportion_concrete: 0.55,      // higher = easier
-    }
-
-    // Per-dimension display copy (placeholder — refine wording). `worseIsHigher`
-    // marks the direction in which the dimension makes the text harder.
+    // Per-dimension display copy for the whole-text summary.
     // Copy is deliberately plain and high-frequency: the tool should itself
     // model the readable writing it recommends.
     static DIMENSIONS = [
-        { key: 'freq_log', worseIsHigher: false,
+        { key: 'freq_log',
           label: 'Moeilijke woorden',
           tip: 'Kies vaker een gewoon woord dat veel mensen kennen.' },
-        { key: 'max_sdl', worseIsHigher: true,
-          label: 'Lange, ingewikkelde zinnen',
+        { key: 'max_sdl',
+          label: 'Ingewikkelde zinnen',
           tip: 'Maak van een lange zin twee korte zinnen.' },
-        { key: 'content_words_per_clause', worseIsHigher: true,
+        { key: 'content_words_per_clause',
           label: 'Veel informatie per zin',
           tip: 'Zet niet te veel in één zin. Verdeel het over meer zinnen.' },
-        { key: 'proportion_concrete', worseIsHigher: false,
+        { key: 'proportion_concrete',
           label: 'Veel abstracte taal',
           tip: 'Gebruik woorden waar mensen zich iets bij kunnen voorstellen.' },
     ]
+
+    // Which summary dimension each trigger/suggestion type addresses. Types
+    // outside the four LiNT kernmaten (spelling, passive, connective,
+    // enumeration) are deliberately unmapped: they are worth accepting but do
+    // not belong under any of the four bars. A consolidated sentence_rewrite
+    // maps via its component_types instead.
+    static TRIGGER_DIMENSIONS = {
+        word_frequency: 'freq_log',
+        max_sdl: 'max_sdl',
+        sentence_length: 'max_sdl',
+        subordinate_clause: 'max_sdl',
+        content_words_per_clause: 'content_words_per_clause',
+        abstract_nouns: 'proportion_concrete',
+    }
 
     /**
      * Extract per-sentence metrics from the original token data.
@@ -463,63 +458,55 @@ export class EditorController {
         return this._aggregateMetrics(i => this._getEffectiveMetrics(i))
     }
 
-    /** Original document metrics, ignoring any accepted suggestions. */
-    _computeBaselineDocMetrics() {
-        return this._aggregateMetrics(i => this._originalSentenceMetrics[i])
-    }
-
     computeUpdatedScore() {
         const m = this._computeDocMetrics()
         return this._lintScore(m.meanFreq, m.meanSdl, m.meanCwpc, m.propConcrete)
     }
 
     /**
-     * Reducible difficulty (in LiNT score points) that one kernmaat contributes
-     * beyond its easy-text reference, for the given aggregated metrics: the gap
-     * in the harder-than-reference direction, scaled by the (absolute) LiNT
-     * coefficient so all four dimensions compare in the same units.
-     */
-    static _dimensionPoints(dim, m) {
-        const valueByKey = {
-            freq_log: m.meanFreq,
-            max_sdl: m.meanSdl,
-            content_words_per_clause: m.meanCwpc,
-            proportion_concrete: m.propConcrete,
-        }
-        const v = valueByKey[dim.key]
-        const ref = EditorController.REFERENCE_PROFILE[dim.key]
-        const gap = dim.worseIsHigher ? Math.max(0, v - ref) : Math.max(0, ref - v)
-        return gap * Math.abs(EditorController.COEFFICIENTS[dim.key])
-    }
-
-    /**
-     * Whole-text summary. For each kernmaat returns both its baseline reducible
-     * difficulty (original text) and its current value (after accepted
-     * suggestions), so the UI can anchor each bar to the baseline and grey out
-     * the part already resolved. The current value is capped at the baseline: an
-     * edit that worsens a dimension past its start still shows a full bar, never
-     * one longer than where it began. Sorted by baseline size (stable order, so
-     * bars grey in place rather than reshuffling). Returns an array of
-     * { key, label, tip, basePoints, curPoints, resolved, isProblem }, or null
-     * when metrics are unavailable (e.g. non-prose input).
+     * Whole-text summary. The unit is CASES: each suggestion cluster (one
+     * highlighted spot the user can act on) counts once toward every kernmaat
+     * it addresses — a consolidated rewrite may count in more than one bar.
+     * Per kernmaat returns the total number of cases found and how many are
+     * still remaining (not accepted; ignoring a case keeps it remaining — the
+     * bar tracks problems actually fixed, not decisions made). Sorted by total
+     * descending (stable order, so bars grey in place rather than reshuffling).
+     * Returns an array of { key, label, tip, total, remaining, resolved,
+     * isProblem }, or null when there are no suggestions at all.
      */
     diagnoseText() {
-        const cur = this._computeDocMetrics()
-        const base = this._baselineDocMetrics
-        const ready = m => m.meanFreq != null && m.meanSdl != null
-            && m.meanCwpc != null && m.propConcrete != null
-        if (!ready(cur) || !ready(base)) return null
+        const byKey = new Map(EditorController.DIMENSIONS.map(
+            d => [d.key, { total: 0, remaining: 0 }]
+        ))
+        for (const [clusterId, cluster] of this._clusters) {
+            const dims = new Set()
+            for (const sid of cluster.suggestionIds) {
+                const s = this.getSuggestion(sid)
+                if (!s) continue
+                const types = s.type === 'sentence_rewrite'
+                    ? (s.component_types ?? []) : [s.type]
+                for (const t of types) {
+                    const key = EditorController.TRIGGER_DIMENSIONS[t]
+                    if (key) dims.add(key)
+                }
+            }
+            const accepted = this.getClusterState(clusterId) === 'accepted'
+            for (const key of dims) {
+                const c = byKey.get(key)
+                c.total++
+                if (!accepted) c.remaining++
+            }
+        }
 
         const dims = EditorController.DIMENSIONS.map(d => {
-            const basePoints = EditorController._dimensionPoints(d, base)
-            const curPoints = Math.min(EditorController._dimensionPoints(d, cur), basePoints)
+            const { total, remaining } = byKey.get(d.key)
             return {
                 key: d.key, label: d.label, tip: d.tip,
-                basePoints, curPoints, resolved: basePoints - curPoints,
-                isProblem: basePoints > 0,
+                total, remaining, resolved: total - remaining,
+                isProblem: total > 0,
             }
         })
-        dims.sort((a, b) => b.basePoints - a.basePoints)
+        dims.sort((a, b) => b.total - a.total)
         return dims
     }
 

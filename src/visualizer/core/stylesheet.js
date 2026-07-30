@@ -959,7 +959,7 @@ export const css = `
     }
     .text-summary .ts-row {
         display: grid;
-        grid-template-columns: 12em 1fr 2.2em;
+        grid-template-columns: 12em 1fr 4.5em;
         align-items: center;
         gap: 0.6em;
         font-size: 0.85em;
@@ -1019,7 +1019,7 @@ export const css = `
         .editor-toolbar { flex-wrap: wrap; gap: 0.5rem; }
         .suggestion-counts { gap: 0.6rem; }
         .text-summary { padding: 0.75em 0.9em; }
-        .text-summary .ts-row { grid-template-columns: 8.5em 1fr 2em; font-size: 0.8em; gap: 0.4em; }
+        .text-summary .ts-row { grid-template-columns: 8.5em 1fr 4em; font-size: 0.8em; gap: 0.4em; }
         [data-view="sentences"] { font-size: 0.95em; padding-inline: .25em; }
         .word { padding-inline: .4em; }
         /* The closing bracket + level badge are the widest trailing unit and

@@ -1,8 +1,8 @@
-import { css } from './core/stylesheet.js?v=32'
+import { css } from './core/stylesheet.js?v=33'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
-import { EditorController } from './core/editor.js?v=30'
+import { EditorController } from './core/editor.js?v=31'
 import { SuggestionPopupController } from './core/suggestion-popup.js?v=14'
 import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './core/word-diff.js?v=2'
 
@@ -136,6 +136,7 @@ export class LintIIVisualizer extends HTMLElement {
             this._editorController.addSuggestion(suggestion)
             this._rerenderSentence(suggestion.sentence_index)
             this.updateEditorToolbar()
+            this.updateTextSummary()
         }
 
         const contentArea = this.shadowRoot.querySelector('#content-area')
@@ -931,32 +932,38 @@ export class LintIIVisualizer extends HTMLElement {
     }
 
     /**
-     * Rank the four LiNT kernmaten by reducible difficulty. Uses the live
-     * editor controller when present (so it reflects accepted suggestions);
-     * otherwise a throwaway controller gives the baseline diagnosis.
+     * Rank the four LiNT kernmaten by number of cases found. Needs the live
+     * editor controller: cases exist only once suggestions have arrived, so
+     * in analysis mode (no suggestions yet) there is nothing to diagnose.
      */
     _getTextDiagnosis() {
-        const ctrl = this._editorController || new EditorController(this._data)
-        return ctrl.diagnoseText()
+        return this._editorController ? this._editorController.diagnoseText() : null
     }
 
     /**
      * Whole-text summary card: a "biggest opportunity" headline plus the four
-     * kernmaten as ranked bars. Educational at-a-glance overview of what makes
-     * the text hard. Returns '' when metrics are unavailable (non-prose input).
+     * kernmaten as ranked bars. The unit is cases: each bar shows how many
+     * spots the tool found for that kernmaat, and greys out as they are
+     * accepted. Renders a hidden shell before suggestions arrive, so
+     * updateTextSummary always has an element to replace in place.
      */
     renderTextSummary() {
         const dims = this._getTextDiagnosis()
-        if (!dims) return ''
+        if (!dims || !dims.some(d => d.total > 0)) {
+            return '<section class="text-summary" hidden></section>'
+        }
 
-        // Bars are anchored to the baseline (original-text) difficulty, so they
-        // do not rescale as suggestions are accepted. Each bar shows a grey
-        // baseline segment with the coloured "still remaining" part on top; the
-        // grey tail that shows through is the difficulty already resolved.
-        const maxBase = Math.max(...dims.map(d => d.basePoints), 1)
+        // Bars are anchored to the total number of cases found, so they do not
+        // rescale as suggestions are accepted. Each bar shows a grey baseline
+        // segment with the coloured "still remaining" part on top; the grey
+        // tail that shows through is the cases already fixed.
+        const maxTotal = Math.max(...dims.map(d => d.total), 1)
         const bars = dims.map(d => {
-            const baseW = Math.round((d.basePoints / maxBase) * 100)
-            const curW = Math.round((d.curPoints / maxBase) * 100)
+            const baseW = Math.round((d.total / maxTotal) * 100)
+            const curW = Math.round((d.remaining / maxTotal) * 100)
+            const count = d.isProblem
+                ? (d.resolved > 0 ? `${d.remaining} van ${d.total}` : `${d.total}`)
+                : '0'
             return `
                 <div class="ts-row${d.isProblem ? '' : ' ts-ok'}" title="${d.tip}">
                     <span class="ts-label">${d.label}</span>
@@ -964,28 +971,23 @@ export class LintIIVisualizer extends HTMLElement {
                         <span class="ts-bar-base" style="width:${baseW}%"></span>
                         <span class="ts-bar-fill" style="width:${curW}%"></span>
                     </span>
-                    <span class="ts-points">${Math.round(d.curPoints)}</span>
+                    <span class="ts-points">${count}</span>
                 </div>`
         }).join('')
 
         // Headline tracks the biggest *remaining* opportunity, so it stays useful
         // as edits land; once everything is handled it acknowledges the progress.
-        const top = [...dims].sort((a, b) => b.curPoints - a.curPoints)[0]
-        const hadProblem = dims.some(d => d.basePoints > 0.5)
+        const top = [...dims].sort((a, b) => b.remaining - a.remaining)[0]
         let headline
-        if (top.curPoints > 0.5) {
+        if (top.remaining > 0) {
             headline = `<div class="ts-headline">
                    <span class="ts-headline-label">Grootste kans op verbetering</span>
                    <span class="ts-headline-dim">${top.label}</span>
                    <span class="ts-headline-tip">${top.tip}</span>
                </div>`
-        } else if (hadProblem) {
-            headline = `<div class="ts-headline ts-balanced">
-                   Goed bezig — de grootste punten zijn nu aangepakt.
-               </div>`
         } else {
             headline = `<div class="ts-headline ts-balanced">
-                   Deze tekst is goed in balans. Geen onderdeel valt op als lastig.
+                   Goed bezig — de gevonden punten zijn nu aangepakt.
                </div>`
         }
 
