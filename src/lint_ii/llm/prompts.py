@@ -186,12 +186,12 @@ Geef TWEE varianten, zodat de gebruiker zelf kan kiezen:
 
 Als de twee varianten inhoudelijk hetzelfde zouden zijn (er valt niets te splitsen), geef dan bij beide dezelfde tekst.
 
-Houd je aan de richtlijnen: behoud de betekenis, de toon en de vakinhoud, voeg niets nieuws toe, en verander niet meer dan nodig is om de genoemde knelpunten op te lossen.
+Houd je aan de richtlijnen: behoud de betekenis, de toon en de vakinhoud, voeg niets nieuws toe, en verander niet meer dan nodig is om de genoemde knelpunten op te lossen. Schrijf de uitleg onpersoonlijk: beschrijf wat er is veranderd, niet in de ik-vorm (dus niet "Ik heb ...").
 
 Geef je antwoord in het volgende formaat:
 BEHOUDEND: [de herschreven zin, niet gesplitst]
 VOLLEDIG: [de herschreven zin of zinnen]
-UITLEG: [hoogstens tien woorden: wat er is veranderd — geen vakjargon]"""
+UITLEG: [hoogstens tien woorden, onpersoonlijk: wat er is veranderd — geen vakjargon]"""
     ),
 
     "word_frequency_bundle": PromptTemplate(
