@@ -342,6 +342,54 @@ class SuggestionEngine:
 
         return triggers
 
+    # Separable verb particles, for the word-family frequency guard: a particle
+    # verb like 'meebewegen' is morphologically transparent from its base
+    # ('bewegen'), so the base's frequency stands in for the family's
+    # familiarity. All prefix matches are tried ('op' and 'open' both, for
+    # 'opendoen'), so order does not matter.
+    _SEPARABLE_PARTICLES = (
+        "tegen", "terug", "samen", "langs", "tussen", "achter", "binnen",
+        "buiten", "boven", "onder", "voort", "vooruit", "verder",
+        "door", "over", "voor", "weg", "mee", "aan", "af", "op", "uit", "in",
+        "na", "toe", "om", "bij", "neer", "open", "dicht", "vast", "los",
+        "rond",
+    )
+
+    def _family_frequency(self, wf: "WordFeatures") -> float | None:
+        """Best known Zipf frequency of the word's morphological family.
+
+        A rare surface form of a common word family is not a hard word (Baayen:
+        familiarity lives at the family level — 'koelere' is as easy as 'koel').
+        Considers the lemma and, for verbs, the particle-stripped base of a
+        separable verb ('meebewegen' → 'bewegen'). Returns None when no family
+        relative has a known frequency.
+        """
+        from lint_ii.linguistic_data.wordlists import FREQ_DATA
+        candidates = []
+        lemma_freq = FREQ_DATA.get(wf.lemma)
+        if lemma_freq is not None:
+            candidates.append(lemma_freq)
+        if wf.token.pos_ == "VERB":
+            for particle in self._SEPARABLE_PARTICLES:
+                if wf.lemma.startswith(particle):
+                    base = wf.lemma[len(particle):]
+                    if len(base) >= 4 and (f := FREQ_DATA.get(base)) is not None:
+                        candidates.append(f)
+        if wf.token.pos_ == "NOUN":
+            # Diminutives belong to their base's family (kraampje → kraam).
+            # Tried on the surface form as well as the lemma, because spaCy
+            # lemmatizes some diminutive plurals badly (kraampjes → 'kraamp').
+            # Allomorphs ('netje' in mannetje → man) are tried alongside; a
+            # wrong strip just misses FREQ_DATA and contributes nothing.
+            for form in {wf.lemma, wf.text}:
+                for suffix in ("netjes", "netje", "etjes", "etje", "pjes",
+                               "pje", "kjes", "kje", "tjes", "tje", "jes", "je"):
+                    if form.endswith(suffix):
+                        base = form[: -len(suffix)]
+                        if len(base) >= 3 and (f := FREQ_DATA.get(base)) is not None:
+                            candidates.append(f)
+        return max(candidates) if candidates else None
+
     def _check_word_frequency(
         self,
         sent_analysis: "SentenceAnalysis",
@@ -355,6 +403,18 @@ class SuggestionEngine:
         for word_idx, wf in enumerate(sent_analysis.word_features):
             freq = wf.word_frequency
             if freq is not None and freq < threshold:
+                # Word-family guard: skip when a morphological relative (lemma,
+                # separable-verb base) is frequent enough — the reader knows the
+                # family, so the rare surface form needs no replacement (and the
+                # LLM would otherwise swap within the family: koelere → koele).
+                family = self._family_frequency(wf)
+                if family is not None and family >= threshold:
+                    logger.debug(
+                        "Skipping word_frequency trigger %r (%.2f): "
+                        "word family is frequent (%.2f)",
+                        wf.text, freq, family,
+                    )
+                    continue
                 # Get context (surrounding words)
                 context = sentence_text
                 triggers.append(
@@ -1182,13 +1242,29 @@ class SuggestionEngine:
     # may be split into a clearer word group (see _replacement_passes_band).
     _COMPOUND_MIN_LEN = 15
 
+    @staticmethod
+    def _same_word_family(a: str, b: str) -> bool:
+        """Heuristic: two words are inflectional/derivational variants of the
+        same family when they share a long common prefix and differ only in
+        short endings (koelere/koele, tiental/tientallen). Swapping within a
+        family is never a simplification — the reader already knows the family.
+        """
+        a, b = a.lower(), b.lower()
+        common = 0
+        for ca, cb in zip(a, b):
+            if ca != cb:
+                break
+            common += 1
+        return common >= 5 and len(a) - common <= 3 and len(b) - common <= 3
+
     def _replacement_passes_band(
         self, trigger_word: str, replacement_word: str | None, original_freq: float
     ) -> bool:
         """Whether a word_frequency replacement is worth keeping.
 
         A single-word replacement must sit in a higher Zipf band than the
-        original (a marginal or equal-band swap isn't worth the risk). A
+        original (a marginal or equal-band swap isn't worth the risk) and must
+        not be a form of the same word family. A
         MULTI-word replacement is a rephrasing, not a swap — a phrase has no
         single frequency to band-check — and is accepted only when the original
         is a long compound with no simple synonym, which is exactly the case a
@@ -1200,6 +1276,8 @@ class SuggestionEngine:
         rep = replacement_word.strip()
         if " " in rep:
             return len(trigger_word or "") >= self._COMPOUND_MIN_LEN
+        if trigger_word and self._same_word_family(trigger_word, rep):
+            return False
         from lint_ii.linguistic_data.wordlists import FREQ_DATA
         zero_count_freq = 1.359228547196266
         return self._in_higher_freq_band(
@@ -1951,7 +2029,8 @@ class SuggestionEngine:
             trigger.word, replacement_word, trigger.feature_value
         ):
             logger.info(
-                "Dropping bundled word_frequency suggestion: %r -> %r not in a higher band",
+                "Dropping bundled word_frequency suggestion: %r -> %r not in a "
+                "higher band (or same word family)",
                 trigger.word, replacement_word,
             )
             return None
@@ -2068,7 +2147,8 @@ class SuggestionEngine:
                         trigger.word, replacement_word, trigger.feature_value)):
                 logger.info(
                     "Dropping word_frequency suggestion: replacement '%s' for '%s' (%.2f) "
-                    "not in a higher frequency band (and not a compound split)",
+                    "not in a higher frequency band, same word family, or not a "
+                    "compound split",
                     replacement_word, trigger.word, trigger.feature_value,
                 )
                 return None
