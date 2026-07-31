@@ -388,6 +388,17 @@ class SuggestionEngine:
                         base = form[: -len(suffix)]
                         if len(base) >= 3 and (f := FREQ_DATA.get(base)) is not None:
                             candidates.append(f)
+        if wf.token.pos_ == "ADJ":
+            # Comparatives/superlatives and inflected adjectives belong to the
+            # base adjective's family (koelere → koel). Tried on the surface
+            # form as well, because spaCy leaves some comparatives
+            # unlemmatized (warmere → 'warmere').
+            for form in {wf.lemma, wf.text}:
+                for suffix in ("ere", "er", "ste", "st", "e"):
+                    if form.endswith(suffix):
+                        base = form[: -len(suffix)]
+                        if len(base) >= 3 and (f := FREQ_DATA.get(base)) is not None:
+                            candidates.append(f)
         return max(candidates) if candidates else None
 
     def _check_word_frequency(
