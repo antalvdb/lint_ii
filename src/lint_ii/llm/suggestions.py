@@ -907,6 +907,17 @@ class SuggestionEngine:
                 )
                 continue
 
+            # A multi-word correction that still contains the original word is
+            # a pure insertion ("kreeg" → "kreeg niet"): the model is rewriting
+            # the sentence, not correcting the word. Splits of the word itself
+            # ("teveel" → "te veel") do not contain the original and pass.
+            if len(correction.split()) > 1 and word in correction.split():
+                logger.info(
+                    "Spelling suggestion discarded: correction '%s' merely inserts "
+                    "words around '%s'", correction[:80], word,
+                )
+                continue
+
             # Map category to normalized value
             if "spel" in category_raw:
                 error_category = "spelling"
@@ -958,23 +969,12 @@ class SuggestionEngine:
             except Exception:
                 pass
 
-            # For spelling (not grammar) suggestions, skip if the correction is not
-            # more frequent than the original — this filters LLM hallucinations where
-            # a correctly-spelled but rare word is "corrected" to an equally rare one.
-            # (Kept as a strict > rather than a frequency-band test: a real spelling
-            # fix between same-band words is still worth applying.)
-            if error_category == "spelling":
-                from lint_ii.linguistic_data.wordlists import FREQ_DATA
-                zero_count_freq = 1.359228547196266
-                original_freq = FREQ_DATA.get(word.lower(), zero_count_freq)
-                correction_freq = FREQ_DATA.get(correction.lower(), zero_count_freq)
-                if correction_freq <= original_freq:
-                    logger.info(
-                        "Spelling suggestion skipped: correction '%s' (%.2f) not more "
-                        "frequent than original '%s' (%.2f)",
-                        correction, correction_freq, word, original_freq,
-                    )
-                    continue
+            if not self._correction_plausible(word, correction, error_category):
+                logger.info(
+                    "Spelling suggestion skipped: implausible correction "
+                    "'%s' -> '%s' (%s)", word, correction, error_category,
+                )
+                continue
 
             suggestions.append(Suggestion(
                 id=str(uuid.uuid4())[:8],
@@ -991,6 +991,46 @@ class SuggestionEngine:
             ))
 
         return suggestions
+
+    @staticmethod
+    def _correction_plausible(word: str, correction: str, error_category: str) -> bool:
+        """Whether a spelling/grammar correction is structurally plausible.
+
+        Applied REGARDLESS of the model's category label — hallucinated
+        'corrections' of correct words arrive labeled grammatica/zinsbouw just
+        as often as spelfout (eval set 4: vogeltelling → 'vogelhelling',
+        telformulieren → 'teelformulieren'). Deterministic shape rules:
+
+        - A split of the word itself ("teveel" → "te veel") is plausible.
+        - A same-stem inflection change (word/wordt, loop/loopt, aparte/apart)
+          is plausible: that is what real grammar fixes look like. Frequency
+          direction is meaningless there (context decides).
+        - A short function/auxiliary word swap (de/het, kan/kunt, hun/zij;
+          both ≤ 4 chars) is plausible for the same reason.
+        - Anything else replaces one stem with another, and a genuine fix then
+          lands on a MORE frequent word (a typo is rarer than its correction).
+          Equal-or-rarer means the model swapped a correct word for a
+          different one — reject. This extends the old spelling-only
+          frequency rule to every category label.
+        """
+        w, c = word.lower(), correction.lower()
+        if c.replace(" ", "") == w:
+            return True
+        if " " not in c:
+            common = 0
+            for cw, cc in zip(w, c):
+                if cw != cc:
+                    break
+                common += 1
+            if common >= max(3, min(len(w), len(c)) - 2):
+                return True
+            if len(w) <= 4 and len(c) <= 4:
+                return True
+        from lint_ii.linguistic_data.wordlists import FREQ_DATA
+        zero_count_freq = 1.359228547196266
+        original_freq = FREQ_DATA.get(w, zero_count_freq)
+        correction_freq = FREQ_DATA.get(c, zero_count_freq)
+        return correction_freq > original_freq
 
     def generate_suggestions(
         self,
