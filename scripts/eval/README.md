@@ -55,7 +55,11 @@ provably suppresses them.
 | 2 | 0.88 / 1.00 | 0.86 / 1.00 | — | — |
 | 3 | 0.88 / 0.98 | 0.86 / 0.95 | — | — |
 | 4 | — | — | 0.90 / 0.92 | **0.91 / 0.95** (re-run 2026-07-31) |
-| 5 | — | — | 0.94 / 0.95 | **0.95 / 0.95** (re-run 2026-07-31) |
+| 5 | — | — | 0.94 / 0.95 | **0.95 / 0.97** (2nd re-run 2026-07-31, `a4246f3`) |
+
+Set 5 was run twice on 2026-07-31: 0.95 / 0.95 at `8397cae`+`c7fdb54`, then
+0.95 / 0.97 after the no-op fix (`a4246f3`). Both runs are described below;
+read the two together, because most of the movement between them is variance.
 
 Set-4 notes: family guard 5/5, zero same-family swaps; recall dip was
 connective (6/10, since fixed to 8/10) plus one wordfreq FN; the spelling
@@ -168,6 +172,28 @@ Also seen: on spelling-4 and spelling-6 the connective pass merged sentences
 that still contain the planted typo ("...kwam onmiddelijk in actie, dus..."),
 since it does not spell-check. Harmless to scoring, but a tester would see a
 suggestion containing a visible misspelling.
+
+Set-5 SECOND re-run (2026-07-31, after `a4246f3`): **0.95 / 0.97**. A good
+illustration of how little a single 100-item run resolves — one real fix,
+otherwise noise:
+
+- **conj-3 is gone from the FPs.** That is the one change attributable to the
+  commit, and the live probe agrees (the input now yields no suggestions).
+- Precision did NOT move, because an unrelated FP replaced it: `family-4`
+  drew a `max_sdl` rewrite ("Wie durft, mag na de les een stukje
+  terugzwemmen..." → "Na de les mag wie durft..."). `a4246f3` only removes
+  suggestions from the bundled word-frequency path, and family-4 produced
+  nothing at all in the previous run, so this is the max_sdl pass wobbling.
+  Note family-4's `must_not` is word_frequency — the family guard HELD.
+- Recall 0.95 → 0.97 is the conn-5/conn-6 wobble landing favourably: conn-6
+  fired, taking connective to 8/10. Both are ~1-in-6 firers under the old and
+  new prompt alike, so anything in 7-9/10 means "unchanged". Spelling 6/6.
+
+Emerging pattern worth a decision: 2 of the 3 surviving FPs (url-1, family-4)
+are now `max_sdl` firing on borderline-length sentences and producing
+DEFENSIBLE rewrites rather than errors. That is a scoring-convention question
+(should a sound rewrite of a 13-word sentence count against precision?) more
+than a quality defect — worth settling before chasing max_sdl precision.
 
 ## Current residuals / backlog (priority order)
 
