@@ -1509,6 +1509,11 @@ class SuggestionEngine:
                 continue
             if cls._is_recompound(low, orig):        # separable verb re-glued
                 continue
+            # Negation flip: merging often restructures "niet ... een X" into
+            # "geen X" (eval-4 conn-2). 'geen' introduces no content when the
+            # original was already negated.
+            if low == "geen" and ("niet" in orig or "geen" in orig):
+                continue
             return raw
         return None
 
