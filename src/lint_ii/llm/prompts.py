@@ -222,13 +222,16 @@ HERSCHRIJVING: [het volledige herschreven tekstfragment met alle noodzakelijke g
 Je richt je op de samenhang tussen opeenvolgende zinnen: waar een relatie tussen twee zinnen impliciet blijft, kan een verbindingswoord die relatie verduidelijken. Je voegt alleen een verbindingswoord toe als de relatie al in de tekst besloten ligt; je verzint nooit een relatie en voegt geen inhoud toe.""",
         user="""Hieronder staat één alinea met genummerde zinnen. Beoordeel of de samenhang tussen bepaalde opeenvolgende zinnen duidelijker wordt door een verbindingswoord toe te voegen — uitsluitend als die relatie al in de tekst besloten ligt.
 
-Voeg ALLEEN een verbindingswoord toe bij een duidelijke oorzakelijke relatie (reden of gevolg) of een duidelijke tegenstelling. Een losse thematische samenhang, een simpele opeenvolging of een toelichting is NIET genoeg — laat zulke overgangen met rust. In de meeste alinea's is geen verbindingswoord nodig; antwoord dan met GEEN.
+Voeg ALLEEN een verbindingswoord toe bij een duidelijke oorzakelijke relatie (reden of gevolg) of een duidelijke tegenstelling. Een losse thematische samenhang, een louter chronologische opeenvolging zonder oorzakelijk verband, of een toelichting is NIET genoeg — laat zulke overgangen met rust. In de meeste alinea's is geen verbindingswoord nodig; antwoord dan met GEEN.
 
 Voorkeur: voeg twee zinnen die duidelijk oorzakelijk of contrastief samenhangen samen tot één zin met een natuurlijk voegwoord ("want", "omdat", "doordat", "maar", "dus"). Gebruik alleen een vooropgeplaatst bijwoord ("daarom", "hierdoor") als samenvoegen niet natuurlijk is. Vermijd formele of ouderwetse verbindingswoorden zoals "namelijk", "immers" of "derhalve". Verzin geen relatie en voeg geen inhoud toe; twijfel je, laat de overgang dan ongemoeid.
 
-Let op beide richtingen van een oorzakelijke relatie: soms noemt de tweede zin de reden, soms juist het gevolg. Twee voorbeelden van duidelijke gevallen:
+Let op beide richtingen van een oorzakelijke relatie: soms noemt de tweede zin de reden, soms juist het gevolg. Een gevolg is niet altijd een nieuwe toestand; het kan ook een reactie, een maatregel of een vertraging zijn die door de eerste zin is veroorzaakt. Ook dan is er een oorzakelijk verband. Vijf voorbeelden van duidelijke gevallen:
 - "Het feest gaat niet door. De zanger is ziek." → HERSCHRIJVING: Het feest gaat niet door, want de zanger is ziek. (RELATIE: reden)
 - "Het regende de hele dag. Het veld staat onder water." → HERSCHRIJVING: Het regende de hele dag, dus het veld staat onder water. (RELATIE: gevolg)
+- "De storm duurde tot het ochtendgloren. De veerdienst begon pas rond het middaguur." → HERSCHRIJVING: De storm duurde tot het ochtendgloren, dus de veerdienst begon pas rond het middaguur. (RELATIE: gevolg)
+- "De wachtrij liep elke ochtend tot buiten de deur. Er is sinds deze week een extra loket open." → HERSCHRIJVING: De wachtrij liep elke ochtend tot buiten de deur, dus er is sinds deze week een extra loket open. (RELATIE: gevolg)
+- "De cursus was maandenlang volgeboekt. De helft van de deelnemers kwam niet opdagen." → HERSCHRIJVING: De cursus was maandenlang volgeboekt, maar de helft van de deelnemers kwam niet opdagen. (RELATIE: tegenstelling)
 
 Alinea:
 {paragraph}
