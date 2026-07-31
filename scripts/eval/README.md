@@ -195,7 +195,19 @@ suggestion containing a visible misspelling.
    the LLM pass, not Hunspell (the earlier claim was a serialization artifact);
    in that re-run the Hunspell pass produced nothing at all across 100 items,
    which is worth understanding before tuning either pass.
-5. **No-op `word_frequency` suggestions slip the filters**: corpus5 conj-3
-   produced a suggestion whose text is byte-identical to the original, in two
-   consecutive runs. Cheap deterministic guard (drop a suggestion that changes
-   nothing), and it costs a real FP each time.
+5. ~~**No-op `word_frequency` suggestions slip the filters**~~ — FIXED for the
+   suggestion layer. The BUNDLED word-frequency path lacked the
+   `_is_noop_rewrite` check the per-trigger path already had, so a rewrite
+   identical to the original reached the user (corpus5 conj-3, two consecutive
+   runs). Added there.
+   **The underlying trigger is still live and is an analyzer issue, not an LLM
+   one:** spaCy's Dutch tokenizer keeps `vol.` as ONE token (a known
+   abbreviation — *vol.* = volume), unlike `mogelijk.` which splits. Such a
+   token is absent from SUBTLEX, so it scores as rare and fires a
+   word_frequency trigger whose only possible "fix" is the same word without
+   the period. The band check cannot catch this (rare → common always passes).
+   Note this also means `word_frequency` — a LiNT scoring feature — treats
+   these tokens as rare, so the effect is not confined to suggestions.
+   Fixing it properly means normalising abbreviation-final tokens before the
+   frequency lookup, which CHANGES LiNT SCORES and must be validated against
+   the LiNT reference first. Left deliberately untouched.

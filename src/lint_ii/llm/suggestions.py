@@ -2137,6 +2137,21 @@ class SuggestionEngine:
         if "niet toegepast" in suggested_text.lower():
             return None
 
+        # The per-trigger path drops rewrites identical to the original; this
+        # bundled path did not, so a no-op reached the user as a real
+        # suggestion (corpus5 conj-3, two consecutive runs: "vol." -> "vol"
+        # left the sentence byte-identical). A punctuation-contaminated
+        # trigger word passes the frequency band trivially — "vol." is not in
+        # SUBTLEX so it scores as rare, while its "replacement" is the same
+        # word without the period — so the band check cannot catch this class.
+        if self._is_noop_rewrite(original, suggested_text):
+            logger.info(
+                "Dropping bundled word_frequency suggestion: rewrite unchanged "
+                "from original (word %r -> %r)",
+                trigger.word, replacement_word,
+            )
+            return None
+
         if replacement_word and not self._replacement_passes_band(
             trigger.word, replacement_word, trigger.feature_value
         ):
