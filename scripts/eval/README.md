@@ -55,7 +55,7 @@ provably suppresses them.
 | 2 | 0.88 / 1.00 | 0.86 / 1.00 | — | — |
 | 3 | 0.88 / 0.98 | 0.86 / 0.95 | — | — |
 | 4 | — | — | 0.90 / 0.92 | **0.91 / 0.95** (re-run 2026-07-31) |
-| 5 | — | — | **0.94 / 0.95** | — |
+| 5 | — | — | 0.94 / 0.95 | **0.95 / 0.95** (re-run 2026-07-31) |
 
 Set-4 notes: family guard 5/5, zero same-family swaps; recall dip was
 connective (6/10, since fixed to 8/10) plus one wordfreq FN; the spelling
@@ -88,8 +88,11 @@ Set-5 notes (best held-out result to date): family guards 5/5 across all
 four mechanisms; connective 8/10 incl. the FIRST 'gevolg' fire on a
 temporal consequence (conn-9); enum exactly as designed (5/5 surface route,
 2 NP sentinels fell back to prose rewrites); **spelling detection 5/6** —
-all five catches were the Hunspell pass, the one miss ("Ik wordt") needs
-LLM dt-detection, confirming the wobble. FPs (4): one abstract_nouns
+~~all five catches were the Hunspell pass~~ **(WRONG — see the re-run note
+below; `model` was `None` for everything because of the serialization bug,
+and `None` was read as "Hunspell". The pass was unknown, not Hunspell.)** —
+the one miss ("Ik wordt") needs LLM dt-detection, confirming the wobble.
+FPs (4): one abstract_nouns
 meaning-shift on clean text (volksuniversiteit→avondschool, the known Qwen
 semantic class), one authoring bait (vakantieweken in conj-3 — also exposed
 a no-op word_frequency suggestion slipping the filters), one defensible
@@ -135,6 +138,37 @@ was tot de laatste stoel gevuld" knocked corpus5 conn-4 ("De zaal was … toch
 uitverkocht") from 5/5 to 1/5. Keep example vocabulary clear of corpus text,
 and keep negatives that share words with new examples in the probe set.
 
+Set-5 re-run notes (2026-07-31, after `8397cae` + `c7fdb54`): **0.95 / 0.95**,
+up from 0.94 / 0.95. Three findings, only one of which is the headline:
+
+- **The set-5 spelling attribution above was wrong, and this is the important
+  correction.** With `Suggestion.model` serializing for the first time, all 7
+  spelling suggestions carry the Qwen model name and the Hunspell pass
+  contributed **zero suggestions in the whole 100-item run** (0 of 107 have
+  `model=None`; `hunspell_spelling.py` hardcodes `model=None`, the LLM pass
+  sets `provider.model_name`, so the count is unambiguous). The catches are
+  the LLM pass, not Hunspell. This is exactly the mis-attribution this README
+  warns about, sprung by the very bug the `model` field was added to prevent —
+  when attribution is broken, "unknown" reads as whichever pass you assumed.
+  Detection was 6/6 this run, including the previously-missed dt-error
+  "Ik wordt" → "Ik word", which is backlog item 4's wobble, not a fix.
+- Connective 7/10, down from 8/10, and **not a regression**: the misses are
+  conn-5, conn-6 and conn-10. A 6-rep probe scores conn-5 at 1/6 and conn-6 at
+  0-1/6 under the OLD and new prompt alike — they are ~1-in-6 firers either
+  way, and the 8/10 run caught them on a lucky draw. conn-10 is the documented
+  inferential residual (item 1). conn-9 fired again.
+- FPs down 4 → 3: `family-4` ("terugzwemmen" → "te rugzwemmen") is gone,
+  confirming `c7fdb54`. Survivors are clean-13 (volksuniversiteit → "openbare
+  school voor volwassenen", item 2), url-1 (defensible max_sdl split, URL
+  intact), and conj-3 — where the `word_frequency` suggested text is
+  BYTE-IDENTICAL to the original. That no-op suggestion is still slipping the
+  filters and is worth a deterministic guard.
+
+Also seen: on spelling-4 and spelling-6 the connective pass merged sentences
+that still contain the planted typo ("...kwam onmiddelijk in actie, dus..."),
+since it does not spell-check. Harmless to scoring, but a tester would see a
+suggestion containing a visible misspelling.
+
 ## Current residuals / backlog (priority order)
 
 1. **Connective GEEN on inferential consequences** (corpus4 conn-10, corpus5
@@ -156,4 +190,12 @@ and keep negatives that share words with new examples in the probe set.
    are sentinels (expected misses) — a surface route for NP lists must not
    break the shortlist guards.
 4. **Spelling detection wobble**: Qwen flags planted dt-errors in ~1 of 3 runs;
-   corpus5's spelling-* group measures it for the first time.
+   corpus5's spelling-* group measures it for the first time. Set-5 re-run got
+   6/6 including both dt-errors — a good draw, not a fix. NOTE the catches are
+   the LLM pass, not Hunspell (the earlier claim was a serialization artifact);
+   in that re-run the Hunspell pass produced nothing at all across 100 items,
+   which is worth understanding before tuning either pass.
+5. **No-op `word_frequency` suggestions slip the filters**: corpus5 conj-3
+   produced a suggestion whose text is byte-identical to the original, in two
+   consecutive runs. Cheap deterministic guard (drop a suggestion that changes
+   nothing), and it costs a real FP each time.
