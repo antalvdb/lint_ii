@@ -639,6 +639,17 @@ class SuggestionEngine:
                 if best is None or n_items > best[0]:
                     best = (n_items, span_words)
 
+            # Surface route: heavy nominalized-infinitive lists ("het opvoeren
+            # van X, het uitnodigen van Y, ...") systematically defeat the conj
+            # parse — spaCy chains at most a fragment of the coordination (eval
+            # sets 1 and 4 both measured 3/8 recall on designed enumerations).
+            # The construction itself is unambiguous at the surface, so count
+            # it directly; short natural NP lists cannot match it.
+            surface = self._nominalized_infinitive_list(doc)
+            if surface is not None and surface[0] >= min_items and surface[1] >= min_span:
+                if best is None or surface[0] > best[0]:
+                    best = surface
+
             if best is None:
                 return None
             return SuggestionTrigger(
@@ -651,6 +662,45 @@ class SuggestionEngine:
         except Exception as e:  # never break trigger detection
             logger.warning("Enumeration check failed on sentence %d: %s", sent_idx, e)
             return None
+
+    @staticmethod
+    def _nominalized_infinitive_list(doc) -> tuple[int, int] | None:
+        """Count "het [modifier] <infinitive> van" items in the sentence — the
+        skeleton of a nominalized-infinitive enumeration ("het dempen van oude
+        sloten, het herstellen van ..."). At most one intervening modifier is
+        allowed ("het wekelijks testen van", "het gescheiden afvoeren van").
+        Returns (item_count, token_span) over the matched region, or None when
+        fewer than two items match."""
+        toks = list(doc)
+        matches: list[tuple[int, int]] = []
+        for j, t in enumerate(toks):
+            if t.lower_ != "het":
+                continue
+            for k in (j + 1, j + 2):
+                if k >= len(toks) - 1:
+                    break
+                cand = toks[k]
+                # spaCy tags some nominalized infinitives as NOUN when the form
+                # doubles as a plural noun ("het planten van", "het plaatsen
+                # van"); in this construction an -en NOUN after 'het' is a
+                # nominalization all the same.
+                if ("Inf" in cand.morph.get("VerbForm") and cand.pos_ == "VERB") or (
+                    cand.pos_ == "NOUN" and cand.lower_.endswith("en")
+                ):
+                    if toks[k + 1].lower_ == "van":
+                        matches.append((j, k))
+                    break
+                # One modifier may sit between 'het' and the infinitive.
+                if k == j + 1 and (
+                    cand.pos_ in ("ADJ", "ADV")
+                    or (cand.pos_ == "VERB" and "Part" in cand.morph.get("VerbForm"))
+                ):
+                    continue
+                break
+        if len(matches) < 2:
+            return None
+        span_words = matches[-1][1] - matches[0][0] + 1
+        return (len(matches), span_words)
 
     @staticmethod
     def _prioritize_triggers(
