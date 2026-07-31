@@ -101,11 +101,24 @@ spelling-pass attribution works from the next deploy.
 ## Prompt iteration against Qwen (method)
 
 Deploy round-trips are far too slow to tune a prompt, and a 100-item eval
-resolves a one-item recall change no better than noise. For `8397cae` the loop
-was a standalone probe that rebuilds the exact `{paragraph}`/`{boundaries}` the
-connective pass sends, calls the Hetzner endpoint with production settings
-(temp 0.3, `enable_thinking:false`), and applies the real `parse_block_response`
-+ relation whitelist — a variant sweep in ~90s. Two rules it earned:
+resolves a one-item recall change no better than noise. `connective_probe.py`
+rebuilds the exact `{paragraph}`/`{boundaries}` the connective pass sends,
+calls the Hetzner endpoint with production settings (temp 0.3,
+`enable_thinking:false`), and applies the real `parse_block_response` +
+relation whitelist — a variant sweep in ~90s.
+
+```
+python3 connective_probe.py --reps 6                       # score the live prompt
+python3 connective_probe.py --variant mine --compare base  # A/B a candidate
+python3 connective_probe.py --audit                        # example/corpus word collisions
+```
+
+Cases are read from the corpora (all 20 `conn-*` positives, plus every
+multi-sentence negative that actually reaches the pass) so they cannot drift.
+Add a candidate to `VARIANTS` via `variant()`, which refuses a substitution
+whose anchor is missing — otherwise an edit to `prompts.py` silently turns
+your candidate back into base and you A/B a prompt against itself. Two rules
+it earned:
 
 - **Run every case 5–6× before believing a delta.** At 3 reps one variant
   looked like 8/12; at 5 it was 9/20. Single-run comparisons of connective
