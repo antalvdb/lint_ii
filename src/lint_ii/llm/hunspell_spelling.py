@@ -1,6 +1,9 @@
 """
 Hunspell-based Dutch spell checking, complementing the LLM spelling pass.
-Hunspell is high-precision and won't hallucinate corrections.
+
+Hunspell can misfire on correct-but-out-of-dictionary compounds (it rejects
+the word, then suggest() offers the nearest dictionary word), so its
+corrections go through the same plausibility gate as the LLM spelling pass.
 """
 import uuid
 import logging
@@ -51,13 +54,11 @@ def generate_hunspell_suggestions(
     Returns:
         List of Suggestion objects.
     """
-    from lint_ii.llm.suggestions import Suggestion, SuggestionType
-    from lint_ii.linguistic_data.wordlists import FREQ_DATA
+    from lint_ii.llm.suggestions import Suggestion, SuggestionType, SuggestionEngine
 
     if existing_word_indices is None:
         existing_word_indices = set()
 
-    zero_count_freq = 1.359228547196266
     dictionary = _get_dictionary()
     suggestions = []
 
@@ -99,17 +100,20 @@ def generate_hunspell_suggestions(
 
             correction = hunspell_suggestions[0]
 
-            # Frequency guard: if the original IS in SUBTLEX-NL (a known rare word,
-            # not a typo), only keep the suggestion if the correction is more frequent.
-            word_lower = word.lower()
-            if word_lower in FREQ_DATA:
-                correction_freq = FREQ_DATA.get(correction.lower(), zero_count_freq)
-                if correction_freq <= FREQ_DATA[word_lower]:
-                    logger.debug(
-                        "Hunspell suggestion skipped: '%s' is a known word and "
-                        "correction '%s' is not more frequent", word, correction,
-                    )
-                    continue
+            # Plausibility gate, shared with the LLM spelling pass. "Unknown to
+            # SUBTLEX" does NOT mean "a real typo": productive Dutch compounds
+            # are routinely missing from both the Hunspell dictionary and
+            # SUBTLEX while being perfectly correct (vogeltelling,
+            # telformulieren — eval set 4), and suggest() then "corrects" them
+            # to the nearest dictionary word (vogelhelling, teelformulieren).
+            # A stem-changing correction must land on a strictly more frequent
+            # word; splits and same-stem inflection fixes stay allowed.
+            if not SuggestionEngine._correction_plausible(word, correction, "spelling"):
+                logger.debug(
+                    "Hunspell suggestion skipped as implausible: '%s' -> '%s'",
+                    word, correction,
+                )
+                continue
 
             suggested_text = sent_text.replace(word, correction, 1)
             if suggested_text == sent_text:
