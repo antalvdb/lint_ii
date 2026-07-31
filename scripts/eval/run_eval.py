@@ -64,9 +64,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--fresh", action="store_true")
+    ap.add_argument("--base", default=None,
+                    help="API base URL; on the Strato box use http://127.0.0.1:8000 "
+                         "(bypasses the nginx edge rate limits)")
     ap.add_argument("--corpus", default=os.path.join(HERE, "corpus.json"))
     ap.add_argument("--results", default=os.path.join(HERE, "results.json"))
     args = ap.parse_args()
+    if args.base:
+        global BASE
+        BASE = args.base.rstrip("/")
     CORPUS, RESULTS = args.corpus, args.results
 
     corpus = json.load(open(CORPUS, encoding="utf-8"))["items"]

@@ -55,10 +55,35 @@ pushing.** Don't assume the other side is idle.
   deployed (git HEAD on the box + fresh service start + a probe). Stale-deploy
   false conclusions have cost multiple debug cycles.
 
+## Feature gates & env (set in /etc/lint-ii/lint-ii.env on the box)
+
+- `LINT_II_CONNECTIVES=1` — the connective pass is OFF by default; the live box
+  has it on. Any local engine experiment that should include connectives needs
+  this set, or the pass silently returns nothing.
+- Other knobs: `LINT_II_LLM_TIMEOUT` (watchdog, 300s), `LINT_II_MAX_PENDING_JOBS`
+  (flood guard, 12), `LINT_II_HETZNER_TEMPERATURE` (0.3),
+  `LINT_II_LOG_LEVEL` (INFO; DEBUG logs full prompts+responses — the fastest way
+  to see raw Qwen output during prompt iteration, but don't leave it on: tester
+  texts would pile up in the logs).
+- `LINT_CONSOLIDATE_REWRITES` — consolidated per-sentence rewrites, default ON.
+
+## Product context (why this exists)
+
+Concept test of LiNT-driven LLM readability suggestions with academic testers
+(Henk Pander Maat — LiNT's author, Merel Scholman, gemeente staff). Their open
+feature asks, in Antal's order of interest: editable/intermediate splits (a
+2-sentence middle option; suggestions editable in place), a tone/genre
+selector, interaction logging (needs a consent checkbox). The tool's privacy
+positioning matters: tester texts can contain PII, and the cloud providers see
+whatever is analyzed — flag this before analyzing real letters.
+
 ## Eval harness
 
 Self-diagnosis unit in `scripts/eval/` — see `scripts/eval/README.md` for the
 workflow, corpus inventory, cross-set results and the current backlog.
+From the box, run it against `--base http://127.0.0.1:8000` (bypasses the
+nginx edge rate limits). Judging is LLM-as-judge: Claude reads the results
+file and scores each suggestion wrong / debatable / right.
 
 ## Conventions
 
