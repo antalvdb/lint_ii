@@ -172,6 +172,8 @@ class Suggestion:
             result["replacement_word"] = self.replacement_word
         if self.error_category is not None:
             result["error_category"] = self.error_category
+        if self.model is not None:
+            result["model"] = self.model
         if self.component_types:
             result["component_types"] = self.component_types
         if self.merges_sentences:
@@ -1064,8 +1066,13 @@ class SuggestionEngine:
           frequency rule to every category label.
         """
         w, c = word.lower(), correction.lower()
+        from lint_ii.linguistic_data.wordlists import FREQ_DATA
         if c.replace(" ", "") == w:
-            return True
+            # A split is only plausible when every resulting part is a common
+            # word in its own right ("te veel"). Hunspell also proposes splits
+            # that reassemble a CORRECT word into nonsense ("terugzwemmen" →
+            # "te rugzwemmen", eval set 5) — there a part is rare or unknown.
+            return all(FREQ_DATA.get(p, 0.0) >= 3.0 for p in c.split())
         if " " not in c:
             common = 0
             for cw, cc in zip(w, c):
@@ -1076,7 +1083,6 @@ class SuggestionEngine:
                 return True
             if len(w) <= 4 and len(c) <= 4:
                 return True
-        from lint_ii.linguistic_data.wordlists import FREQ_DATA
         zero_count_freq = 1.359228547196266
         original_freq = FREQ_DATA.get(w, zero_count_freq)
         correction_freq = FREQ_DATA.get(c, zero_count_freq)
