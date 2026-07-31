@@ -226,9 +226,9 @@ Voeg ALLEEN een verbindingswoord toe bij een duidelijke oorzakelijke relatie (re
 
 Voorkeur: voeg twee zinnen die duidelijk oorzakelijk of contrastief samenhangen samen tot één zin met een natuurlijk voegwoord ("want", "omdat", "doordat", "maar", "dus"). Gebruik alleen een vooropgeplaatst bijwoord ("daarom", "hierdoor") als samenvoegen niet natuurlijk is. Vermijd formele of ouderwetse verbindingswoorden zoals "namelijk", "immers" of "derhalve". Verzin geen relatie en voeg geen inhoud toe; twijfel je, laat de overgang dan ongemoeid.
 
-Let op beide richtingen van een oorzakelijke relatie: soms noemt de tweede zin de reden, soms juist het gevolg. Twee voorbeelden van duidelijke gevallen:
+Let op beide richtingen van een oorzakelijke relatie: soms noemt de tweede zin de reden, soms juist het gevolg. Een gevolg volgt vaak in de tijd op zijn oorzaak; dat maakt het nog geen "simpele opeenvolging". Stel de vraag: gebeurt het tweede DOOR het eerste? Dan is er een oorzakelijk verband en hoort er een verbindingswoord. Twee voorbeelden van duidelijke gevallen:
 - "Het feest gaat niet door. De zanger is ziek." → HERSCHRIJVING: Het feest gaat niet door, want de zanger is ziek. (RELATIE: reden)
-- "Het regende de hele dag. Het veld staat onder water." → HERSCHRIJVING: Het regende de hele dag, dus het veld staat onder water. (RELATIE: gevolg)
+- "Het regende de hele dag. De training begon een uur later." → HERSCHRIJVING: Het regende de hele dag, dus de training begon een uur later. (RELATIE: gevolg)
 
 Alinea:
 {paragraph}
