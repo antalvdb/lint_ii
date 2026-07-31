@@ -49,6 +49,21 @@ pushing.** Don't assume the other side is idle.
   whitelist, `_correction_plausible`, the word-family guard). Prompt-only rules
   were tried and failed. Related lesson: rhetorical questions in a
   structured-output prompt make Qwen answer in prose and break block parsing.
+- When a prompt rule IS the right tool, Qwen moves on WORKED EXAMPLES, not on
+  abstract guidance. `8397cae` fixed the connective gevolg gap with a delay and
+  a measure example; the same session proved the converse by testing the
+  rewritten guard clause on its own (the "simpele opeenvolging" narrowing that
+  `0041a47` was built around) — scored identically to base. `0041a47`'s
+  rhetorical question was correctly blamed for the collapse, but its underlying
+  premise, that the clause suppressed temporal consequences, was simply wrong.
+  Don't re-derive it: reach for an example before reaching for a sentence of
+  explanation.
+- Prompt examples LEAK LEXICALLY into nearby inputs. A connective example
+  opening "De zaal was tot de laatste stoel gevuld" knocked corpus5 conn-4
+  ("De zaal was ... toch uitverkocht") from 5/5 to 1/5; rewording restored 6/6.
+  Keep new example vocabulary clear of corpus/tester text — a shared common
+  noun is usually fine, a repeated phrase is not — and check with
+  `python3 scripts/eval/connective_probe.py --audit`.
 - "Not in SUBTLEX/Hunspell" does NOT mean "not a word" — Dutch productive
   compounds are routinely missing from both while being perfectly correct.
 - Before trusting any eval delta or live probe: verify the fix is actually
