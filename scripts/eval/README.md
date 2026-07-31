@@ -54,12 +54,26 @@ provably suppresses them.
 | 2 | 0.88 / 1.00 | 0.86 / 1.00 | — |
 | 3 | 0.88 / 0.98 | 0.86 / 0.95 | — |
 | 4 | — | — | 0.90 / 0.92 (run of 2026-07-31) |
-| 5 | — | — | pending (run in flight 2026-07-31) |
+| 5 | — | — | **0.94 / 0.95** (run of 2026-07-31) |
 
 Set-4 notes: family guard 5/5, zero same-family swaps; recall dip was
 connective (6/10, since fixed to 8/10) plus one wordfreq FN; the spelling
 "regression" (3/3 hallucinated) traced to the HUNSPELL pass on out-of-
 dictionary compounds, both passes now gated by `_correction_plausible`.
+
+Set-5 notes (best held-out result to date): family guards 5/5 across all
+four mechanisms; connective 8/10 incl. the FIRST 'gevolg' fire on a
+temporal consequence (conn-9); enum exactly as designed (5/5 surface route,
+2 NP sentinels fell back to prose rewrites); **spelling detection 5/6** —
+all five catches were the Hunspell pass, the one miss ("Ik wordt") needs
+LLM dt-detection, confirming the wobble. FPs (4): one abstract_nouns
+meaning-shift on clean text (volksuniversiteit→avondschool, the known Qwen
+semantic class), one authoring bait (vakantieweken in conj-3 — also exposed
+a no-op word_frequency suggestion slipping the filters), one defensible
+14-word max_sdl split (URL preserved intact), and "terugzwemmen → te
+rugzwemmen" — fixed in `c7fdb54` (split corrections now require every part
+to be a common word). `Suggestion.model` serialization also fixed there, so
+spelling-pass attribution works from the next deploy.
 
 ## Current residuals / backlog (priority order)
 
