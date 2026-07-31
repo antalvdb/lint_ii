@@ -23,9 +23,12 @@ import urllib.request
 BASE = "https://lint-ii.valkuil.net"
 HERE = os.path.dirname(__file__)
 
-# Fields worth keeping per suggestion for judging.
+# Fields worth keeping per suggestion for judging. `model` distinguishes the
+# two spelling passes (None = Hunspell, a model name = LLM) — eval set 4's
+# spelling failures were mis-attributed to the LLM for lack of it.
 KEEP = ("type", "sentence_index", "original_text", "suggested_text",
-        "replacement_word", "relation", "list_intro", "list_items")
+        "replacement_word", "relation", "list_intro", "list_items",
+        "model", "error_category", "word")
 
 
 def _post(path, payload):

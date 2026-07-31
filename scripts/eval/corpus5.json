@@ -1,0 +1,822 @@
+{
+ "description": "LiNT-II held-out eval set 5 — independent of corpus.json..corpus4.json (new texts/domains), same label scheme. Consolidation set for the family guard, spelling plausibility gates, connective direction fixes and enumeration surface route; first set with spelling-* DETECTION positives. Synthetic, no PII.",
+ "items": [
+  {
+   "id": "passive-1",
+   "should_suggest": true,
+   "phenomena": [
+    "passive"
+   ],
+   "text": "De gewonde buizerd is door de vogelopvang met succes teruggezet in het duingebied."
+  },
+  {
+   "id": "passive-2",
+   "should_suggest": true,
+   "phenomena": [
+    "passive"
+   ],
+   "text": "Het lesrooster van de muziekschool wordt door de nieuwe coördinator volledig omgegooid."
+  },
+  {
+   "id": "passive-3",
+   "should_suggest": true,
+   "phenomena": [
+    "passive"
+   ],
+   "text": "De nalatenschap is door de notaris volgens de laatste wilsbeschikking verdeeld."
+  },
+  {
+   "id": "passive-4",
+   "should_suggest": true,
+   "phenomena": [
+    "passive"
+   ],
+   "text": "De speeltoestellen van de kinderopvang worden door een onafhankelijke keurmeester jaarlijks getest."
+  },
+  {
+   "id": "passive-5",
+   "should_suggest": true,
+   "phenomena": [
+    "passive"
+   ],
+   "text": "De zieke kastanjeboom op het plein is door de gemeente uit voorzorg gekapt."
+  },
+  {
+   "id": "passive-6",
+   "should_suggest": true,
+   "phenomena": [
+    "passive"
+   ],
+   "text": "De sorteermachine in het postcentrum wordt door twee monteurs in de nachtdienst nagekeken."
+  },
+  {
+   "id": "passive-7",
+   "should_suggest": true,
+   "phenomena": [
+    "passive"
+   ],
+   "text": "Het lekkende dak van de ijsbaan zal door de verhuurder vóór het nieuwe seizoen worden hersteld."
+  },
+  {
+   "id": "long-1",
+   "should_suggest": true,
+   "phenomena": [
+    "max_sdl",
+    "sentence_length"
+   ],
+   "text": "Omdat het aantal vluchten op de regionale luchthaven de afgelopen jaren zo sterk is gegroeid dat de omwonenden dagelijks over geluidsoverlast klagen, onderzoekt de provincie nu of er een nachtelijk landingsverbod kan worden ingesteld."
+  },
+  {
+   "id": "long-2",
+   "should_suggest": true,
+   "phenomena": [
+    "max_sdl",
+    "sentence_length"
+   ],
+   "text": "De dirigente, die het amateurorkest twintig jaar geleden overnam toen het nog uit een handvol enthousiaste blazers bestond, neemt na het jubileumconcert afscheid van een vereniging die inmiddels tot ver buiten de regio bekendheid geniet."
+  },
+  {
+   "id": "long-3",
+   "should_suggest": true,
+   "phenomena": [
+    "max_sdl",
+    "sentence_length"
+   ],
+   "text": "Hoewel de vrijwilligers van de voedselbank wekenlang extra pakketten hadden klaargezet omdat de feestdagen altijd meer aanvragen opleveren, bleek de vraag dit jaar zo groot dat er halverwege december al tekorten dreigden te ontstaan."
+  },
+  {
+   "id": "long-4",
+   "should_suggest": true,
+   "phenomena": [
+    "max_sdl",
+    "sentence_length"
+   ],
+   "text": "Nadat de leerlingen van de rijschool bij herhaling hadden geklaagd dat de examenplaatsen in de regio maandenlang van tevoren volgeboekt waren, besloot de branchevereniging om samen met het exameninstituut naar structurele oplossingen te zoeken."
+  },
+  {
+   "id": "long-5",
+   "should_suggest": true,
+   "phenomena": [
+    "max_sdl",
+    "sentence_length"
+   ],
+   "text": "Doordat de restauratie van het openluchtmuseum aanzienlijk duurder uitviel dan in de oorspronkelijke begroting was voorzien, moest het bestuur een beroep doen op een noodfonds dat eigenlijk voor heel andere doeleinden was bestemd."
+  },
+  {
+   "id": "long-6",
+   "should_suggest": true,
+   "phenomena": [
+    "max_sdl",
+    "sentence_length"
+   ],
+   "text": "De sterrenkundige legde tijdens de publieksavond uit dat het nieuwe meetinstrument, waaraan haar team bijna tien jaar heeft gewerkt, signalen kan opvangen die tot nu toe volledig aan alle waarnemingen ontsnapten."
+  },
+  {
+   "id": "long-7",
+   "should_suggest": true,
+   "phenomena": [
+    "max_sdl",
+    "sentence_length"
+   ],
+   "text": "Aangezien de wachtlijst voor een plek in het verzorgingstehuis de afgelopen twee jaar meer dan verdubbeld is en mantelzorgers steeds vaker overbelast raken, dringt de cliëntenraad aan op een versnelde uitbreiding van de capaciteit."
+  },
+  {
+   "id": "enum-1",
+   "should_suggest": true,
+   "phenomena": [
+    "enumeration"
+   ],
+   "text": "Het jubileumjaar van de dierentuin staat in het teken van het openen van een nieuw vlinderverblijf, het uitbreiden van de educatieve rondleidingen, het renoveren van het historische apenhuis en het aanleggen van een natuurspeelplaats."
+  },
+  {
+   "id": "enum-2",
+   "should_suggest": true,
+   "phenomena": [
+    "enumeration"
+   ],
+   "text": "De verbouwing van de bouwmarkt omvat het verplaatsen van de kassazone, het verbreden van de gangpaden, het vernieuwen van de drive-in voor bouwmaterialen en het inrichten van een aparte afdeling voor gereedschapsverhuur."
+  },
+  {
+   "id": "enum-3",
+   "should_suggest": true,
+   "phenomena": [
+    "enumeration"
+   ],
+   "text": "Het preventieplan van de tandartspraktijk draait om het geven van poetsinstructie aan kinderen, het versturen van halfjaarlijkse oproepen, het vroegtijdig signaleren van tandvleesproblemen en het terugdringen van no-shows."
+  },
+  {
+   "id": "enum-4",
+   "should_suggest": true,
+   "phenomena": [
+    "enumeration"
+   ],
+   "text": "De opleiding tot reddingszwemmer behelst het aanleren van vervoersgrepen, het oefenen van reddingen met kleding aan, het wekelijks trainen van de conditie en het grondig bestuderen van de veiligheidsprotocollen."
+  },
+  {
+   "id": "enum-5",
+   "should_suggest": true,
+   "phenomena": [
+    "enumeration"
+   ],
+   "text": "Het winterprogramma van de volkstuinvereniging bestaat uit het gezamenlijk onderhouden van de paden, het snoeien van de fruitbomen, het controleren van de waterleidingen en het organiseren van een ruilbeurs voor zaden."
+  },
+  {
+   "id": "enum-6",
+   "should_suggest": true,
+   "phenomena": [
+    "enumeration"
+   ],
+   "text": "De tentoonstelling over de zeevaart toont oude landkaarten uit de zestiende eeuw, handgeschreven brieven van scheepskapiteins, schaalmodellen van koopvaardijschepen en een unieke verzameling antieke navigatie-instrumenten."
+  },
+  {
+   "id": "enum-7",
+   "should_suggest": true,
+   "phenomena": [
+    "enumeration"
+   ],
+   "text": "De nieuwe stadswandeling voert langs het voormalige weeshuis aan de gracht, de verborgen binnentuin van het hofje, de oudste gevelsteen van de binnenstad en het gerestaureerde pakhuis van de graanhandel."
+  },
+  {
+   "id": "conn-1",
+   "should_suggest": true,
+   "phenomena": [
+    "connective"
+   ],
+   "text": "De rondvaartboot blijft vandaag aan de kade. De sluis is voor onderhoud gesloten."
+  },
+  {
+   "id": "conn-2",
+   "should_suggest": true,
+   "phenomena": [
+    "connective"
+   ],
+   "text": "De cursus kalligrafie gaat definitief door. Er zijn genoeg aanmeldingen binnengekomen."
+  },
+  {
+   "id": "conn-3",
+   "should_suggest": true,
+   "phenomena": [
+    "connective"
+   ],
+   "text": "Het schoolplein staat vol plassen. De drainage is al jaren aan vervanging toe."
+  },
+  {
+   "id": "conn-4",
+   "should_suggest": true,
+   "phenomena": [
+    "connective"
+   ],
+   "text": "De kaartverkoop verliep in het begin stroef. De zaal was op de avond zelf toch uitverkocht."
+  },
+  {
+   "id": "conn-5",
+   "should_suggest": true,
+   "phenomena": [
+    "connective"
+   ],
+   "text": "De imker had dit voorjaar weinig volken verloren. De honingoogst viel opnieuw tegen."
+  },
+  {
+   "id": "conn-6",
+   "should_suggest": true,
+   "phenomena": [
+    "connective"
+   ],
+   "text": "Het asfalt op de rondweg lag er al twintig jaar. De provincie heeft de weg volledig laten vernieuwen."
+  },
+  {
+   "id": "conn-7",
+   "should_suggest": true,
+   "phenomena": [
+    "connective"
+   ],
+   "text": "De bibliotheekbus stopt voortaan ook in de kleine dorpen. Veel ouderen kunnen niet meer naar de stad reizen."
+  },
+  {
+   "id": "conn-8",
+   "should_suggest": true,
+   "phenomena": [
+    "connective"
+   ],
+   "text": "Het dorpsfeest kostte meer dan er binnenkwam. De organisatie zoekt voor volgend jaar extra sponsors."
+  },
+  {
+   "id": "conn-9",
+   "should_suggest": true,
+   "phenomena": [
+    "connective"
+   ],
+   "text": "De storing in de seinen duurde de hele ochtend. De treinen reden pas na de middag weer op tijd."
+  },
+  {
+   "id": "conn-10",
+   "should_suggest": true,
+   "phenomena": [
+    "connective"
+   ],
+   "text": "Het nieuwe zwembad trok in de eerste week duizenden bezoekers. Kaartjes zijn voorlopig alleen online te krijgen."
+  },
+  {
+   "id": "compound-1",
+   "should_suggest": true,
+   "phenomena": [
+    "word_frequency"
+   ],
+   "text": "De perronverlengingswerkzaamheden bij het voorstadsstation duren tot diep in het najaar."
+  },
+  {
+   "id": "compound-2",
+   "should_suggest": true,
+   "phenomena": [
+    "word_frequency"
+   ],
+   "text": "De drinkwatertransportleiding onder de rivier wordt in fasen vervangen."
+  },
+  {
+   "id": "compound-3",
+   "should_suggest": true,
+   "phenomena": [
+    "word_frequency"
+   ],
+   "text": "De gevelrenovatiesubsidie voor eigenaren van monumentale panden is opnieuw opengesteld."
+  },
+  {
+   "id": "compound-4",
+   "should_suggest": true,
+   "phenomena": [
+    "word_frequency"
+   ],
+   "text": "Het muskusrattenbestrijdingsprogramma van het waterschap loopt komend jaar gewoon door."
+  },
+  {
+   "id": "compound-5",
+   "should_suggest": true,
+   "phenomena": [
+    "word_frequency"
+   ],
+   "text": "De schoolzwemvergoedingsregeling geldt alleen voor gezinnen met een laag inkomen."
+  },
+  {
+   "id": "compound-6",
+   "should_suggest": true,
+   "phenomena": [
+    "word_frequency"
+   ],
+   "text": "Het fietsparkeerverwijssysteem bij het station wijst automatisch de dichtstbijzijnde vrije plek aan."
+  },
+  {
+   "id": "compound-7",
+   "should_suggest": true,
+   "phenomena": [
+    "word_frequency"
+   ],
+   "text": "De begraafplaatsonderhoudsploeg werkt in de wintermaanden met een aangepast rooster."
+  },
+  {
+   "id": "abstract-1",
+   "should_suggest": true,
+   "phenomena": [
+    "abstract_nouns"
+   ],
+   "text": "Het plan voorziet in een verlaging van de drempels en een verbreding van de doelgroep."
+  },
+  {
+   "id": "abstract-2",
+   "should_suggest": true,
+   "phenomena": [
+    "abstract_nouns"
+   ],
+   "text": "De evaluatie wees op een verschraling van het aanbod en een afname van de deelname."
+  },
+  {
+   "id": "abstract-3",
+   "should_suggest": true,
+   "phenomena": [
+    "abstract_nouns"
+   ],
+   "text": "Het bestuur belooft een versterking van het toezicht en een verheldering van de procedures."
+  },
+  {
+   "id": "abstract-4",
+   "should_suggest": true,
+   "phenomena": [
+    "abstract_nouns"
+   ],
+   "text": "De subsidie mikt op een verduurzaming van de gebouwen en een verlaging van het verbruik."
+  },
+  {
+   "id": "abstract-5",
+   "should_suggest": true,
+   "phenomena": [
+    "abstract_nouns"
+   ],
+   "text": "De nota bepleit een verruiming van de openingstijden en een vereenvoudiging van de aanvraag."
+  },
+  {
+   "id": "abstract-6",
+   "should_suggest": true,
+   "phenomena": [
+    "abstract_nouns"
+   ],
+   "text": "Het traject leidde tot een verzakelijking van de verhoudingen en een verharding van de standpunten."
+  },
+  {
+   "id": "abstract-7",
+   "should_suggest": true,
+   "phenomena": [
+    "abstract_nouns"
+   ],
+   "text": "De aanpak zorgt voor een bundeling van de krachten en een verkorting van de lijnen."
+  },
+  {
+   "id": "wordfreq-1",
+   "should_suggest": true,
+   "phenomena": [
+    "word_frequency"
+   ],
+   "text": "De penningmeester schetste tijdens de vergadering een ronduit penibele financiële situatie."
+  },
+  {
+   "id": "wordfreq-2",
+   "should_suggest": true,
+   "phenomena": [
+    "word_frequency"
+   ],
+   "text": "De rechter deed de aangevoerde bezwaren af als futiele details."
+  },
+  {
+   "id": "wordfreq-3",
+   "should_suggest": true,
+   "phenomena": [
+    "word_frequency"
+   ],
+   "text": "De douane stuitte in de haven op een clandestiene handel in beschermde planten."
+  },
+  {
+   "id": "wordfreq-4",
+   "should_suggest": true,
+   "phenomena": [
+    "word_frequency"
+   ],
+   "text": "De wethouder toonde zich ambivalent over de komst van het distributiecentrum."
+  },
+  {
+   "id": "wordfreq-5",
+   "should_suggest": true,
+   "phenomena": [
+    "word_frequency"
+   ],
+   "text": "De inspectie verweet de instelling een rigide toepassing van de huisregels."
+  },
+  {
+   "id": "wordfreq-6",
+   "should_suggest": true,
+   "phenomena": [
+    "word_frequency"
+   ],
+   "text": "De burgemeester reageerde zichtbaar gepikeerd op de kritische vragen van de raad."
+  },
+  {
+   "id": "wordfreq-7",
+   "should_suggest": true,
+   "phenomena": [
+    "word_frequency"
+   ],
+   "text": "De advocaat sprak van kwalijke insinuaties aan het adres van haar cliënt."
+  },
+  {
+   "id": "spelling-1",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling"
+   ],
+   "text": "De acomodatie op het eiland was tot in de puntjes verzorgd. Het ontbijt stond elke ochtend klaar."
+  },
+  {
+   "id": "spelling-2",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling"
+   ],
+   "text": "Ik wordt volgende maand aan mijn knie geopereerd. De revalidatie duurt ongeveer zes weken."
+  },
+  {
+   "id": "spelling-3",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling"
+   ],
+   "text": "Hij loop elke ochtend een rondje om het meer. Daarna drinkt hij koffie in het clubhuis."
+  },
+  {
+   "id": "spelling-4",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling"
+   ],
+   "text": "De brandweer kwam onmiddelijk in actie na de melding. De schade bleef daardoor beperkt."
+  },
+  {
+   "id": "spelling-5",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling"
+   ],
+   "text": "De trainer vond het gedrag van de supporters aggresief overkomen. De club neemt maatregelen."
+  },
+  {
+   "id": "spelling-6",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling"
+   ],
+   "text": "Zij vind het lastig om nee te zeggen tegen extra diensten. Haar rooster zit al helemaal vol."
+  },
+  {
+   "id": "multi-1",
+   "should_suggest": true,
+   "phenomena": [
+    "sentence_rewrite",
+    "passive"
+   ],
+   "text": "Aan de leden van de volkstuinvereniging is door het bestuur toegezegd dat de gestegen waterkosten dit jaar niet in de contributie zullen worden doorberekend."
+  },
+  {
+   "id": "multi-2",
+   "should_suggest": true,
+   "phenomena": [
+    "sentence_rewrite",
+    "passive"
+   ],
+   "text": "Door de directie van de luchthaven is na overleg met de omwonenden besloten dat de proef met stillere aanvliegroutes met een jaar zal worden verlengd."
+  },
+  {
+   "id": "multi-3",
+   "should_suggest": true,
+   "phenomena": [
+    "sentence_rewrite",
+    "passive"
+   ],
+   "text": "Het is door de arbeidsinspectie vastgesteld dat er in het sorteercentrum structureel te zware pakketten door één persoon werden getild."
+  },
+  {
+   "id": "multi-4",
+   "should_suggest": true,
+   "phenomena": [
+    "sentence_rewrite",
+    "passive"
+   ],
+   "text": "Aan de ouders is door de kinderopvang gemeld dat de vestiging in de zomerweken vanwege personeelsgebrek eerder zal sluiten."
+  },
+  {
+   "id": "multi-5",
+   "should_suggest": true,
+   "phenomena": [
+    "sentence_rewrite",
+    "passive"
+   ],
+   "text": "Door de organisatie van de wandelvierdaagse is aan de deelnemers beloofd dat er dit jaar meer rustpunten langs de route zullen worden ingericht."
+  },
+  {
+   "id": "multi-6",
+   "should_suggest": true,
+   "phenomena": [
+    "sentence_rewrite",
+    "passive"
+   ],
+   "text": "Het is door de dierenbescherming bevestigd dat de verwaarloosde pony's inmiddels bij een gastgezin zijn ondergebracht."
+  },
+  {
+   "id": "multi-7",
+   "should_suggest": true,
+   "phenomena": [
+    "sentence_rewrite",
+    "passive"
+   ],
+   "text": "Aan de huurders is door de woningstichting gemeld dat het achterstallige schilderwerk komend voorjaar alsnog zal worden uitgevoerd."
+  },
+  {
+   "id": "clean-1",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [],
+   "text": "De speeltuin is weer open. De nieuwe schommel hangt er al. Kom gerust langs met de kinderen."
+  },
+  {
+   "id": "clean-2",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [],
+   "text": "Het koor zoekt nieuwe leden. Zingen kan iedereen leren. De repetitie is op donderdag."
+  },
+  {
+   "id": "clean-3",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [],
+   "text": "De boot vaart weer op tijd. De overtocht duurt vijf minuten. Fietsers gaan gratis mee."
+  },
+  {
+   "id": "clean-4",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [],
+   "text": "De kringloopwinkel haalt grote spullen op. Bel voor een afspraak. Kleine spullen brengt u zelf."
+  },
+  {
+   "id": "clean-5",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [],
+   "text": "Het consultatiebureau is verhuisd. Het nieuwe adres staat in de brief. Parkeren kan voor de deur."
+  },
+  {
+   "id": "clean-6",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [],
+   "text": "De ijssalon heeft een nieuwe smaak. Proeven mag altijd. Een bolletje kost twee euro."
+  },
+  {
+   "id": "clean-7",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [],
+   "text": "Het veldje voor honden is verplaatst. Het ligt nu achter de grote zaal. Zakjes hangen bij het hek."
+  },
+  {
+   "id": "clean-8",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [],
+   "text": "Het ontbijt in het buurthuis is elke eerste zondag. Iedereen neemt iets mee. De koffie staat om negen uur klaar."
+  },
+  {
+   "id": "clean-9",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [],
+   "text": "De fietsenmaker werkt ook op zaterdag. Een kleine beurt is meestal dezelfde dag klaar. Bellen mag altijd."
+  },
+  {
+   "id": "clean-10",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [],
+   "text": "Het theater opent een uur voor de voorstelling. De garderobe is gratis. Wie te laat komt, wacht tot de pauze."
+  },
+  {
+   "id": "clean-11",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [],
+   "text": "De moskee houdt een open dag. Bezoekers krijgen een rondleiding. Vragen stellen mag altijd."
+  },
+  {
+   "id": "clean-12",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [],
+   "text": "De strandtent is in de winter dicht. De strandwacht blijft bereikbaar. De vlaggen gelden het hele jaar."
+  },
+  {
+   "id": "clean-13",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [],
+   "text": "De volksuniversiteit start weer met taalles. Er zijn groepen voor elk niveau. Inschrijven kan online."
+  },
+  {
+   "id": "family-1",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [
+    "word_frequency on rare form of common family"
+   ],
+   "text": "Na de zomer komen de warmere truien weer uit de kast. De winkel hangt de collectie alvast op."
+  },
+  {
+   "id": "family-2",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [
+    "word_frequency on rare form of common family"
+   ],
+   "text": "De nieuwe wasmiddelen beloven schonere sportkleding. De test wijst uit of dat klopt."
+  },
+  {
+   "id": "family-3",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [
+    "word_frequency on rare form of common family"
+   ],
+   "text": "Op het terras staan bordjes met de soep van de dag. De prijzen staan op het krijtbord."
+  },
+  {
+   "id": "family-4",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [
+    "word_frequency on rare form of common family"
+   ],
+   "text": "Wie durft, mag na de les een stukje terugzwemmen naar de steiger. De badmeester kijkt mee."
+  },
+  {
+   "id": "family-5",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [
+    "word_frequency on rare form of common family"
+   ],
+   "text": "De vrolijkere kleuren maken het klaslokaal een stuk lichter. De leerlingen kozen ze zelf."
+  },
+  {
+   "id": "shortlist-1",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [
+    "enumeration"
+   ],
+   "text": "In het pakket zitten zaadjes, aarde en een schepje. De handleiding zit erbij."
+  },
+  {
+   "id": "shortlist-2",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [
+    "enumeration"
+   ],
+   "text": "Bij de brunch horen verse jus, broodjes en een eitje. Koffie schenken we onbeperkt bij."
+  },
+  {
+   "id": "shortlist-3",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [
+    "enumeration"
+   ],
+   "text": "Voor de proef heb je een potlood, papier en geduld nodig. De rest ligt op tafel."
+  },
+  {
+   "id": "shortlist-4",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [
+    "enumeration"
+   ],
+   "text": "De doos in de keuken bevat pleisters, een schaar en verband. Controleer de inhoud elk jaar."
+  },
+  {
+   "id": "conj-1",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [
+    "split ', maar '"
+   ],
+   "text": "Het terras is verwarmd, maar een jas blijft aan te raden."
+  },
+  {
+   "id": "conj-2",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [
+    "split ', dus '"
+   ],
+   "text": "De kassa is defect, dus alleen pinnen is mogelijk."
+  },
+  {
+   "id": "conj-3",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [
+    "split ', want '"
+   ],
+   "text": "Reserveer op tijd, want de vakantieweken lopen snel vol."
+  },
+  {
+   "id": "conj-4",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [
+    "split ', maar '"
+   ],
+   "text": "De bus rijdt vandaag wel, maar de dienstregeling is aangepast."
+  },
+  {
+   "id": "url-1",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [
+    "alter URL"
+   ],
+   "text": "De uitslagen van de wedstrijd staan op https://www.voorbeeldatletiek.nl/uitslagen en hangen ook in de kantine."
+  },
+  {
+   "id": "url-2",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [
+    "alter URL"
+   ],
+   "text": "Een afspraak maken kan het snelst via www.voorbeeldpraktijk.nl of anders telefonisch."
+  },
+  {
+   "id": "url-3",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [
+    "alter URL"
+   ],
+   "text": "Meld een kapotte lantaarnpaal via openbareruimte@voorbeeldstad.nl onder vermelding van het mastnummer."
+  },
+  {
+   "id": "fragment-1",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [
+    "suggest on non-prose"
+   ],
+   "text": "Klantnummer: 20931\nAbonnement: maandelijks\nIngangsdatum: 1 september\nStatus: actief"
+  },
+  {
+   "id": "fragment-2",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [
+    "suggest on non-prose"
+   ],
+   "text": "Trainingsschema week 3:\nDinsdag intervalduurloop\nDonderdag krachttraining\nZondag lange duurloop"
+  },
+  {
+   "id": "fragment-3",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [
+    "suggest on non-prose"
+   ],
+   "text": "Boodschappenlijst weekend\n1. Brood en beleg halen\n2. Groente voor de soep\n3. Verjaardagstaart bestellen"
+  },
+  {
+   "id": "good-1",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [],
+   "text": "Uw auto staat klaar. De sleutel ligt bij de receptie."
+  },
+  {
+   "id": "good-2",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [],
+   "text": "De foto's zijn geleverd. Veel plezier ermee."
+  },
+  {
+   "id": "good-3",
+   "should_suggest": false,
+   "phenomena": [],
+   "must_not": [],
+   "text": "Uw aanvraag is goedgekeurd. U ontvangt de pas deze week."
+  }
+ ]
+}
