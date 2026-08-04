@@ -57,11 +57,21 @@ provably suppresses them.
 | 2 | 0.88 / 1.00 | 0.86 / 1.00 | — | — |
 | 3 | 0.88 / 0.98 | 0.86 / 0.95 | — | — |
 | 4 | — | — | 0.90 / 0.92 | **0.91 / 0.95** (re-run 2026-07-31) |
-| 5 | — | — | 0.94 / 0.95 | **0.95 / 0.97** (2nd re-run 2026-07-31, `a4246f3`) |
+| 5 | — | — | 0.94 / 0.95 | **0.97 / 0.94** (4th run 2026-08-04, `48c8fa8`) |
 
-Set 5 was run twice on 2026-07-31: 0.95 / 0.95 at `8397cae`+`c7fdb54`, then
-0.95 / 0.97 after the no-op fix (`a4246f3`). Both runs are described below;
-read the two together, because most of the movement between them is variance.
+Set 5 has been run four times. The sequence matters more than any single
+number, and it is the strongest argument in this file for judging phenomenon
+fixes by phenomenon counts rather than by precision/recall:
+
+| run | commit | headline | what actually changed |
+|-----|--------|----------|------------------------|
+| 1 | `8397cae`+`c7fdb54` | 0.95 / 0.95 | spelling attribution corrected |
+| 2 | `a4246f3` | 0.95 / 0.97 | conj-3 no-op FP fixed; recall gain was conn-6 wobble |
+| 3 | `fe0ff4c` | 0.95 / 0.95 | enum 5/7 → **7/7** — invisible to the metric |
+| 4 | `48c8fa8` | 0.97 / 0.94 | dt fix — invisible; family-4 FP cleared |
+
+Twice the headline moved OPPOSITE to a fix that demonstrably worked. Each run
+is described below; read them together.
 
 Set-4 notes: family guard 5/5, zero same-family swaps; recall dip was
 connective (6/10, since fixed to 8/10) plus one wordfreq FN; the spelling
@@ -234,6 +244,24 @@ enum-6/7 never measured the gap they were authored to track. Judge a
 phenomenon fix by its phenomenon count (here 5/7 → 7/7) plus offline
 validation, not by precision/recall.
 
+Set-5 FOURTH run (2026-08-04, after `48c8fa8`): **0.97 / 0.94**. The dt fix is
+again invisible to the headline — spelling was already 6/6 in the three
+previous runs, so there was no room to gain — and the run's real job was
+regression detection, which it passed:
+
+- **Zero spelling FPs on any negative.** That was the risk worth checking: a
+  dt-focused instruction could have made the pass over-flag correct verb
+  forms. It did not, on all 35 negatives with production filters applied.
+- Precision 0.95 → 0.97: `family-4`'s max_sdl rewrite did not recur (the same
+  borderline-length wobble noted two runs earlier). Not attributable.
+- Recall 0.95 → 0.94: one new FN, `compound-6`, and it is NOT the spelling
+  change — that commit only touches the spelling prompt. Probing the word
+  directly 8x: the model never returns ONGEWIJZIGD, but 4 of 8 times it
+  answers with a shorter yet still-rare compound ("fietsparkeersysteem",
+  "fietsenstalling") instead of splitting, and the frequency band check
+  correctly rejects those. Pre-existing compound wobble in word_frequency.
+- connective 7/10, spelling 6/6, enum 7/7 — all unchanged.
+
 ## Current residuals / backlog (priority order)
 
 1. **Connective GEEN on inferential consequences** (corpus4 conn-10, corpus5
@@ -290,12 +318,29 @@ validation, not by precision/recall.
    `enumeration_min_items` exactly, chained correctly) but by SPAN, 4-6
    against a threshold of 12. The new route reuses that span gate and the
    margin stays wide (negatives 4-6, positives 15-24).
-4. **Spelling detection wobble**: Qwen flags planted dt-errors in ~1 of 3 runs;
-   corpus5's spelling-* group measures it for the first time. Set-5 re-run got
-   6/6 including both dt-errors — a good draw, not a fix. NOTE the catches are
-   the LLM pass, not Hunspell (the earlier claim was a serialization artifact);
-   in that re-run the Hunspell pass produced nothing at all across 100 items,
-   which is worth understanding before tuning either pass.
+4. ~~**Spelling detection wobble**~~ — FIXED in `48c8fa8`, and the diagnosis in
+   the old item text was wrong twice over.
+   - It was never stochastic across the group and never a DETECTION failure.
+     At 10 reps: non-word typos 30/30, dt-errors 24/30, and all six failures
+     are ONE case. On "Ik wordt volgende maand geopereerd" the model flags
+     "wordt" 10/10 and 6 of those returns `CORRECTIE: wordt` — the word
+     unchanged. The pipeline correctly drops that (`suggested_text ==
+     sent_text`), so a **correction-formation** failure surfaces as a missing
+     suggestion and reads like flaky detection. That is also why three
+     consecutive runs all scored 6/6 while the item predicted ~1 in 3: at item
+     granularity you sample a 40%-failure case once per run.
+   - Fixed with conjugation guidance + the rule that CORRECTIE must differ from
+     WOORD. dt 24/30 → 30/30 (the one case 4/10 → 10/10), non-word unchanged,
+     and clean controls widened to 16 items IMPROVED 72/80 → 76/80 — the dt
+     focus did not cause over-flagging. Measure with `spelling_probe.py`.
+   - **The Hunspell pass is correct, not dead.** It produced nothing across 100
+     items because it skips words the LLM already flagged, and the LLM catches
+     all six typos first. Given uncovered input it still fires
+     (acomodatie → accommodatie). It STRUCTURALLY cannot catch dt-errors —
+     word/vind/loop are valid dictionary entries — and misses "onmiddelijk"
+     because spylls' `suggest()` returns empty for it. Non-word typos are
+     Hunspell's; dt-errors are the LLM's alone, which is why this item was
+     always an LLM-prompt problem.
 5. ~~**No-op `word_frequency` suggestions slip the filters**~~ — FIXED for the
    suggestion layer. The BUNDLED word-frequency path lacked the
    `_is_noop_rewrite` check the per-trigger path already had, so a rewrite
