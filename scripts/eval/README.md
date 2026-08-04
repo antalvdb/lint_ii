@@ -41,8 +41,10 @@ provably suppresses them.
   forms of common word families must not fire word_frequency).
 - `corpus5.json` — consolidation set for the 2026-07-30/31 fixes. First
   `spelling-*` DETECTION positives (planted typos + dt-errors); enum mixes
-  nominalized-infinitive lists (surface route) with two plain NP-list
-  sentinels (known conj-route gap, expected misses); family-* covers
+  nominalized-infinitive lists with two plain NP lists (enum-6/7, authored as
+  conj-route sentinels, detecting since `fe0ff4c` — note they never actually
+  measured that gap at the headline level, see the third-run notes);
+  family-* covers
   lemma/comparative/diminutive/particle mechanisms; conn-9/10 are temporal
   consequences tracking the model-side GEEN residual (conn-9 fires as of the
   set-5 run; conn-10 is the surviving inferential case — see backlog item 1).
@@ -211,6 +213,27 @@ DEFENSIBLE rewrites rather than errors. That is a scoring-convention question
 (should a sound rewrite of a 13-word sentence count against precision?) more
 than a quality defect — worth settling before chasing max_sdl precision.
 
+Set-5 THIRD run (2026-08-04, after `fe0ff4c`): 0.95 / 0.95. **The headline is
+the wrong place to look for this fix, and the reason is a flaw in the harness
+worth understanding before designing another sentinel.**
+
+- The fix worked: enum 5/7 → **7/7**, enum-6 and enum-7 both detect, zero new
+  FPs (the route fires on 0 of 185 non-enum items offline).
+- Yet recall went 0.97 → 0.95. Two independent things moved: enum gained 2,
+  and conn-6 — a ~1-in-6 firer under the old and new connective prompt alike —
+  drew its miss again. The connective loss is sampling; the enum gain is a
+  deterministic detector change.
+- They do not cancel arithmetically because **enum-6/7 were already counted as
+  TPs**. Both attract `word_frequency` suggestions, so the item scored as
+  "suggested something" while the enumeration itself was missing.
+
+The lesson for corpus design: presence/absence is an ITEM-level metric, so it
+only moves when an item goes from zero suggestions to some. A sentinel for a
+missing PHENOMENON is invisible to it unless the item is otherwise clean —
+enum-6/7 never measured the gap they were authored to track. Judge a
+phenomenon fix by its phenomenon count (here 5/7 → 7/7) plus offline
+validation, not by precision/recall.
+
 ## Current residuals / backlog (priority order)
 
 1. **Connective GEEN on inferential consequences** (corpus4 conn-10, corpus5
@@ -255,10 +278,18 @@ than a quality defect — worth settling before chasing max_sdl precision.
      only. A trigger folded into a consolidated sentence_rewrite uses a
      different prompt carrying none of this guidance. Observed benign once
      (monumentale preserved), but unguarded and unmeasured.
-3. **Enumeration conj-route gap**: plain 4-item NP lists parse as pair-chains,
-   only nominalized-infinitive lists are surface-detected. corpus5 enum-6/7
-   are sentinels (expected misses) — a surface route for NP lists must not
-   break the shortlist guards.
+3. ~~**Enumeration conj-route gap**~~ — FIXED in `fe0ff4c`. corpus5 enum-6/7
+   detect; the enum group is 7/7. A second surface route counts plain comma
+   lists ("A, B, C en D") with phrase-level items.
+   The diagnosis was worse than "parses as pair-chains": on enum-6 spaCy
+   chains 2 of 4 items, and on enum-7 it chains "binnenstad" — a noun from
+   INSIDE the third item — to the wrong head. The chain is wrong, not just
+   short, so no tuning of the conj route could reach these.
+   The warning about the shortlist guards was aimed at the wrong gate:
+   shortlist-* was never held back by item count (it hits
+   `enumeration_min_items` exactly, chained correctly) but by SPAN, 4-6
+   against a threshold of 12. The new route reuses that span gate and the
+   margin stays wide (negatives 4-6, positives 15-24).
 4. **Spelling detection wobble**: Qwen flags planted dt-errors in ~1 of 3 runs;
    corpus5's spelling-* group measures it for the first time. Set-5 re-run got
    6/6 including both dt-errors — a good draw, not a fix. NOTE the catches are

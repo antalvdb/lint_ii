@@ -9,7 +9,12 @@ the enumeration surface route. New here:
 - a spelling-* POSITIVE group (planted errors) — sets 1-4 never measured
   spelling DETECTION recall, only its false positives;
 - enum-* mixes nominalized-infinitive lists (surface route) with plain
-  noun-phrase lists (conj route);
+  noun-phrase lists (enum-6/7). Those two were authored as conj-route
+  sentinels; `fe0ff4c` added an NP-list surface route and they now detect.
+  Note they were poor sentinels: both attract word_frequency suggestions, so
+  the item-level presence/absence metric scored them as TPs the whole time
+  and never showed the missing enumeration. A phenomenon sentinel only works
+  on an item that is otherwise clean;
 - family-* includes 'warmere' (spaCy leaves it unlemmatized — regression
   case for the ADJ surface-strip) and covers lemma/comparative/diminutive/
   particle mechanisms;
