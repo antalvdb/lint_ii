@@ -118,7 +118,23 @@ relation whitelist — a variant sweep in ~90s.
 python3 connective_probe.py --reps 6                       # score the live prompt
 python3 connective_probe.py --variant mine --compare base  # A/B a candidate
 python3 connective_probe.py --audit                        # example/corpus word collisions
+
+python3 wordfreq_probe.py --reps 12                        # item 2: semantic swaps
+python3 wordfreq_probe.py --group control --reps 4         # ...must still simplify
+python3 swap_judge_probe.py --judge calibrated             # can Qwen judge its own swaps?
 ```
+
+**Reps: 6 for connective, 12 for word-frequency.** The word-frequency
+aggregate is far noisier — two runs of an IDENTICAL prompt scored 55% and 42%
+(a 13-point swing, larger than the effect being measured), which briefly
+produced a confident wrong conclusion. 5 reps is enough for a per-case
+verdict, not for a total.
+
+**Always run the control group.** `wordfreq_probe.py --group control` scores
+words that MUST still be simplified, where refusing is the failure. A variant
+can otherwise look excellent purely by declining to do its job — and the
+winning variant does add an ONGEWIJZIGD escape hatch, so this is a live risk
+rather than a theoretical one.
 
 Cases are read from the corpora (all 20 `conn-*` positives, plus every
 multi-sentence negative that actually reaches the pass) so they cannot drift.
@@ -208,9 +224,37 @@ than a quality defect — worth settling before chasing max_sdl precision.
    loosening for it is what drove false positives in the discarded variants.
    Note corpus5 conn-9 is NOT part of this residual — it has fired since the
    set-5 run (base 5/5 on a direct probe); the old item text was stale.
-2. **Qwen semantic swaps on positives** (monumentale→groot,
-   "verloren gewaande"→vermeende, koeling→koelkast class): low volume,
-   meaning-changing. Likely prompt work; same box-side loop.
+2. **Qwen semantic swaps on positives** — PARTLY addressed by `3992b09`;
+   what remains is characterised, not guessed. Measure with
+   `wordfreq_probe.py` (11 reproducible bad swaps + 10 must-still-simplify
+   controls). The item said "likely prompt work"; that is only half right.
+   - **Shipped:** meaning-preservation examples in the bundle prompt, BAD
+     67% → 52% at 12 reps, controls 40/40 with 0 refusals (no recall cost).
+   - **The class splits in two, and this is the key finding.** Every swap
+     failing 12/12 at base still fails 12/12 after the fix
+     (monumentale→groot, gewaande→vermeende, insinuaties→suggesties,
+     notoire→bekende — 48 of the 68 remaining failures). The entire gain came
+     from partially-failing cases (koeling 8→3, verharding 10→5, reder 4→0).
+     **Prompt examples move wobbly cases and cannot touch confident ones.**
+     Do not spend more prompt effort on the confident four.
+   - **Vector similarity is ruled out** as a deterministic guard: spaCy
+     `nl_core_news_lg` cosine gives BAD mean 0.440 vs GOOD 0.529, heavily
+     overlapping, because the worst swaps are topically CLOSE
+     (koeling→koelkast 0.547, insinuaties→suggesties 0.561 both score above
+     the legitimate beoogt→wil 0.288). Relatedness is not substitutability.
+   - **Next step, and it is viable:** a verification pass. Qwen does NOT share
+     its own generator error — it rejects monumentale→groot 5/5 when asked
+     directly. Everything depends on calibration: "precies hetzelfde?" gives
+     100% detection but 60% FALSE ALARMS (useless — false alarms destroy the
+     legitimate simplifications that are the product), while "zet dit de lezer
+     op het verkeerde been?" gives 45% held-out detection at **0%** false
+     alarms. See `swap_judge_probe.py`. Unmeasured and required first: cost
+     and latency of one extra call per word_frequency suggestion (~45 per
+     100-item set) against an output-bound rate limit.
+   - **Scope limit of the shipped fix:** it patches `word_frequency_bundle`
+     only. A trigger folded into a consolidated sentence_rewrite uses a
+     different prompt carrying none of this guidance. Observed benign once
+     (monumentale preserved), but unguarded and unmeasured.
 3. **Enumeration conj-route gap**: plain 4-item NP lists parse as pair-chains,
    only nominalized-infinitive lists are surface-detected. corpus5 enum-6/7
    are sentinels (expected misses) — a surface route for NP lists must not
