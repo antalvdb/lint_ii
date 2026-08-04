@@ -292,6 +292,12 @@ Belangrijke richtlijnen:
 Tekst:
 {text}
 
+Let bij werkwoorden op de persoonsvorm: "ik" krijgt de stam zonder -t, "hij/zij/het" en "jij" (voor het werkwoord) krijgen de stam met -t. Twee voorbeelden:
+- "Ik reageert morgen" -> WOORD: reageert, CORRECTIE: reageer
+- "Hij reageer nooit" -> WOORD: reageer, CORRECTIE: reageert
+
+CORRECTIE bevat het VERBETERDE woord en moet dus altijd verschillen van WOORD. Kun je geen verbeterde vorm geven, meld het woord dan niet.
+
 Geef voor elke gevonden fout het volgende gestructureerde formaat (één blok per fout):
 
 ---
