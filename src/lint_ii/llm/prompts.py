@@ -202,6 +202,13 @@ Je richt je specifiek op het vervangen van infrequente of moeilijke woorden door
 
 Is het aangegeven woord een lange samenstelling zonder eenvoudig synoniem? Splits het dan in een begrijpelijker woordgroep in plaats van één zeldzaam woord te zoeken (bijv. "levensmiddelendistributiecentrum" → "centrum voor de distributie van levensmiddelen"). Geef die woordgroep als VERVANGING en verwerk hem in de HERSCHRIJVING. Voeg geen nieuwe inhoud toe die niet al in het woord besloten ligt.
 
+Behoud de precieze betekenis. Kies geen woord dat er in de buurt komt maar iets anders betekent: een specifieker begrip, een ander voorwerp of een andere gevoelswaarde is FOUT, ook als het makkelijker is. Vier voorbeelden van wat er mis kan gaan:
+- "aanmaning" (een formele eis tot betaling) → NIET "herinnering"; die is vrijblijvend
+- "beademing" (het beademen) → NIET "beademingsapparaat"; dat is een apparaat, geen handeling
+- "eigenzinnige" (koppig, met een oordeel erin) → NIET "bijzondere"; dat is neutraal
+- "chronische" (langdurig) → NIET "zware"; dat zegt iets anders over de ernst
+Weet je geen woord dat de betekenis volledig behoudt? Laat het woord dan staan en antwoord met VERVANGING: ONGEWIJZIGD.
+
 Belangrijk: als de vervanging gevolgen heeft voor de grammaticale context (bijv. adjectief­verbuiging, lidwoord de/het, meervoud/enkelvoud, werkwoordsvervoeging), pas dan ook de omringende woorden aan zodat de zin grammaticaal correct blijft.
 
 {items}
