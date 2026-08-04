@@ -652,6 +652,18 @@ class SuggestionEngine:
                 if best is None or surface[0] > best[0]:
                     best = surface
 
+            # Second surface route: plain NP lists ("oude landkaarten uit de
+            # zestiende eeuw, handgeschreven brieven van scheepskapiteins, ...
+            # en een unieke verzameling ..."). The conj parse fails on these
+            # even worse than on nominalized infinitives -- on corpus5 enum-6
+            # spaCy chains 2 of the 4 items, and on enum-7 it chains a noun
+            # from INSIDE an item ("binnenstad") to the wrong head. Counting
+            # commas at the surface is reliable where the parse is not.
+            np_surface = self._np_coordination_list(doc)
+            if np_surface is not None and np_surface[0] >= min_items and np_surface[1] >= min_span:
+                if best is None or np_surface[0] > best[0]:
+                    best = np_surface
+
             if best is None:
                 return None
             return SuggestionTrigger(
@@ -703,6 +715,73 @@ class SuggestionEngine:
             return None
         span_words = matches[-1][1] - matches[0][0] + 1
         return (len(matches), span_words)
+
+    # Coordinators that can join the final item of a list. "maar"/"want"/"dus"
+    # are deliberately absent: they join CLAUSES, so treating them as list
+    # coordinators would match "Reserveer op tijd, want de vakantieweken lopen
+    # snel vol" (corpus5 conj-3).
+    _LIST_COORDINATORS = frozenset({"en", "of"})
+
+    @classmethod
+    def _np_coordination_list(cls, doc) -> tuple[int, int] | None:
+        """Count a surface comma list "A, B, C en D" of phrase-level items.
+
+        Returns (item_count, token_span) or None. The span is anchored at the
+        FIRST comma, not at the start of the first item: the left edge of item
+        one is not recoverable at the surface ("... toont oude landkaarten ..."
+        -- where does the item begin?). That makes this span systematically
+        smaller than the conj route's by roughly one item, so reusing
+        enumeration_min_span_words here is the conservative choice, not a
+        loosening. Measured margin on the corpora is wide: the shortlist-*
+        negatives score 4-6 against a threshold of 12, the enum-* positives
+        15-24.
+
+        Every segment must be phrase-level. That single rule is what keeps
+        appositions and clause-joining commas out: "De directeur, een oude
+        bekende, opende de deur en liep weg" has finite verbs in its segments
+        and is rejected.
+        """
+        toks = [t for t in doc]
+        commas = [i for i, t in enumerate(toks) if t.text == ","]
+        if not commas:
+            return None
+
+        # Segments strictly after the first comma. The text before it holds
+        # item one plus the sentence preamble, which cannot be separated here;
+        # it is counted (+1) but never inspected.
+        segments: list[list] = []
+        start = commas[0] + 1
+        for c in commas[1:]:
+            segments.append(toks[start:c])
+            start = c + 1
+
+        tail = toks[start:]
+        coord_positions = [
+            i for i, t in enumerate(tail) if t.lower_ in cls._LIST_COORDINATORS
+        ]
+        if not coord_positions:
+            # No "en"/"of" closing the list: commas here are doing some other
+            # job (apposition, clause separation, an interrupted sentence).
+            return None
+        k = coord_positions[-1]
+        segments.append(tail[:k])
+        segments.append(tail[k + 1:])
+
+        segments = [[t for t in s if not t.is_punct] for s in segments]
+        segments = [s for s in segments if s]
+        if not segments:
+            return None
+        n_items = len(segments) + 1  # + the item preceding the first comma
+
+        for seg in segments:
+            if any(
+                t.pos_ in ("VERB", "AUX") and "Fin" in t.morph.get("VerbForm")
+                for t in seg
+            ):
+                return None
+
+        span_words = segments[-1][-1].i - toks[commas[0]].i + 1
+        return (n_items, span_words)
 
     @staticmethod
     def _prioritize_triggers(
