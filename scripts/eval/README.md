@@ -13,6 +13,25 @@ python3 run_eval.py --corpus scripts/eval/corpus5.json \
                     --results scripts/eval/results5.json --fresh
 ```
 
+**Check provider health before AND after any eval run.** A run on 2026-08-06
+scored 0.71 recall and looked like a catastrophic regression; the cause was
+295 HTTP 500s from `inference.hetzner.com` during the run. Every pass is
+fail-open, so a provider outage silently becomes "no suggestions" and reads as
+a recall collapse. The tell is items losing suggestion types the change under
+test cannot touch. Gate on it:
+
+```
+curl -s -o /dev/null -w "%{http_code}\n" -X POST \
+  https://inference.hetzner.com/api/v1/chat/completions \
+  -H "Authorization: Bearer $HETZNER_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"model":"Qwen/Qwen3.6-35B-A3B-FP8","messages":[{"role":"user","content":"ok"}],
+       "max_tokens":5,"chat_template_kwargs":{"enable_thinking":false}}'
+grep -c "500 Internal Server Error" /var/log/lint-ii/app.log   # before vs after
+```
+
+A handful of 500s is survivable (81 in the next run cost exactly one item);
+hundreds voids the run.
+
 - The runner is sequential, resumable (`--fresh` ignores prior results), and
   cache-busts every item with a per-run nonce. It prints presence/absence
   precision/recall; per-suggestion quality judging (wrong / debatable / right)
@@ -57,7 +76,7 @@ provably suppresses them.
 | 2 | 0.88 / 1.00 | 0.86 / 1.00 | — | — |
 | 3 | 0.88 / 0.98 | 0.86 / 0.95 | — | — |
 | 4 | — | — | 0.90 / 0.92 | **0.91 / 0.95** (re-run 2026-07-31) |
-| 5 | — | — | 0.94 / 0.95 | **0.97 / 0.94** (4th run 2026-08-04, `48c8fa8`) |
+| 5 | — | — | 0.94 / 0.95 | **0.95 / 0.94** (5th run 2026-08-06, `bb8783d`) |
 
 Set 5 has been run four times. The sequence matters more than any single
 number, and it is the strongest argument in this file for judging phenomenon
@@ -69,9 +88,11 @@ fixes by phenomenon counts rather than by precision/recall:
 | 2 | `a4246f3` | 0.95 / 0.97 | conj-3 no-op FP fixed; recall gain was conn-6 wobble |
 | 3 | `fe0ff4c` | 0.95 / 0.95 | enum 5/7 → **7/7** — invisible to the metric |
 | 4 | `48c8fa8` | 0.97 / 0.94 | dt fix — invisible; family-4 FP cleared |
+| — | `bebbecd` | ~~0.95 / 0.71~~ | **VOID** — 295 provider 500s, not a regression |
+| 5 | `bb8783d` | 0.95 / 0.94 | swap judge: 3 bad swaps removed, 1 good one lost |
 
-Twice the headline moved OPPOSITE to a fix that demonstrably worked. Each run
-is described below; read them together.
+Twice the headline moved OPPOSITE to a fix that demonstrably worked, and once
+it measured a provider outage. Each run is described below; read them together.
 
 Set-4 notes: family guard 5/5, zero same-family swaps; recall dip was
 connective (6/10, since fixed to 8/10) plus one wordfreq FN; the spelling
@@ -262,6 +283,40 @@ regression detection, which it passed:
   correctly rejects those. Pre-existing compound wobble in word_frequency.
 - connective 7/10, spelling 6/6, enum 7/7 — all unchanged.
 
+Set-5 FIFTH run (2026-08-06, after `bb8783d`, swap judge live): **0.95 / 0.94**.
+Valid despite 81 provider 500s — only one item lost everything, and the judge
+explains that one, not the outage. (The run before it, at `bebbecd`, scored
+0.71 recall and is VOID: 295 500s, and 15 items shed suggestion types the
+judge cannot touch.)
+
+The judge made 5 rejections across 100 items — the direct evidence, better
+than the headline:
+
+| rejected | verdict |
+|----------|---------|
+| verharding → vastberadenheid | correct |
+| verzakelijking → zakelijkheid | correct (also produced ungrammatical Dutch) |
+| insinuaties → suggesties | correct |
+| aggresief → agressief | harmless — the SPELLING pass still supplies that fix |
+| ambivalent → verdeeld | **false alarm, and it cost a whole item** |
+
+The denominalization fix held: `verlaging → minder` and `afname → minder` are
+absent from the list and the `abstract-*` group is intact (all seven keep
+their suggestions bar abstract-6, where the judge correctly removed
+verharding).
+
+The one costly error is instructive. `verdeeld` is a GOOD replacement for
+ambivalent, and it was that item's only suggestion, so rejecting it dropped
+wordfreq-4 to zero and made it the run's new FN. The judge has no stable view
+of that word: it rejects both the bad swap (`→ twijfelachtig`) and the good one
+(`→ verdeeld`). **A false alarm on a single-suggestion item costs the whole
+item**, which is a sharper failure than on an item with several — worth
+considering if the judge is ever tightened.
+
+Net for the run: 3 meaning-changing suggestions removed, 1 legitimate one
+destroyed. The other FP change (family-4) is the max_sdl borderline wobble,
+unrelated.
+
 ## Current residuals / backlog (priority order)
 
 1. **Connective GEEN on inferential consequences** (corpus4 conn-10, corpus5
@@ -293,15 +348,31 @@ regression detection, which it passed:
      overlapping, because the worst swaps are topically CLOSE
      (koeling→koelkast 0.547, insinuaties→suggesties 0.561 both score above
      the legitimate beoogt→wil 0.288). Relatedness is not substitutability.
-   - **Next step, and it is viable:** a verification pass. Qwen does NOT share
-     its own generator error — it rejects monumentale→groot 5/5 when asked
-     directly. Everything depends on calibration: "precies hetzelfde?" gives
-     100% detection but 60% FALSE ALARMS (useless — false alarms destroy the
-     legitimate simplifications that are the product), while "zet dit de lezer
-     op het verkeerde been?" gives 45% held-out detection at **0%** false
-     alarms. See `swap_judge_probe.py`. Unmeasured and required first: cost
-     and latency of one extra call per word_frequency suggestion (~45 per
-     100-item set) against an output-bound rate limit.
+   - **Verification pass — SHIPPED** in `bebbecd` + `bb8783d`
+     (`_verify_word_swaps`, prompt `swap_judge`, `LINT_II_SWAP_JUDGE=0`
+     disables; defaults ON). Qwen does NOT share its own generator error — it
+     rejects monumentale→groot when asked directly — so a second call reaches
+     what prompt work cannot.
+     Cost is a non-issue, which was the open question: ~8 completion tokens
+     and ~0.22s per call, ~40 per 100-item set, ~0.6% of the per-minute output
+     budget. FAIL-OPEN throughout (exception, unparseable answer or missing
+     verdict all KEEP the suggestion).
+     **Calibration is the entire design, and every direction has been measured
+     to fail in a different way:**
+     | judge wording | detection | false alarms |
+     |---------------|-----------|--------------|
+     | "precies hetzelfde?" | 100% | **60%** — unusable |
+     | "zet dit de lezer op het verkeerde been?" | 47% | 0% on probes, but rejected `verlaging→minder` live |
+     | + blanket "simplifying noun constructions is good" | 25% | 0% |
+     | + NARROW change-nominalization rule (shipped) | 37% | 0% |
+     The false-alarm side governs: a false alarm deletes a legitimate
+     simplification, which is the product. On a live run the shipped judge
+     removed 3 meaning-changing swaps and destroyed 1 good one.
+     **Known weakness:** it has no stable view of some words — it rejects both
+     `ambivalent→twijfelachtig` (bad) and `ambivalent→verdeeld` (good). And a
+     false alarm on a single-suggestion item costs the WHOLE item.
+     Still untouched by either layer: monumentale→grote, conservator→bewaarder,
+     notoire→bekende all pass the judge as readily as they pass the generator.
    - **Scope limit of the shipped fix:** it patches `word_frequency_bundle`
      only. A trigger folded into a consolidated sentence_rewrite uses a
      different prompt carrying none of this guidance. Observed benign once
