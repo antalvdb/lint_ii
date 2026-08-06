@@ -75,6 +75,13 @@ pushing.** Don't assume the other side is idle.
 - `LINT_II_CONNECTIVES=1` — the connective pass is OFF by default; the live box
   has it on. Any local engine experiment that should include connectives needs
   this set, or the pass silently returns nothing.
+- `LINT_II_SWAP_JUDGE=1` — verification pass that drops meaning-changing
+  word_frequency swaps (backlog item 2). OFF by default and NOT yet in the box
+  env file, so it is currently inactive in production. It only ever removes
+  suggestions: measured on set 5 it dropped 3 meaning-changing swaps and 1
+  legitimate one, and a false alarm on a single-suggestion item costs the whole
+  item. Turn it on deliberately, and re-read the calibration table in
+  `scripts/eval/README.md` before changing its prompt.
 - Other knobs: `LINT_II_LLM_TIMEOUT` (watchdog, 300s), `LINT_II_MAX_PENDING_JOBS`
   (flood guard, 12), `LINT_II_HETZNER_TEMPERATURE` (0.3),
   `LINT_II_LOG_LEVEL` (INFO; DEBUG logs full prompts+responses — the fastest way

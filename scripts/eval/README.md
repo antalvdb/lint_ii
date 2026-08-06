@@ -349,8 +349,10 @@ unrelated.
      (koeling→koelkast 0.547, insinuaties→suggesties 0.561 both score above
      the legitimate beoogt→wil 0.288). Relatedness is not substitutability.
    - **Verification pass — SHIPPED** in `bebbecd` + `bb8783d`
-     (`_verify_word_swaps`, prompt `swap_judge`, `LINT_II_SWAP_JUDGE=0`
-     disables; defaults ON). Qwen does NOT share its own generator error — it
+     (`_verify_word_swaps`, prompt `swap_judge`). **OFF by default; set
+     `LINT_II_SWAP_JUDGE=1` to enable**, same pattern as `LINT_II_CONNECTIVES`
+     — it only ever REMOVES suggestions and its false-alarm rate is measured on
+     one corpus, not on tester text. Qwen does NOT share its own generator error — it
      rejects monumentale→groot when asked directly — so a second call reaches
      what prompt work cannot.
      Cost is a non-issue, which was the open question: ~8 completion tokens

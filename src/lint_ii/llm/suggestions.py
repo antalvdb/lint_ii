@@ -729,9 +729,13 @@ class SuggestionEngine:
         on the same pool width as the job pool. A full 100-item eval set makes
         ~40 of them, about 0.6% of the provider's per-minute output budget.
 
-        Set LINT_II_SWAP_JUDGE=0 to disable.
+        OFF by default; set LINT_II_SWAP_JUDGE=1 to enable (the live box does
+        so via its EnvironmentFile, same pattern as LINT_II_CONNECTIVES). It
+        only ever REMOVES suggestions, and its false-alarm rate is measured on
+        one corpus rather than on tester text, so switching it on is a
+        deliberate choice rather than a default.
         """
-        if os.environ.get("LINT_II_SWAP_JUDGE", "1") == "0":
+        if os.environ.get("LINT_II_SWAP_JUDGE", "0") != "1":
             return suggestions
 
         targets = [
