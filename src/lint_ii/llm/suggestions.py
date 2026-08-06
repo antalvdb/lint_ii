@@ -716,6 +716,73 @@ class SuggestionEngine:
         span_words = matches[-1][1] - matches[0][0] + 1
         return (len(matches), span_words)
 
+    def _verify_word_swaps(
+        self, suggestions: list[Suggestion], provider: LLMProvider,
+    ) -> list[Suggestion]:
+        """Drop word_frequency swaps the model judges to change meaning.
+
+        FAIL-OPEN throughout: a judge error, an unparseable answer or a missing
+        field keeps the suggestion. A verification pass that silently deleted
+        suggestions on a network blip would be worse than no pass at all.
+
+        Cheap: the judge answers in ~8 tokens, ~0.22s per call, and calls run
+        on the same pool width as the job pool. A full 100-item eval set makes
+        ~40 of them, about 0.6% of the provider's per-minute output budget.
+
+        Set LINT_II_SWAP_JUDGE=0 to disable.
+        """
+        if os.environ.get("LINT_II_SWAP_JUDGE", "1") == "0":
+            return suggestions
+
+        targets = [
+            s for s in suggestions
+            if s.type == SuggestionType.WORD_FREQUENCY
+            and s.word and s.replacement_word and s.original_text
+        ]
+        if not targets:
+            return suggestions
+
+        def verdict(sug: Suggestion) -> bool:
+            """True to keep. Any doubt keeps the suggestion."""
+            try:
+                system_prompt, user_prompt = format_prompt(
+                    "swap_judge",
+                    sentence=sug.original_text,
+                    word=sug.word,
+                    replacement=sug.replacement_word,
+                )
+                answer = provider.complete(user_prompt, system_prompt).content.upper()
+            except Exception as e:  # noqa: BLE001 - fail open
+                logger.warning("Swap judge failed for %r -> %r: %s",
+                               sug.word, sug.replacement_word, e)
+                return True
+            if re.search(r"OORDEEL:\s*FOUT", answer):
+                return False
+            if re.search(r"OORDEEL:\s*GOED", answer):
+                return True
+            logger.info("Swap judge gave no verdict for %r -> %r; keeping",
+                        sug.word, sug.replacement_word)
+            return True
+
+        workers = _JOB_CONCURRENCY if provider.supports_concurrency else 1
+        workers = max(1, min(workers, len(targets)))
+        if workers > 1:
+            with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="swap-judge") as ex:
+                keep = list(ex.map(verdict, targets))
+        else:
+            keep = [verdict(s) for s in targets]
+
+        rejected = {id(s) for s, k in zip(targets, keep) if not k}
+        if not rejected:
+            return suggestions
+        for s, k in zip(targets, keep):
+            if not k:
+                logger.info(
+                    "Swap judge rejected word_frequency %r -> %r (meaning change)",
+                    s.word, s.replacement_word,
+                )
+        return [s for s in suggestions if id(s) not in rejected]
+
     # Coordinators that can join the final item of a list. "maar"/"want"/"dus"
     # are deliberately absent: they join CLAUSES, so treating them as list
     # coordinators would match "Reserveer op tijd, want de vakantieweken lopen
@@ -1268,6 +1335,21 @@ class SuggestionEngine:
         else:
             for job in jobs:
                 suggestions.extend(_run_job(job))
+
+        # Step 3b: verification pass over word_frequency swaps (backlog item 2).
+        # Prompt work cannot reach the confident-wrong swaps — every swap that
+        # failed 12/12 before the meaning-preservation examples still fails
+        # 12/12 after them — but the model rejects those same swaps when asked
+        # about them directly. Runs after generation so it sees the final
+        # word/replacement pair whichever path produced it.
+        t_judge = time.perf_counter()
+        before = len(suggestions)
+        suggestions = self._verify_word_swaps(suggestions, provider)
+        if len(suggestions) != before:
+            logger.info(
+                "TIMING swap_judge=%.2fs (%d of %d swaps rejected)",
+                time.perf_counter() - t_judge, before - len(suggestions), before,
+            )
 
         # An enumeration suggestion IS the rewrite for its sentence: a bulleted
         # list. Drop competing full-sentence prose rewrites for the same

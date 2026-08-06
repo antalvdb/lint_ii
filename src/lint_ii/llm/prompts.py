@@ -311,6 +311,42 @@ UITLEG: [hoogstens tien woorden: wat er fout is, in eenvoudige taal]
 Als er geen fouten zijn, antwoord dan met:
 GEEN_FOUTEN"""
     ),
+
+    # Verification pass for word_frequency swaps (backlog item 2). Prompt
+    # examples are drawn from OUTSIDE every eval corpus on purpose: a judge
+    # taught its own test cases scored 63% where the honest figure was 45%.
+    #
+    # Calibration is the whole design here. Asking "does this mean precisely
+    # the same?" detects 100% of bad swaps but false-alarms on 60% of good
+    # ones, which is useless — a false alarm silently deletes a legitimate
+    # simplification, and those are the product. Asking whether the reader is
+    # MISLED gives 47% detection at 0% false alarms on the probe set, and on
+    # the 39 real swaps of a full eval run it rejected 5: four genuinely bad
+    # (verharding->vastberadenheid, insinuaties->suggesties, structureel->
+    # altijd, verzakelijking->zakelijkheid) and one good (verlaging->minder).
+    # Do not tighten this toward "exactly the same" without re-measuring the
+    # false-alarm side.
+    "swap_judge": PromptTemplate(
+        system="Je bent een strenge maar praktische lezer van Nederlandse teksten.",
+        user="""Je beoordeelt of een woordvervanging in een tekst voor gewone lezers acceptabel is.
+
+Zin: "{sentence}"
+Vervanging: "{word}" wordt "{replacement}"
+
+Het doel is de tekst MAKKELIJKER te maken. Een eenvoudiger woord met dezelfde strekking is GOED, ook als het net iets algemener of gewoner klinkt; kleine stijlverschillen zijn geen bezwaar.
+
+Keur alleen AF als de vervanging de lezer op het verkeerde been zet:
+- het wordt een ander ding (een handeling wordt een apparaat)
+- de gevoelswaarde draait om (negatief wordt neutraal of positief)
+- er wordt iets specifieks beweerd dat er niet stond
+
+Voorbeelden van GOED: "terstond" -> "meteen"; "gaarne" -> "graag".
+Voorbeelden van FOUT: "verhitting" -> "oven" (handeling wordt apparaat); "eigenzinnige" -> "bijzondere" (het oordeel verdwijnt).
+
+Antwoord met exact een van deze twee regels:
+OORDEEL: GOED
+OORDEEL: FOUT""",
+    ),
 }
 
 
