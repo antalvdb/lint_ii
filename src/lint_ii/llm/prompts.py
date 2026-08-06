@@ -316,16 +316,26 @@ GEEN_FOUTEN"""
     # examples are drawn from OUTSIDE every eval corpus on purpose: a judge
     # taught its own test cases scored 63% where the honest figure was 45%.
     #
-    # Calibration is the whole design here. Asking "does this mean precisely
-    # the same?" detects 100% of bad swaps but false-alarms on 60% of good
-    # ones, which is useless — a false alarm silently deletes a legitimate
-    # simplification, and those are the product. Asking whether the reader is
-    # MISLED gives 47% detection at 0% false alarms on the probe set, and on
-    # the 39 real swaps of a full eval run it rejected 5: four genuinely bad
-    # (verharding->vastberadenheid, insinuaties->suggesties, structureel->
-    # altijd, verzakelijking->zakelijkheid) and one good (verlaging->minder).
-    # Do not tighten this toward "exactly the same" without re-measuring the
-    # false-alarm side.
+    # Calibration is the whole design here, and BOTH directions have been
+    # measured to fail:
+    #   "does this mean precisely the same?"  100% detection / 60% false alarms
+    #   "does this mislead the reader?"        47% / 0% on the probe set
+    #   + a blanket "simplifying noun constructions is good"  25% / 0%
+    #   + the NARROW change-nominalization rule below (shipped)  37% / 0%
+    # A false alarm silently deletes a legitimate simplification, and those are
+    # the product, so the false-alarm side governs.
+    #
+    # The change-nominalization sentence is not decoration. Without it a full
+    # eval run rejected "verlaging -> minder" and "afname -> minder" — the
+    # abstract-noun class this pipeline EXISTS to simplify, i.e. the judge
+    # attacking the product. Phrasing it broadly ("replacing a clumsy noun
+    # construction is good") fixed those but halved detection; the narrow
+    # version keeps verharding->vastberadenheid, verzakelijking->zakelijkheid
+    # and insinuaties->suggesties at 8/8 while accepting both denominalizations,
+    # at the cost of ambivalent->twijfelachtig (6/8 -> 0/8).
+    #
+    # Do not tighten toward "exactly the same" without re-measuring false
+    # alarms, and do not broaden the exemption without re-measuring detection.
     "swap_judge": PromptTemplate(
         system="Je bent een strenge maar praktische lezer van Nederlandse teksten.",
         user="""Je beoordeelt of een woordvervanging in een tekst voor gewone lezers acceptabel is.
@@ -334,6 +344,8 @@ Zin: "{sentence}"
 Vervanging: "{word}" wordt "{replacement}"
 
 Het doel is de tekst MAKKELIJKER te maken. Een eenvoudiger woord met dezelfde strekking is GOED, ook als het net iets algemener of gewoner klinkt; kleine stijlverschillen zijn geen bezwaar.
+
+Een naamwoord dat een toename of afname uitdrukt mag worden vervangen door een gewone formulering van diezelfde toename of afname; de betekenis blijft dan gelijk. Bijvoorbeeld "een stijging van het aantal leden" -> "meer leden". Dat is GOED.
 
 Keur alleen AF als de vervanging de lezer op het verkeerde been zet:
 - het wordt een ander ding (een handeling wordt een apparaat)

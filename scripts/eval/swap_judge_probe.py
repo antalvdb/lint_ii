@@ -72,6 +72,8 @@ CASES = [
 # Words named in the `calibrated` prompt. Their scores are inflated; the
 # summary reports held-out separately so the honest number stays visible.
 TAUGHT = {"koeling", "notoire", "reprimande", "clandestiene", "gepikeerd"}
+# `production` teaches none of these; its held-out figure equals its overall one.
+TAUGHT_BY = {"calibrated": TAUGHT, "strict": set(), "production": set(), "production_v2": set(), "production_v3": set()}
 
 JUDGES = {
     # Rejects nearly everything: "exactly the same?" is a stricter question
@@ -87,6 +89,81 @@ Antwoord met exact een van deze twee regels:
 OORDEEL: BEHOUDEN
 OORDEEL: VERANDERD''',
 
+    # Production candidate. Same calibration as `calibrated`, but its examples
+    # are drawn from outside every corpus AND outside this test set, so all 12
+    # cases below stay held-out. `calibrated` names koeling/notoire/reprimande/
+    # clandestiene/gepikeerd in its own prompt and its 63% is inflated; this one
+    # can be read at face value.
+    "production": '''Je beoordeelt of een woordvervanging in een tekst voor gewone lezers acceptabel is.
+
+Zin: "{sent}"
+Vervanging: "{word}" wordt "{repl}"
+
+Het doel is de tekst MAKKELIJKER te maken. Een eenvoudiger woord met dezelfde strekking is GOED, ook als het net iets algemener of gewoner klinkt; kleine stijlverschillen zijn geen bezwaar.
+
+Keur alleen AF als de vervanging de lezer op het verkeerde been zet:
+- het wordt een ander ding (een handeling wordt een apparaat)
+- de gevoelswaarde draait om (negatief wordt neutraal of positief)
+- er wordt iets specifieks beweerd dat er niet stond
+
+Voorbeelden van GOED: "terstond" -> "meteen"; "gaarne" -> "graag".
+Voorbeelden van FOUT: "verhitting" -> "oven" (handeling wordt apparaat); "eigenzinnige" -> "bijzondere" (het oordeel verdwijnt).
+
+Antwoord met exact een van deze twee regels:
+OORDEEL: GOED
+OORDEEL: FOUT''',
+    # production_v2: adds the denominalization rule. The first production judge
+    # rejected "verlaging -> minder" and "afname -> minder" on a full eval run
+    # -- both are the abstract-noun class the pipeline EXISTS to simplify, so
+    # that was the judge attacking the product. The rule is taught by pattern
+    # with clear vocabulary (daling/wachttijd/lagere), never by naming
+    # verlaging/afname/minder, so those stay held-out.
+    "production_v2": '''Je beoordeelt of een woordvervanging in een tekst voor gewone lezers acceptabel is.
+
+Zin: "{sent}"
+Vervanging: "{word}" wordt "{repl}"
+
+Het doel is de tekst MAKKELIJKER te maken. Een eenvoudiger woord met dezelfde strekking is GOED, ook als het net iets algemener of gewoner klinkt; kleine stijlverschillen zijn geen bezwaar.
+
+Een omslachtige naamwoordconstructie vervangen door een gewoner woord, een werkwoord of een bijvoeglijk naamwoord is juist GOED — dat is het doel van deze tekstverbetering. Bijvoorbeeld "een daling van de wachttijd" -> "een lagere wachttijd".
+
+Keur alleen AF als de vervanging de lezer op het verkeerde been zet:
+- het wordt een ander ding (een handeling wordt een apparaat)
+- de gevoelswaarde draait om (negatief wordt neutraal of positief)
+- er wordt iets specifieks beweerd dat er niet stond
+
+Voorbeelden van GOED: "terstond" -> "meteen"; "gaarne" -> "graag".
+Voorbeelden van FOUT: "verhitting" -> "oven" (handeling wordt apparaat); "eigenzinnige" -> "bijzondere" (het oordeel verdwijnt).
+
+Antwoord met exact een van deze twee regels:
+OORDEEL: GOED
+OORDEEL: FOUT''',
+    # production_v3: production + a NARROW exemption. v2's blanket "replacing a
+    # clumsy noun construction is good" halved detection (47% -> 25%) because it
+    # licenses almost anything. This names only the change-nominalization shape
+    # (a noun expressing an increase/decrease -> a plain wording of the same
+    # increase/decrease), taught with "stijging -> meer leden" so the actual
+    # false-alarm pairs (verlaging->minder, afname->minder) stay held-out.
+    "production_v3": '''Je beoordeelt of een woordvervanging in een tekst voor gewone lezers acceptabel is.
+
+Zin: "{sent}"
+Vervanging: "{word}" wordt "{repl}"
+
+Het doel is de tekst MAKKELIJKER te maken. Een eenvoudiger woord met dezelfde strekking is GOED, ook als het net iets algemener of gewoner klinkt; kleine stijlverschillen zijn geen bezwaar.
+
+Een naamwoord dat een toename of afname uitdrukt mag worden vervangen door een gewone formulering van diezelfde toename of afname; de betekenis blijft dan gelijk. Bijvoorbeeld "een stijging van het aantal leden" -> "meer leden". Dat is GOED.
+
+Keur alleen AF als de vervanging de lezer op het verkeerde been zet:
+- het wordt een ander ding (een handeling wordt een apparaat)
+- de gevoelswaarde draait om (negatief wordt neutraal of positief)
+- er wordt iets specifieks beweerd dat er niet stond
+
+Voorbeelden van GOED: "terstond" -> "meteen"; "gaarne" -> "graag".
+Voorbeelden van FOUT: "verhitting" -> "oven" (handeling wordt apparaat); "eigenzinnige" -> "bijzondere" (het oordeel verdwijnt).
+
+Antwoord met exact een van deze twee regels:
+OORDEEL: GOED
+OORDEEL: FOUT''',
     "calibrated": '''Je beoordeelt of een woordvervanging in een tekst voor gewone lezers acceptabel is.
 
 Zin: "{sent}"
@@ -155,7 +232,7 @@ def report(judge: str, res, reps: int) -> None:
     det_h = tot_h = 0
     for word, repl, _s, should_reject in CASES:
         c = collections.Counter(res[(word, repl)])
-        taught = " [TAUGHT]" if word in TAUGHT else ""
+        taught = " [TAUGHT]" if word in TAUGHT_BY.get(judge, TAUGHT) else ""
         if should_reject:
             det += c["REJECT"]; miss += reps - c["REJECT"]
             if not taught:
