@@ -752,6 +752,7 @@ class SuggestionEngine:
                 system_prompt, user_prompt = format_prompt(
                     "swap_judge",
                     sentence=sug.original_text,
+                    suggested=sug.suggested_text,
                     word=sug.word,
                     replacement=sug.replacement_word,
                 )

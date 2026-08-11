@@ -40,42 +40,71 @@ import sys
 
 # (word, replacement, sentence, should_reject)
 CASES = [
-    # confident-wrong: the generator emits these 12/12 and no prompt stops it
+    # (word, replacement, original sentence, PROPOSED REWRITE, should_reject)
+    # The rewrite matters: the pipeline restructures the phrase, so judging the
+    # bare pair against the original judges a substitution it never makes.
     ("monumentale", "grote",
-     "Het monumentale orgel wordt door een gespecialiseerde restaurator pijp voor pijp schoongemaakt.", True),
+     "Het monumentale orgel wordt door een gespecialiseerde restaurator pijp voor pijp schoongemaakt.",
+     "Het grote orgel wordt door een gespecialiseerde restaurator pijp voor pijp schoongemaakt.", True),
     ("gewaande", "vermeende",
-     "De verloren gewaande brieven zijn door een medewerker van het archief bij toeval teruggevonden.", True),
+     "De verloren gewaande brieven zijn door een medewerker van het archief bij toeval teruggevonden.",
+     "De verloren vermeende brieven zijn door een medewerker van het archief bij toeval teruggevonden.", True),
     ("insinuaties", "suggesties",
-     "De advocaat sprak van kwalijke insinuaties aan het adres van haar cliënt.", True),
+     "De advocaat sprak van kwalijke insinuaties aan het adres van haar client.",
+     "De advocaat sprak van kwalijke suggesties aan het adres van haar client.", True),
     ("notoire", "bekende",
-     "De naburige camping staat in de regio bekend als een notoire bron van nachtelijke overlast.", True),
-    # partially-failing
+     "De naburige camping staat in de regio bekend als een notoire bron van nachtelijke overlast.",
+     "De naburige camping staat in de regio bekend als een bekende bron van nachtelijke overlast.", True),
     ("koeling", "koelkast",
-     "Bij twee kramen op de markt was de koeling van verse vis niet op orde.", True),
+     "Bij twee kramen op de markt was de koeling van verse vis niet op orde.",
+     "Bij twee kramen op de markt was de koelkast van verse vis niet op orde.", True),
     ("conservator", "bewaarder",
-     "De conservator legde tijdens de rondleiding uit hoe het schilderij was toegeschreven.", True),
+     "De conservator legde tijdens de rondleiding uit hoe het schilderij was toegeschreven.",
+     "De bewaarder legde tijdens de rondleiding uit hoe het schilderij was toegeschreven.", True),
+    # DENOMINALIZATIONS -- must ACCEPT. Rewrites are real suggested_text from
+    # eval runs. Judged against the ORIGINAL alone these get rejected; that is
+    # the bug the rewrite framing fixes. Two came from set 5, two from set 4.
+    ("vermindering", "minder",
+     "De reorganisatie mikt op een versnelling van de besluitvorming en een vermindering van de overlegdruk.",
+     "De reorganisatie mikt op een versnelling van de besluitvorming en minder overlegdruk.", False),
+    ("verkorting", "minder",
+     "De pilot moet leiden tot een verkorting van de wachttijden en een verhoging van de tevredenheid.",
+     "De pilot moet leiden tot minder wachttijden en een verhoging van de tevredenheid.", False),
+    ("verlaging", "minder",
+     "De subsidie mikt op een verduurzaming van de gebouwen en een verlaging van het verbruik.",
+     "De subsidie mikt op een verduurzaming van de gebouwen en minder verbruik.", False),
     # CONTROLS: legitimate simplifications; rejecting these is the costly error
     ("clandestiene", "illegale",
-     "De douane stuitte in de haven op een clandestiene handel in beschermde planten.", False),
+     "De douane stuitte in de haven op een clandestiene handel in beschermde planten.",
+     "De douane stuitte in de haven op een illegale handel in beschermde planten.", False),
     ("futiele", "onbelangrijke",
-     "De rechter deed de aangevoerde bezwaren af als futiele details.", False),
+     "De rechter deed de aangevoerde bezwaren af als futiele details.",
+     "De rechter deed de aangevoerde bezwaren af als onbelangrijke details.", False),
     ("gepikeerd", "boos",
-     "De burgemeester reageerde zichtbaar gepikeerd op de kritische vragen van de raad.", False),
+     "De burgemeester reageerde zichtbaar gepikeerd op de kritische vragen van de raad.",
+     "De burgemeester reageerde zichtbaar boos op de kritische vragen van de raad.", False),
     ("reprimande", "waarschuwing",
-     "De rechter gaf de advocaat een stevige reprimande wegens zijn late stukken.", False),
+     "De rechter gaf de advocaat een stevige reprimande wegens zijn late stukken.",
+     "De rechter gaf de advocaat een stevige waarschuwing wegens zijn late stukken.", False),
     ("stringentere", "strengere",
-     "De toezichthouder hanteert sinds dit jaar aanzienlijk stringentere regels voor kleine fondsen.", False),
+     "De toezichthouder hanteert sinds dit jaar aanzienlijk stringentere regels voor kleine fondsen.",
+     "De toezichthouder hanteert sinds dit jaar aanzienlijk strengere regels voor kleine fondsen.", False),
     ("precair", "onzeker",
-     "De financiering van het jeugdhonk blijft volgens de wethouder uiterst precair.", False),
+     "De financiering van het jeugdhonk blijft volgens de wethouder uiterst precair.",
+     "De financiering van het jeugdhonk blijft volgens de wethouder uiterst onzeker.", False),
 ]
+
 
 # Words named in the `calibrated` prompt. Their scores are inflated; the
 # summary reports held-out separately so the honest number stays visible.
 TAUGHT = {"koeling", "notoire", "reprimande", "clandestiene", "gepikeerd"}
 # `production` teaches none of these; its held-out figure equals its overall one.
-TAUGHT_BY = {"calibrated": TAUGHT, "strict": set(), "production": set(), "production_v2": set(), "production_v3": set()}
+TAUGHT_BY = {"calibrated": TAUGHT, "strict": set(), "production": set(), "production_v2": set(), "production_v3": set(), "shipped": set()}
 
 JUDGES = {
+    # The SHIPPED prompt (mirrors prompts.py swap_judge). Shows the judge the
+    # PROPOSED REWRITE, which is what fixed the denominalization false alarms.
+    "shipped": 'Je beoordeelt of een tekstverbetering voor gewone lezers acceptabel is.\n\nOrigineel: "{sent}"\nVoorstel:  "{sugg}"\n\nIn het voorstel is "{word}" vervangen door "{repl}"; de zin kan daarbij licht zijn geherformuleerd.\n\nHet doel is de tekst MAKKELIJKER te maken. Een eenvoudiger woord met dezelfde strekking is GOED, ook als het net iets algemener of gewoner klinkt; kleine stijlverschillen en een vloeiendere formulering zijn geen bezwaar.\n\nEen naamwoord dat een toename of afname uitdrukt mag worden vervangen door een gewone formulering van diezelfde toename of afname; de betekenis blijft dan gelijk. Bijvoorbeeld "een stijging van het aantal leden" -> "meer leden". Dat is GOED.\n\nKeur alleen AF als het voorstel de lezer op het verkeerde been zet:\n- het wordt een ander ding (een handeling wordt een apparaat)\n- de gevoelswaarde draait om (negatief wordt neutraal of positief)\n- er wordt iets specifieks beweerd dat er niet stond\n\nVoorbeelden van GOED: "terstond" -> "meteen"; "gaarne" -> "graag".\nVoorbeelden van FOUT: "verhitting" -> "oven" (handeling wordt apparaat); "eigenzinnige" -> "bijzondere" (het oordeel verdwijnt).\n\nAntwoord met exact een van deze twee regels:\nOORDEEL: GOED\nOORDEEL: FOUT',
     # Rejects nearly everything: "exactly the same?" is a stricter question
     # than the product needs. Kept as the cautionary baseline.
     "strict": '''Je controleert of een woordvervanging de betekenis van een zin intact laat.
@@ -204,9 +233,11 @@ def call(prompt: str) -> str:
 
 
 def probe(judge: str, case):
-    word, repl, sent, _ = case
+    word, repl, sent, sugg, _ = case
     try:
-        out = call(JUDGES[judge].format(sent=sent, word=word, repl=repl)).upper()
+        # str.format ignores unused kwargs, so the historical judges that take
+        # only {sent}/{word}/{repl} still format cleanly.
+        out = call(JUDGES[judge].format(sent=sent, sugg=sugg, word=word, repl=repl)).upper()
     except Exception as e:  # noqa: BLE001
         return (word, repl), "ERROR"
     if "VERANDERD" in out or re.search(r"OORDEEL:\s*FOUT", out):
@@ -230,7 +261,7 @@ def report(judge: str, res, reps: int) -> None:
     print(f"\n=== judge {judge!r}, {reps} reps ===")
     det = miss = fa = ok = 0
     det_h = tot_h = 0
-    for word, repl, _s, should_reject in CASES:
+    for word, repl, _s, _sg, should_reject in CASES:
         c = collections.Counter(res[(word, repl)])
         taught = " [TAUGHT]" if word in TAUGHT_BY.get(judge, TAUGHT) else ""
         if should_reject:
@@ -243,8 +274,8 @@ def report(judge: str, res, reps: int) -> None:
             verdict = "ok      " if c["ACCEPT"] > reps / 2 else "FALSE ALARM"
         print(f"  {'REJECT' if should_reject else 'accept':6s} "
               f"{word + ' -> ' + repl:32s} reject={c['REJECT']:2d} accept={c['ACCEPT']:2d}  {verdict}{taught}")
-    nb = sum(1 for c in CASES if c[3]) * reps
-    ng = sum(1 for c in CASES if not c[3]) * reps
+    nb = sum(1 for c in CASES if c[4]) * reps
+    ng = sum(1 for c in CASES if not c[4]) * reps
     print(f"\n  detection      {det}/{nb} ({100*det/nb:.0f}%)"
           + (f"   held-out {det_h}/{tot_h} ({100*det_h/tot_h:.0f}%)" if tot_h else ""))
     print(f"  FALSE ALARMS   {fa}/{ng} ({100*fa/ng:.0f}%)   <- the number that decides usability")
@@ -253,7 +284,7 @@ def report(judge: str, res, reps: int) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--judge", default="calibrated", choices=list(JUDGES))
+    ap.add_argument("--judge", default="shipped", choices=list(JUDGES))
     ap.add_argument("--compare", default=None, choices=list(JUDGES))
     ap.add_argument("--reps", type=int, default=5)
     ap.add_argument("--workers", type=int, default=3)

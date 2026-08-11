@@ -325,29 +325,36 @@ GEEN_FOUTEN"""
     # A false alarm silently deletes a legitimate simplification, and those are
     # the product, so the false-alarm side governs.
     #
-    # The change-nominalization sentence is not decoration. Without it a full
-    # eval run rejected "verlaging -> minder" and "afname -> minder" — the
-    # abstract-noun class this pipeline EXISTS to simplify, i.e. the judge
-    # attacking the product. Phrasing it broadly ("replacing a clumsy noun
-    # construction is good") fixed those but halved detection; the narrow
-    # version keeps verharding->vastberadenheid, verzakelijking->zakelijkheid
-    # and insinuaties->suggesties at 8/8 while accepting both denominalizations,
-    # at the cost of ambivalent->twijfelachtig (6/8 -> 0/8).
+    # SHOW THE JUDGE THE PROPOSED REWRITE, not just the word pair. The first
+    # version passed only the original sentence, so it judged a substitution
+    # the pipeline never makes: "vermindering -> minder" looks wrong as a
+    # drop-in ("een minder van de overlegdruk") but the actual proposal is
+    # "... en minder overlegdruk", which is right. That mis-framing rejected
+    # good denominalizations on BOTH corpora — set 5 before the clause below,
+    # set 4 after it — i.e. the narrow clause had patched two measured
+    # instances rather than the cause. With the rewrite visible, all four known
+    # denominalizations are accepted 8/8 even WITHOUT the clause.
+    #
+    # The change-nominalization sentence is kept anyway: it lifts detection
+    # 23% -> 33% at no false-alarm cost. Phrasing it broadly instead ("replacing
+    # a clumsy noun construction is good") halved detection, so keep it narrow.
     #
     # Do not tighten toward "exactly the same" without re-measuring false
     # alarms, and do not broaden the exemption without re-measuring detection.
     "swap_judge": PromptTemplate(
         system="Je bent een strenge maar praktische lezer van Nederlandse teksten.",
-        user="""Je beoordeelt of een woordvervanging in een tekst voor gewone lezers acceptabel is.
+        user="""Je beoordeelt of een tekstverbetering voor gewone lezers acceptabel is.
 
-Zin: "{sentence}"
-Vervanging: "{word}" wordt "{replacement}"
+Origineel: "{sentence}"
+Voorstel:  "{suggested}"
 
-Het doel is de tekst MAKKELIJKER te maken. Een eenvoudiger woord met dezelfde strekking is GOED, ook als het net iets algemener of gewoner klinkt; kleine stijlverschillen zijn geen bezwaar.
+In het voorstel is "{word}" vervangen door "{replacement}"; de zin kan daarbij licht zijn geherformuleerd.
+
+Het doel is de tekst MAKKELIJKER te maken. Een eenvoudiger woord met dezelfde strekking is GOED, ook als het net iets algemener of gewoner klinkt; kleine stijlverschillen en een vloeiendere formulering zijn geen bezwaar.
 
 Een naamwoord dat een toename of afname uitdrukt mag worden vervangen door een gewone formulering van diezelfde toename of afname; de betekenis blijft dan gelijk. Bijvoorbeeld "een stijging van het aantal leden" -> "meer leden". Dat is GOED.
 
-Keur alleen AF als de vervanging de lezer op het verkeerde been zet:
+Keur alleen AF als het voorstel de lezer op het verkeerde been zet:
 - het wordt een ander ding (een handeling wordt een apparaat)
 - de gevoelswaarde draait om (negatief wordt neutraal of positief)
 - er wordt iets specifieks beweerd dat er niet stond
