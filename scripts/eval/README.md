@@ -75,7 +75,7 @@ provably suppresses them.
 | 1 (dev) | 0.84 / 1.00 | 0.93 / 0.98 | — | — |
 | 2 | 0.88 / 1.00 | 0.86 / 1.00 | — | — |
 | 3 | 0.88 / 0.98 | 0.86 / 0.95 | — | — |
-| 4 | — | — | 0.90 / 0.92 | **0.91 / 0.95** (re-run 2026-07-31) |
+| 4 | — | — | 0.90 / 0.92 | **0.90 / 0.94** (3rd run 2026-08-11, `c60953d`) |
 | 5 | — | — | 0.94 / 0.95 | **0.95 / 0.94** (5th run 2026-08-06, `bb8783d`) |
 
 Set 5 has been run four times. The sequence matters more than any single
@@ -120,6 +120,41 @@ A caution this run earned: a 10-item phenomenon group cannot resolve a
 one-item recall change. The connective claim rests on the 6-rep probe
 (conn-8 0/5 → 6/6, no regression across 48 case-reps); the eval's job here was
 regression detection on the other passes, and it passed.
+
+Set-4 runs 2 and 3 (2026-08-07 `bb8783d`, 2026-08-11 `c60953d`) exist to test
+the **swap judge on a set it was not tuned on**, and that is what they were
+worth. Both valid (0 new provider 500s).
+
+Run 2 (0.92 / 0.91) found the judge's real defect. It rejected
+`vermindering → minder` and `verkorting → minder` — the same denominalization
+shape that `bb8783d` had supposedly fixed on set 5. The clause had patched the
+two measured instances, not the cause. **A second corpus is what exposed it;
+set 5 alone looked fixed.** The cause was that the judge saw only the ORIGINAL
+sentence plus the bare pair, so it judged a substitution the pipeline never
+makes ("een minder van de overlegdruk") rather than the real proposal
+("... en minder overlegdruk"). Fixed in `c60953d` by passing suggested_text.
+
+Run 3 (0.90 / 0.94) confirms the fix and shows its limits:
+- The denominalization rejections are gone. Prediction confirmed.
+- Seeing the rewrite adds a capability the word pair cannot give: it catches
+  BROKEN rewrites. `leidingwerk → leidingen` produced "het vervangen van het
+  volledige leidingen" (ungrammatical) and `instrueren → uitleggen` produced
+  "het uitleggen van de vrijwilligers" (explaining *the volunteers*). Both
+  correctly rejected; neither is visible from the pair alone.
+- But the errors MOVED rather than reduced. Two new false alarms —
+  `monumentenvergunningstraject → procedure voor een monumentenvergunning` (a
+  good compound split, and it cost compound-6) and `onvoorspelbaarder →
+  moeilijker te voorspellen`. And by no longer rejecting `moestuinvereniging`
+  it stopped incidentally fixing the clean-9 FP, so precision fell.
+
+**Do not read 0.92/0.91 vs 0.90/0.94 as an A/B of the judge**: the two runs
+generated different swaps, so generator wobble is mixed in.
+
+The pattern across three runs on two corpora: **this judge sits at roughly 2
+false alarms per ~40 swaps whatever the wording, and each fix relocates the
+errors** — denominalizations, then compound splits. Further prompt tuning has
+low expected value. Its best property, catching ungrammatical rewrites, is
+probably better served by a deterministic grammar check.
 
 Set-5 notes (best held-out result to date): family guards 5/5 across all
 four mechanisms; connective 8/10 incl. the FIRST 'gevolg' fire on a
@@ -370,11 +405,25 @@ unrelated.
      The false-alarm side governs: a false alarm deletes a legitimate
      simplification, which is the product. On a live run the shipped judge
      removed 3 meaning-changing swaps and destroyed 1 good one.
-     **Known weakness:** it has no stable view of some words — it rejects both
-     `ambivalent→twijfelachtig` (bad) and `ambivalent→verdeeld` (good). And a
-     false alarm on a single-suggestion item costs the WHOLE item.
-     Still untouched by either layer: monumentale→grote, conservator→bewaarder,
-     notoire→bekende all pass the judge as readily as they pass the generator.
+     **Known weaknesses, measured on two corpora — read before tuning it:**
+     - It sits at roughly **2 false alarms per ~40 swaps whatever the wording**,
+       and each fix RELOCATES the errors rather than removing them
+       (denominalizations → compound splits). Two successive "fixes" turned out
+       to be patches on the instances measured; the second corpus caught both.
+       Further prompt tuning has low expected value.
+     - It has no stable view of some words: it rejects both
+       `ambivalent→twijfelachtig` (bad) and `ambivalent→verdeeld` (good).
+     - A false alarm on a **single-suggestion item costs the WHOLE item**
+       (wordfreq-4 on set 5, compound-6 on set 4).
+     - Still untouched by either layer: monumentale→grote,
+       conservator→bewaarder, notoire→bekende pass the judge as readily as they
+       pass the generator.
+     **Net:** clearly positive on set 5 (3 bad removed, 1 good lost), roughly
+     break-even on set 4. It is opt-in for that reason. Its most valuable
+     behaviour — rejecting rewrites that are ungrammatical ("het volledige
+     leidingen") or semantically broken ("het uitleggen van de vrijwilligers")
+     — is arguably better served by a deterministic grammar check than by an
+     LLM judge.
    - **Scope limit of the shipped fix:** it patches `word_frequency_bundle`
      only. A trigger folded into a consolidated sentence_rewrite uses a
      different prompt carrying none of this guidance. Observed benign once
