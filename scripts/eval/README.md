@@ -74,7 +74,7 @@ provably suppresses them.
 |-----|-------------|----------|--------------------------|----------------|
 | 1 (dev) | 0.84 / 1.00 | 0.93 / 0.98 | — | not re-run |
 | 2 | 0.88 / 1.00 | 0.86 / 1.00 | — | **0.86 / 0.97** (2026-09-11, `c60953d`) |
-| 3 | 0.88 / 0.98 | 0.86 / 0.95 | — | not re-run |
+| 3 | 0.88 / 0.98 | 0.86 / 0.95 | — | **0.92 / 0.89** (2026-09-11, `3e85b3f`) |
 | 4 | — | — | 0.90 / 0.92 | **0.90 / 0.94** (3rd run 2026-08-11, `c60953d`) |
 | 5 | — | — | 0.94 / 0.95 | **0.95 / 0.94** (5th run 2026-08-06, `bb8783d`) |
 
@@ -383,6 +383,35 @@ the semantic-swap class, and **the swap judge rejected exactly that pair on
 set 4**. It is off, so it got through. First evidence the judge would help on
 unseen data.
 
+Set-3 re-run (2026-09-11, `3e85b3f`): **0.92 / 0.89** against Qwen@0.3's
+0.86 / 0.95 — precision up six points, recall down six. With this, every
+held-out set has been measured against the current engine.
+
+**The recall drop is mostly connective.** Three of the seven FNs are conn-2/3/4,
+including conn-4 ("Het bedrijf boekte recordwinst. De werknemers kregen toch
+geen loonsverhoging"), an unmistakable contrast. Set 3 was never in the
+connective tuning set, so this is the honest held-out picture: **the connective
+pass is weaker on unseen data than sets 4 and 5 imply.** The other FNs are two
+word_frequency (inconsistent, impasse), one max_sdl and one passive.
+
+**The scoring artefact recurs for a third set.** conj-4 (`, maar ` intact),
+url-1 and url-2 (URLs intact) all had their `must_not` guard hold while a
+different, legitimate suggestion type fired. Sets 2, 3 and 5 now agree, so this
+is systematic: **precision on these corpora understates the engine**, and
+tuning any pass for precision optimises against the measurement rather than the
+product. Settle the convention first.
+
+Also seen: `bezorging → levering` fired here (conj-4) and on set 2 (clean-14) —
+the same lateral swap twice, neither simpler nor wrong, the kind the swap judge
+is aimed at. And shortlist-4 produced ungrammatical Dutch: backlog item 7.
+
+**Measured cost of a 100-item run** (first run with token logging live):
+**255,210 tokens over ~240 calls**, ~1,080 tokens/call. An earlier estimate of
+"1-2M per run" was wrong — it extrapolated from one atypical text with many
+triggers. The per-month figures in this file derive from CALL counts, so they
+are unaffected. A full five-corpus sweep is ~1.3M tokens, which makes
+validating a provider change cheap.
+
 ## Current residuals / backlog (priority order)
 
 1. **Connective GEEN on inferential consequences** (corpus4 conn-10, corpus5
@@ -527,3 +556,20 @@ unseen data.
    require at least one of the two forms to be in SUBTLEX — but re-verify the
    gate's existing cases (word/wordt, loop/loopt, aparte/apart, te veel,
    terugzwemmen) before changing it, since it is load-bearing for two passes.
+7. **`de`/`het` article disagreement reaches the user** (set 3 shortlist-4,
+   found 2026-09-11). The word-frequency pass swapped `gereedschapsset →
+   gereedschap`, yielding "**De** gereedschap bevat een hamer..." — it is *het*
+   gereedschap. Two independent gaps, both needed for a fix:
+   - `_dehet_disagreement` checks only ADJECTIVE inflection (`buitenlandse
+     bezit` → `buitenlands bezit`). Article/noun agreement is a different
+     phenomenon and was never in scope, so it returns None here.
+   - The bundled word-frequency path (`_build_wordfreq_suggestion`) does not
+     call that guard AT ALL. It applies the no-op, frequency-band,
+     conjunction, URL and misspelling checks; de/het is applied only in the
+     connective path, the rewrite backstop and the per-trigger path.
+   So extending the guard without also wiring it into the bundled path would
+   fix nothing. Note a swap changing a noun's gender is exactly what a
+   word-frequency replacement does, which makes that path the one most likely
+   to produce this error — and the guard's docstring warns the reverse
+   direction (uninflected `houten`, `gouden`) must stay allowed, so widening
+   it needs the same care as item 6.
