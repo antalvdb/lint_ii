@@ -573,3 +573,23 @@ validating a provider change cheap.
    to produce this error — and the guard's docstring warns the reverse
    direction (uninflected `houten`, `gouden`) must stay allowed, so widening
    it needs the same care as item 6.
+   **Attempted and REVERTED on 2026-09-11 — read this before trying again.**
+   The obvious fix is to compare the article against spaCy's gender tag on the
+   noun. That cannot work: **spaCy's in-context gender tag is derived from the
+   article itself.** `De gereedschap` tags gereedschap `zijd`; `Het
+   gereedschap` tags the same word `onz`. The tag always agrees with the
+   article, so it carries no independent signal.
+   The next idea — probe the noun in a determiner-free frame ("Wij zagen X
+   daar.") — looked sound on a 36-word de/het battery (0 errors) and then
+   produced **12 false positives on the 500 corpus items**, flagging correct
+   Dutch like "Het wijkcentrum", "Het orgel" and "De hoofdprijs". Without a
+   determiner the tagger simply guesses, defaulting to `zijd` for anything it
+   does not know well — which is most compounds, i.e. exactly this corpus's
+   vocabulary. The battery was unrepresentative: common short nouns are the
+   case spaCy gets right.
+   **Dutch gender is lexical and cannot be derived from the parser.** A real
+   fix needs a de/het GENDER LEXICON (Hunspell is no help — its Y-flags encode
+   diminutive formation, not gender; NOUN_DATA has no gender field). Treat
+   that data dependency, and its licensing, as the actual task. Until then the
+   500-item sweep is the acceptance test: a candidate guard must fire on "De
+   gereedschap bevat..." and hit 0 of the 500.
