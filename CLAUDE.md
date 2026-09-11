@@ -32,6 +32,21 @@ pushing.** Don't assume the other side is idle.
   deploys invalidate naturally and startup re-warms the example texts.
 - Hetzner rate limits are output-bound (60k tokens/60s): sequential eval runs
   are safe, parallel-3 can brush the cap. Some non-prose inputs 422 (expected).
+- TLS (nginx + Let's Encrypt, `lint-ii.valkuil.net`): renewal is automatic via
+  `certbot.timer`, with a deploy hook at
+  `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh` that runs
+  `nginx -t && systemctl reload nginx`. **Keep that hook**: without it certbot
+  writes the renewed cert but nginx serves the old one from memory until
+  something restarts it, so the site expires anyway. The cert died once
+  (2026-08-23) because it had been issued with `authenticator = manual` +
+  `pref_challs = dns-01`, which certbot cannot renew unattended — the timer ran
+  daily and silently skipped it for three months. It is now `authenticator =
+  nginx`; if you ever re-issue, do NOT go back to a manual challenge. The
+  single-name cert has no wildcard, so http-01 is fine.
+  Diagnose with: `echo | openssl s_client -connect lint-ii.valkuil.net:443
+  -servername lint-ii.valkuil.net 2>/dev/null | openssl x509 -noout -dates`,
+  then `sudo certbot renew --dry-run`. Real errors are in
+  `/var/log/letsencrypt/` (root-only).
 
 ## Hard-won rules — do not undo
 
@@ -76,8 +91,10 @@ pushing.** Don't assume the other side is idle.
   has it on. Any local engine experiment that should include connectives needs
   this set, or the pass silently returns nothing.
 - `LINT_II_SWAP_JUDGE=1` — verification pass that drops meaning-changing
-  word_frequency swaps (backlog item 2). OFF by default and NOT yet in the box
-  env file, so it is currently inactive in production. It only ever removes
+  word_frequency swaps (backlog item 2). OFF by default in code, and the box
+  env file sets it to 0, so it is inactive in production (turned off after the
+  set-4 run: ~2 false alarms per ~40 swaps whatever the wording, and each
+  prompt fix relocated the errors rather than removing them). It only ever removes
   suggestions: measured on set 5 it dropped 3 meaning-changing swaps and 1
   legitimate one, and a false alarm on a single-suggestion item costs the whole
   item. Turn it on deliberately, and re-read the calibration table in
