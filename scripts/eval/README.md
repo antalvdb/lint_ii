@@ -70,11 +70,11 @@ provably suppresses them.
 
 ## Cross-set results (presence/absence, precision/recall)
 
-| Set | Mistral@0.7 | Qwen@0.3 | Qwen + July-30/31 fixes | + `8397cae` connective |
-|-----|-------------|----------|--------------------------|------------------------|
-| 1 (dev) | 0.84 / 1.00 | 0.93 / 0.98 | — | — |
-| 2 | 0.88 / 1.00 | 0.86 / 1.00 | — | — |
-| 3 | 0.88 / 0.98 | 0.86 / 0.95 | — | — |
+| Set | Mistral@0.7 | Qwen@0.3 | Qwen + July-30/31 fixes | current engine |
+|-----|-------------|----------|--------------------------|----------------|
+| 1 (dev) | 0.84 / 1.00 | 0.93 / 0.98 | — | not re-run |
+| 2 | 0.88 / 1.00 | 0.86 / 1.00 | — | **0.86 / 0.97** (2026-09-11, `c60953d`) |
+| 3 | 0.88 / 0.98 | 0.86 / 0.95 | — | not re-run |
 | 4 | — | — | 0.90 / 0.92 | **0.90 / 0.94** (3rd run 2026-08-11, `c60953d`) |
 | 5 | — | — | 0.94 / 0.95 | **0.95 / 0.94** (5th run 2026-08-06, `bb8783d`) |
 
@@ -352,6 +352,37 @@ Net for the run: 3 meaning-changing suggestions removed, 1 legitimate one
 destroyed. The other FP change (family-4) is the max_sdl borderline wobble,
 unrelated.
 
+Set-2 re-run (2026-09-11, `c60953d`): **0.86 / 0.97** against Qwen@0.3's
+0.86 / 1.00. The first time ANY of the July/August work met a set it had not
+been tuned on, and the headline is the least informative part of it.
+
+**The engine held.** Recall cost is two items (wordfreq-5 "indicatief",
+multi-5 passive) across five engine changes, every one of which only ever
+REMOVES suggestions. No guard misfired: in all five `must_not` items the
+forbidden behaviour did not occur.
+
+**Half the FPs are a scoring artefact, not an engine fault.** In five of the
+ten, the `must_not` guard held and a DIFFERENT suggestion type fired:
+
+| item | forbids | fired | guard |
+|------|---------|-------|-------|
+| shortlist-1 | enumeration | max_sdl | held |
+| conj-1, conj-4 | split ", maar " | abstract_nouns / word_frequency, `maar` intact | held |
+| url-1, url-3 | alter URL | max_sdl / abstract_nouns, URL intact | held |
+
+conj-4's `invalidenplaatsen → parkeerplaatsen voor gehandicapten` is a good
+suggestion counted against us. A binary `should_suggest` cannot express "no
+enumeration here, but a word-frequency suggestion is fine" — the same
+scoring-convention question raised by the set-5 max_sdl FPs, now confirmed on
+independent data. **Worth settling before anyone tunes a pass for precision.**
+
+The rest: two defensible connectives (clean-13, good-3, both real causal
+links); two mild quality issues (good-1 drops a sentence, clean-14 is a lateral
+swap); one real bug (backlog item 6); and `clean-13`'s `omleiding → omweg` —
+the semantic-swap class, and **the swap judge rejected exactly that pair on
+set 4**. It is off, so it got through. First evidence the judge would help on
+unseen data.
+
 ## Current residuals / backlog (priority order)
 
 1. **Connective GEEN on inferential consequences** (corpus4 conn-10, corpus5
@@ -479,3 +510,20 @@ unrelated.
    Fixing it properly means normalising abbreviation-final tokens before the
    frequency lookup, which CHANGES LiNT SCORES and must be validated against
    the LiNT reference first. Left deliberately untouched.
+6. **Hunspell mangles valid compounds when BOTH forms are unknown to SUBTLEX**
+   (set 2 clean-8, found 2026-09-11). The Hunspell pass "corrected"
+   `banenzwemmen` → `banenzwemmer`, yielding ungrammatical Dutch ("In de
+   ochtend is er banenzwemmer") and turning a gerund into a person.
+   Mechanism, so it need not be re-derived: `_correction_plausible` has a
+   same-stem branch (`common >= max(3, min(len) - 2)`) meant for short
+   inflection fixes like word/wordt and loop/loopt. It has **no length ceiling
+   and no requirement that either form be a known word**, so two 12-letter
+   compounds differing in the final letter match it and return True before the
+   frequency check is ever reached. Both forms are absent from SUBTLEX, so the
+   frequency rule would have had no signal either.
+   This is the failure CLAUDE.md warns about ("not in SUBTLEX/Hunspell does NOT
+   mean not a word"), reaching the user through the one pass whose corrections
+   are not LLM-generated. Likely fix: cap the same-stem exemption by length, or
+   require at least one of the two forms to be in SUBTLEX — but re-verify the
+   gate's existing cases (word/wordt, loop/loopt, aparte/apart, te veel,
+   terugzwemmen) before changing it, since it is load-bearing for two passes.
