@@ -96,6 +96,30 @@ class LLMProvider(ABC):
             self.model_name,
             response.content,
         )
+        # Per-call token accounting, at INFO so it is present without turning on
+        # DEBUG (which dumps full prompts and would pile tester text into the
+        # logs). Counts and model name only -- no text, so this is safe to keep
+        # on permanently. Every provider routes through this method, so it is
+        # the one chokepoint that sees all traffic.
+        #
+        # Monthly totals:
+        #   grep -oP 'LLM_USAGE .*\btotal=\K\d+' /var/log/lint-ii/app.log \
+        #     | paste -sd+ | bc
+        # Providers that return no usage block log total=? so the gap is
+        # visible rather than silently counted as zero.
+        if response.usage:
+            logger.info(
+                "LLM_USAGE model=%s prompt=%s completion=%s total=%s",
+                response.model or self.model_name,
+                response.usage.get("prompt_tokens", "?"),
+                response.usage.get("completion_tokens", "?"),
+                response.usage.get("total_tokens", "?"),
+            )
+        else:
+            logger.info(
+                "LLM_USAGE model=%s prompt=? completion=? total=?",
+                response.model or self.model_name,
+            )
         return response
 
     def _complete_with_watchdog(

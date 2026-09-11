@@ -32,6 +32,15 @@ pushing.** Don't assume the other side is idle.
   deploys invalidate naturally and startup re-warms the example texts.
 - Hetzner rate limits are output-bound (60k tokens/60s): sequential eval runs
   are safe, parallel-3 can brush the cap. Some non-prose inputs 422 (expected).
+- Token accounting: every provider call logs one `LLM_USAGE` line at INFO
+  (counts + model only, no text, so it is safe to leave on). Hetzner has no
+  usage endpoint (`/api/v1/usage` is 404), so this log is the only record.
+  Monthly totals:
+  `grep -oP 'LLM_USAGE .*\btotal=\K\d+' /var/log/lint-ii/app.log | paste -sd+ | bc`
+  Before 2026-09-11 nothing was logged; usage for Jul–Sep 2026 could only be
+  ESTIMATED (~6,200 API calls ≈ 2–4M tokens/month, mostly eval runs and probe
+  traffic rather than testers). A provider returning no usage block logs
+  `total=?`, so gaps are visible instead of silently summing as zero.
 - TLS (nginx + Let's Encrypt, `lint-ii.valkuil.net`): renewal is automatic via
   `certbot.timer`, with a deploy hook at
   `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh` that runs
