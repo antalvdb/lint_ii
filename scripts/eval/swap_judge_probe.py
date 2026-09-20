@@ -38,6 +38,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _probe_endpoint as _ep  # noqa: E402
+
 # (word, replacement, sentence, should_reject)
 CASES = [
     # (word, replacement, original sentence, PROPOSED REWRITE, should_reject)
@@ -216,17 +219,10 @@ OORDEEL: FOUT''',
 
 def call(prompt: str) -> str:
     import httpx
-    key = os.environ.get("HETZNER_API_KEY")
-    if not key:
-        raise SystemExit("HETZNER_API_KEY not set (box: /etc/lint-ii/lint-ii.env)")
     r = httpx.post(
-        "https://inference.hetzner.com/api/v1/chat/completions",
-        headers={"Authorization": f"Bearer {key}"},
-        json={"model": os.environ.get("LINT_II_LLM_MODEL", "Qwen/Qwen3.6-35B-A3B-FP8"),
-              "messages": [{"role": "user", "content": prompt}],
-              "temperature": float(os.environ.get("LINT_II_HETZNER_TEMPERATURE", "0.3")),
-              "max_tokens": 200,
-              "chat_template_kwargs": {"enable_thinking": False}},
+        _ep.base_url() + "/chat/completions",
+        headers=_ep.headers(),
+        json=_ep.body([{"role": "user", "content": prompt}], 200),
         timeout=120.0)
     r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"] or ""

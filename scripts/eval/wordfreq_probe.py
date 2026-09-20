@@ -46,6 +46,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "src"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _probe_endpoint as _ep  # noqa: E402
 
 from lint_ii.llm.prompts import PROMPT_TEMPLATES, parse_block_response  # noqa: E402
 
@@ -169,22 +171,12 @@ VARIANTS: dict[str, str] = {"base": BUNDLE["user"]}
 
 def call(prompt: str) -> str:
     import httpx
-    key = os.environ.get("HETZNER_API_KEY")
-    if not key:
-        raise SystemExit("HETZNER_API_KEY not set (box: /etc/lint-ii/lint-ii.env)")
     r = httpx.post(
-        "https://inference.hetzner.com/api/v1/chat/completions",
-        headers={"Authorization": f"Bearer {key}"},
-        json={
-            "model": os.environ.get("LINT_II_LLM_MODEL", "Qwen/Qwen3.6-35B-A3B-FP8"),
-            "messages": [
-                {"role": "system", "content": BUNDLE["system"]},
-                {"role": "user", "content": prompt},
-            ],
-            "temperature": float(os.environ.get("LINT_II_HETZNER_TEMPERATURE", "0.3")),
-            "max_tokens": 1200,
-            "chat_template_kwargs": {"enable_thinking": False},
-        },
+        _ep.base_url() + "/chat/completions",
+        headers=_ep.headers(),
+        json=_ep.body(
+            [{"role": "system", "content": BUNDLE["system"]},
+             {"role": "user", "content": prompt}], 1200),
         timeout=180.0,
     )
     r.raise_for_status()

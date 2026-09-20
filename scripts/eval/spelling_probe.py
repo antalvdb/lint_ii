@@ -28,6 +28,8 @@ the LLM is the only detector for them.
 import os, re, sys, collections, concurrent.futures as cf  # noqa: E401
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(HERE)), "src"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _probe_endpoint as _ep  # noqa: E402
 from lint_ii.llm.prompts import PROMPT_TEMPLATES, parse_block_response
 
 SP = PROMPT_TEMPLATES["spelling"]
@@ -83,13 +85,11 @@ def numbered(t):
 
 def call(p):
     import httpx
-    r=httpx.post("https://inference.hetzner.com/api/v1/chat/completions",
-      headers={"Authorization":f"Bearer {os.environ['HETZNER_API_KEY']}"},
-      json={"model":"Qwen/Qwen3.6-35B-A3B-FP8",
-            "messages":[{"role":"system","content":SP["system"]},
-                        {"role":"user","content":p}],
-            "temperature":0.3,"max_tokens":900,
-            "chat_template_kwargs":{"enable_thinking":False}}, timeout=150.0)
+    r=httpx.post(_ep.base_url() + "/chat/completions",
+      headers=_ep.headers(),
+      json=_ep.body([{"role":"system","content":SP["system"]},
+                     {"role":"user","content":p}], 900),
+      timeout=150.0)
     r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"] or ""
 
