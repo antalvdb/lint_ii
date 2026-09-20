@@ -412,6 +412,67 @@ triggers. The per-month figures in this file derive from CALL counts, so they
 are unaffected. A full five-corpus sweep is ~1.3M tokens, which makes
 validating a provider change cheap.
 
+## Comparing models / providers (and a worked example)
+
+The probes take `LINT_II_LLM_MODEL`, so swapping the model is a config change,
+not a code change:
+
+```
+LINT_II_LLM_MODEL=<other-model> python3 connective_probe.py --reps 6 --workers 2
+LINT_II_LLM_MODEL=<other-model> python3 wordfreq_probe.py   --reps 12 --workers 2
+LINT_II_LLM_MODEL=<other-model> python3 wordfreq_probe.py   --group control --reps 4
+```
+
+**Run all three.** The third is not optional: the hard group can be "improved"
+by a model that simply refuses to simplify, and only the control group
+distinguishes that from a real gain.
+
+### Worked example: Qwen3.8-27B vs Qwen3.6-35B-A3B-FP8 (2026-09-20)
+
+Hetzner began serving a second model (`Qwen3.8-27B`) alongside ours. Measured
+rather than guessed:
+
+| dimension | Qwen3.6 (current) | Qwen3.8-27B |
+|-----------|-------------------|-------------|
+| semantic swaps, BAD rate | 52% | **34%** |
+| refusals on must-simplify | 0/40 | 0/40 |
+| connective probe | 90% | 89% (no real difference) |
+| latency per call | 0.41s | **1.51s** (~3.7x) |
+
+Compatibility is fine: it parses the block format, speaks correct Dutch, and
+honours the same `enable_thinking:false` kwarg (thinking still defaults ON, so
+the kwarg stays load-bearing). `HetznerProvider` would drive it unchanged.
+
+**The finding that matters is about backlog item 2, not about switching.**
+`gewaande → vermeende` failed **12/12 under every prompt variant tried** and is
+**0/12** on the newer model. So part of that residual is
+**model-capability-bound, not engineering-bound** — which vindicates stopping
+prompt work on those cases, and means the swap judge compensates for something
+a model upgrade partly fixes. Note `notoire → bekende` is 12/12 on BOTH models:
+that one is a stable property of Qwen's Dutch, not a capability gap.
+
+**But a newer model is not a free upgrade.** `koeling → koelkast` regressed
+3/12 → 11/12 — the "action becomes an appliance" error, much worse. And the
+apparent fixes on verharding/structureel/verwaarloosde are the ONGEWIJZIGD
+escape hatch, i.e. declining to simplify; the control group is what showed this
+was discriminating (0/40 refusals on words that DO have simpler synonyms)
+rather than general laziness. Without that control the 34% would have been
+over-read.
+
+**Recommendation as of 2026-09-20: do not switch.** A gain on one pass, a
+regression on another, nothing on connective, at 3.7x latency — and with 429s
+at 6.6% (see below) slower calls make throughput worse, not better.
+
+### Hetzner rate limits tightened (2026-09)
+
+429 responses as a share of calls: **0.1% (Jul), 0.2% (Aug), 6.6% (Sep)** — a
+~40x rise, consistent with the experiment being commercialised. Nothing is
+broken (auth, model, structured output and thinking control all verified
+2026-09-20) but the headroom is gone: CLAUDE.md's "parallel-3 can brush the
+cap" is now "parallel-3 hits it routinely". Probe runs lose calls to 429s, and
+because failed calls are EXCLUDED from a probe's denominator, two runs can
+report different observation counts — check those before comparing rates.
+
 ## Current residuals / backlog (priority order)
 
 1. **Connective GEEN on inferential consequences** (corpus4 conn-10, corpus5
@@ -478,6 +539,13 @@ validating a provider change cheap.
      - Still untouched by either layer: monumentale→grote,
        conservator→bewaarder, notoire→bekende pass the judge as readily as they
        pass the generator.
+     - **Part of this residual is MODEL-capability-bound, not
+       engineering-bound** (measured 2026-09-20, see the model-comparison
+       section): `gewaande → vermeende` failed 12/12 under every prompt variant
+       and is 0/12 on Qwen3.8-27B. So stopping prompt work on the confident
+       cases was right, and a future model change may retire part of this item
+       for free. `notoire → bekende` is 12/12 on both models, so that one is
+       not capability-bound — do not expect a model upgrade to fix it.
      **Net:** clearly positive on set 5 (3 bad removed, 1 good lost), roughly
      break-even on set 4. It is opt-in for that reason. Its most valuable
      behaviour — rejecting rewrites that are ungrammatical ("het volledige
