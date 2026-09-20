@@ -43,6 +43,50 @@ hundreds voids the run.
   to the right pass before fixing anything (eval 4's spelling regression was
   chased into the wrong pass for lack of this).
 
+### Scoring convention: `must_not` vs `should_suggest` (SETTLED 2026-09-20)
+
+`must_not` was recorded from the start but **never scored** — every guard it
+names was checked by hand. `run_eval.py` now checks it, and reports three
+numbers instead of one:
+
+1. **Presence/absence precision/recall** — unchanged, so the cross-set table
+   stays comparable. Read it knowing what it conflates (below).
+2. **Guard violations** — the `must_not` rules actually breached. This is the
+   metric that asserts something; it should be **0**.
+3. **Negatives that fired, split by kind** — `must_not=[]` (should have been
+   silent: a genuine precision concern) versus guarded items where a
+   *different* suggestion type fired.
+
+The convention, stated once: **`should_suggest=False` with a non-empty
+`must_not` asserts only that the named behaviour must not occur.** A different,
+legitimate suggestion on that item is not a defect. `should_suggest=False` with
+an EMPTY `must_not` (clean-*, good-*) does mean "nothing should fire".
+
+Why this matters, measured over sets 2-5: **14 of 25 false positives (56%) were
+guarded items whose guard held.** Treating those as defects moves precision
+from 0.96 to 0.91 — so the legacy number understates the engine by ~5 points,
+and conj-4's `invalidenplaatsen → parkeerplaatsen voor gehandicapten`, a good
+suggestion, was being counted against us.
+
+| set | legacy precision | guard-aware | FP split (silent / guarded) |
+|-----|------------------|-------------|------------------------------|
+| 2 | 0.86 | 0.93 | 5 / 5 |
+| 3 | 0.92 | 0.98 | 1 / 4 |
+| 4 | 0.90 | 0.94 | 4 / 3 |
+| 5 | 0.95 | 0.98 | 1 / 2 |
+| all | 0.91 | **0.96** | 11 / 14 |
+
+**One thing the split does NOT mean.** A guarded item firing something else is
+not automatically *good* — set 3's shortlist-4 kept its enumeration guard and
+still produced "De gereedschap bevat ..." (item 7). Those cases leave the
+automatic FP count and enter the LLM-as-judge queue; they are not waved through.
+
+Validation: run over the four stored result sets, the checker reports **0
+violations and 0 unchecked rules**, matching the by-hand conclusion from each
+of those runs. All 8 distinct `must_not` values across the five corpora have
+predicates; a new, unrecognised rule is reported as `UNCHECKED` rather than
+silently passing.
+
 ## Corpus inventory
 
 Five independent 100-item sets, same label scheme, disjoint texts/domains.
@@ -399,7 +443,8 @@ url-1 and url-2 (URLs intact) all had their `must_not` guard hold while a
 different, legitimate suggestion type fired. Sets 2, 3 and 5 now agree, so this
 is systematic: **precision on these corpora understates the engine**, and
 tuning any pass for precision optimises against the measurement rather than the
-product. Settle the convention first.
+product. **SETTLED 2026-09-20** — see the scoring-convention section above;
+`run_eval.py` now scores `must_not` and splits the negatives.
 
 Also seen: `bezorging → levering` fired here (conj-4) and on set 2 (clean-14) —
 the same lateral swap twice, neither simpler nor wrong, the kind the swap judge
