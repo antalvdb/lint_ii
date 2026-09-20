@@ -435,6 +435,12 @@ class MistralProvider(LLMProvider):
                 "Mistral API key required. Pass api_key or set MISTRAL_API_KEY env var."
             )
         self._model = model or os.environ.get("LINT_II_LLM_MODEL", self.DEFAULT_MODEL)
+        # 0.7 is the historical value every Mistral-era baseline in
+        # scripts/eval/README.md was measured at, so it stays the default.
+        # Overridable because Qwen moved to 0.3 after 0.7 produced noisy
+        # lexical swaps: comparing Mistral@0.7 with Qwen@0.3 would confound
+        # temperature with model. Mirrors LINT_II_HETZNER_TEMPERATURE.
+        self._temperature = float(os.environ.get("LINT_II_MISTRAL_TEMPERATURE", "0.7"))
         self._client = None
 
     @property
@@ -472,7 +478,7 @@ class MistralProvider(LLMProvider):
             json={
                 "model": self._model,
                 "messages": messages,
-                "temperature": 0.7,
+                "temperature": self._temperature,
                 "max_tokens": max_tokens or self.DEFAULT_MAX_TOKENS,
             },
         )

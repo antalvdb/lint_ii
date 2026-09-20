@@ -118,6 +118,9 @@ pushing.** Don't assume the other side is idle.
   `scripts/eval/README.md` before changing its prompt.
 - Other knobs: `LINT_II_LLM_TIMEOUT` (watchdog, 300s), `LINT_II_MAX_PENDING_JOBS`
   (flood guard, 12), `LINT_II_HETZNER_TEMPERATURE` (0.3),
+  `LINT_II_MISTRAL_TEMPERATURE` (0.7 — the value every Mistral-era baseline in
+  `scripts/eval/README.md` was measured at, so it stays the default; set it to
+  0.3 when comparing against Qwen, or temperature is confounded with model),
   `LINT_II_LOG_LEVEL` (INFO; DEBUG logs full prompts+responses — the fastest way
   to see raw Qwen output during prompt iteration, but don't leave it on: tester
   texts would pile up in the logs).
