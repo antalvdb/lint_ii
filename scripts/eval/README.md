@@ -666,7 +666,9 @@ report different observation counts — check those before comparing rates.
      because spylls' `suggest()` returns empty for it. Non-word typos are
      Hunspell's; dt-errors are the LLM's alone, which is why this item was
      always an LLM-prompt problem.
-5. ~~**No-op `word_frequency` suggestions slip the filters**~~ — FIXED for the
+5. ~~**No-op `word_frequency` suggestions slip the filters**~~ / ~~abbreviation
+   tokens fire spurious triggers~~ — the TRIGGER half is now FIXED too; the
+   LiNT-score half remains open. FIXED for the
    suggestion layer. The BUNDLED word-frequency path lacked the
    `_is_noop_rewrite` check the per-trigger path already had, so a rewrite
    identical to the original reached the user (corpus5 conj-3, two consecutive
@@ -695,6 +697,18 @@ report different observation counts — check those before comparing rates.
    treats as an abbreviation is a candidate.
    This also raises the priority of the LiNT-score half: the same ~3-point error
    feeds the frequency metric on every such token.
+   **TRIGGER HALF FIXED 2026-09-21**: `_check_word_frequency` now skips a token
+   whose period-stripped form is frequent enough, alongside the existing
+   word-family guard. Validated over all 500 corpus items: exactly 5 tokens
+   suppressed (`pas.` 2.26/5.51, `hand.` 2.77/5.30, `vol.` 2.36/5.32 ×3 — a
+   third word, `hand.`, surfaced that no eval run had flagged), 0 legitimate
+   abbreviation triggers lost, and neither affected positive loses its other
+   suggestion types. Genuinely rare words still trigger, sentence-final ones
+   included (spaCy splits the period for those, so the token is already bare).
+   **The LiNT-score half is still open and is the harder one**: `WordFeatures.
+   word_frequency` continues to score these tokens ~3 Zipf too low, so the
+   published metric is affected. Fixing that changes LiNT scores and needs
+   validating against the LiNT reference first — deliberately not touched.
 6. **Hunspell mangles valid compounds when BOTH forms are unknown to SUBTLEX**
    (set 2 clean-8, found 2026-09-11). The Hunspell pass "corrected"
    `banenzwemmen` → `banenzwemmer`, yielding ungrammatical Dutch ("In de

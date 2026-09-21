@@ -428,6 +428,35 @@ class SuggestionEngine:
                         wf.text, freq, family,
                     )
                     continue
+                # Abbreviation-token guard. spaCy keeps a sentence-final word it
+                # treats as an abbreviation as ONE token including the period
+                # ("vol.", "pas."), and SUBTLEX has no entry for that form, so a
+                # perfectly common word scores ~3 Zipf too low and fires a
+                # spurious trigger. The bare form is the real word; if that is
+                # frequent enough, there is nothing to simplify.
+                #
+                # Observed twice: corpus5 conj-3 ("vol." 2.36 vs "vol" 5.32,
+                # where the model echoed the word and the no-op guard caught it)
+                # and corpus.json clean-1 ("pas." 2.26 vs "pas" 5.51, where it
+                # answered "kaart" and nothing filtered it -- a real suggestion
+                # on a word that was never difficult).
+                #
+                # Scope: this suppresses the TRIGGER only. WordFeatures.
+                # word_frequency still scores these tokens as rare, so the LiNT
+                # metric itself is unchanged -- fixing that alters published
+                # scores and must be validated against the LiNT reference first
+                # (backlog item 5).
+                bare = wf.text.rstrip(".")
+                if bare != wf.text and bare:
+                    from lint_ii.linguistic_data.wordlists import FREQ_DATA
+                    bare_freq = FREQ_DATA.get(bare)
+                    if bare_freq is not None and bare_freq >= threshold:
+                        logger.debug(
+                            "Skipping word_frequency trigger %r (%.2f): bare form "
+                            "%r is frequent (%.2f) — spaCy kept the period in the token",
+                            wf.text, freq, bare, bare_freq,
+                        )
+                        continue
                 # Get context (surrounding words)
                 context = sentence_text
                 triggers.append(
