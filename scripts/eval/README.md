@@ -87,6 +87,25 @@ of those runs. All 8 distinct `must_not` values across the five corpora have
 predicates; a new, unrecognised rule is reported as `UNCHECKED` rather than
 silently passing.
 
+## Deterministic-guard unit tests (`tests/`)
+
+The pure guard/filter methods on `SuggestionEngine` — the deterministic
+backstops that reject bad LLM output — have a pytest suite (`tests/`,
+`python -m pytest`, ~4s, no LLM calls, no API keys). Until 2026-09 they were
+validated only by 40-minute eval runs. `test_text_guards.py` covers the
+text-level guards (`_is_noop_rewrite`, `_breaks_clause_conjunction`,
+`_alters_url`, band/family checks, `_connective_adds_content`,
+`_correction_plausible`, enumeration parsing/anchoring);
+`test_parse_guards.py` covers the spaCy/Hunspell-dependent ones
+(`_np_coordination_list`, `_nominalized_infinitive_list`,
+`_dehet_disagreement`, `_introduces_misspelling`). Every guard is tested in
+both directions — fires on a breach, silent on legitimate input (method
+lesson 4). Known defects are encoded as strict `xfail` so a fix flips them
+loudly: backlog item 6 (`banenzwemmen → banenzwemmer` passes
+`_correction_plausible`) is there now. Run the suite before an eval run when
+touching a guard: it catches shape regressions for free; the eval's job is
+what the units cannot see (LLM behaviour, pass interactions).
+
 ## Corpus inventory
 
 Five independent 100-item sets, same label scheme, disjoint texts/domains.
