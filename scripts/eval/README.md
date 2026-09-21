@@ -114,13 +114,32 @@ provably suppresses them.
 
 ## Cross-set results (presence/absence, precision/recall)
 
-| Set | Mistral@0.7 | Qwen@0.3 | Qwen + July-30/31 fixes | current engine |
-|-----|-------------|----------|--------------------------|----------------|
-| 1 (dev) | 0.84 / 1.00 | 0.93 / 0.98 | — | not re-run |
-| 2 | 0.88 / 1.00 | 0.86 / 1.00 | — | **0.86 / 0.97** (2026-09-11, `c60953d`) |
-| 3 | 0.88 / 0.98 | 0.86 / 0.95 | — | **0.92 / 0.89** (2026-09-11, `3e85b3f`) |
-| 4 | — | — | 0.90 / 0.92 | **0.90 / 0.94** (3rd run 2026-08-11, `c60953d`) |
-| 5 | — | — | 0.94 / 0.95 | **0.95 / 0.94** (5th run 2026-08-06, `bb8783d`) |
+All figures are LEGACY presence/absence (any suggestion on a negative item is a
+false positive), kept for comparability across the whole history. The
+`guard-aware` column applies the settled scoring convention — see the
+scoring-convention section — and is the number that reflects the engine.
+
+| Set | Mistral@0.7 | Qwen@0.3 | Qwen + July-30/31 fixes | current engine (legacy) | guard-aware |
+|-----|-------------|----------|--------------------------|-------------------------|-------------|
+| 1 (dev) | 0.84 / 1.00 | 0.93 / 0.98 | — | not re-run | — |
+| 2 | 0.88 / 1.00 | 0.86 / 1.00 | — | 0.86 / 0.97 (2026-09-11, `c60953d`) | **0.93** / 0.97 |
+| 3 | 0.88 / 0.98 | 0.86 / 0.95 | — | 0.92 / 0.89 (2026-09-11, `3e85b3f`) | **0.98** / 0.89 |
+| 4 | — | — | 0.90 / 0.92 | 0.90 / 0.94 (2026-08-11, `c60953d`) | **0.94** / 0.94 |
+| 5 | — | — | 0.94 / 0.95 | 0.95 / 0.94 (2026-08-06, `bb8783d`) | **0.98** / 0.94 |
+
+Recall is identical in both columns: the convention only changes how negatives
+are counted. **Guard violations are 0 on all four sets** — every `must_not` the
+corpora assert has held on the current engine.
+
+The guard-aware numbers are a re-score of the SAME runs (the runner is
+resumable, so pointing it at a stored `results*.json` re-reports without new
+API calls), not fresh measurements. That is deliberate: it isolates the scoring
+change from run variance.
+
+Do not read guard-aware precision as "those items are fine". A guarded item can
+hold its guard and still produce something bad — set 3's shortlist-4 kept its
+enumeration guard while emitting "De gereedschap bevat ..." (item 7). Such cases
+leave the automatic FP count and enter the judging queue.
 
 Set 5 has been run four times. The sequence matters more than any single
 number, and it is the strongest argument in this file for judging phenomenon
