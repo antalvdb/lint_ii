@@ -281,16 +281,42 @@ class TestCorrectionPlausible:
             "acomodatie", "accommodatie", "spelfout"
         )
 
-    @pytest.mark.xfail(
-        reason="backlog item 6: same-stem branch has no length ceiling and no "
-        "known-word requirement, so long unknown compounds differing in one "
-        "letter pass (banenzwemmen → banenzwemmer)",
-        strict=True,
-    )
-    def test_item6_long_unknown_compound_mutation_should_be_rejected(self):
+    def test_item6_long_unknown_compound_mutation_is_rejected(self):
+        """Backlog item 6, FIXED: Hunspell turned the valid compound
+        "banenzwemmen" into "banenzwemmer" -- a gerund into a person -- because
+        11 of 12 characters matched. Both forms are absent from SUBTLEX, so the
+        frequency rule had no signal either."""
         assert not SuggestionEngine._correction_plausible(
             "banenzwemmen", "banenzwemmer", "spelfout"
         )
+
+    @pytest.mark.parametrize(
+        "word,correction",
+        [
+            ("word", "wordt"),      # suffix added
+            ("wordt", "word"),      # suffix removed
+            ("loop", "loopt"),
+            ("vind", "vindt"),
+            ("aparte", "apart"),
+        ],
+    )
+    def test_suffix_inflection_is_plausible(self, word, correction):
+        # One form is a PREFIX of the other: that is what a real inflection fix
+        # looks like, and it is the distinction item 6's fix turns on.
+        assert SuggestionEngine._correction_plausible(word, correction, "grammatica")
+
+    @pytest.mark.parametrize(
+        "word,correction",
+        [
+            ("banenzwemmen", "banenzwemmer"),   # final letter substituted
+            ("vogeltelling", "vogelhelling"),   # divergence mid-word
+            ("telformulieren", "teelformulieren"),
+        ],
+    )
+    def test_shared_prefix_without_prefix_relation_is_rejected(self, word, correction):
+        # Sharing a long prefix and then DIVERGING is a different word, not an
+        # inflection. The old test accepted these on prefix length alone.
+        assert not SuggestionEngine._correction_plausible(word, correction, "spelfout")
 
 
 class TestAbbreviationTokenTrigger:

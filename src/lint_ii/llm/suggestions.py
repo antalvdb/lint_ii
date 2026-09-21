@@ -1254,12 +1254,20 @@ class SuggestionEngine:
             # "te rugzwemmen", eval set 5) — there a part is rare or unknown.
             return all(FREQ_DATA.get(p, 0.0) >= 3.0 for p in c.split())
         if " " not in c:
-            common = 0
-            for cw, cc in zip(w, c):
-                if cw != cc:
-                    break
-                common += 1
-            if common >= max(3, min(len(w), len(c)) - 2):
+            # A real inflection fix ADDS or REMOVES a suffix, so one form is a
+            # PREFIX of the other: word/wordt, loop/loopt, apart/aparte.
+            #
+            # The old test only required a long shared prefix, which also admits
+            # a substitution at the END -- and that is a different word, not an
+            # inflection. Backlog item 6: Hunspell turned the valid compound
+            # "banenzwemmen" into "banenzwemmer", a gerund into a person
+            # ("In de ochtend is er banenzwemmer"), because 11 of 12 characters
+            # matched. Both forms are absent from SUBTLEX, so the frequency rule
+            # below had no signal either and the mutation reached the user.
+            #
+            # The length cap keeps this to actual inflection: Dutch inflectional
+            # suffixes are short (-t, -e, -en, -de, -te, -s).
+            if w != c and (w.startswith(c) or c.startswith(w)) and abs(len(w) - len(c)) <= 3:
                 return True
             if len(w) <= 4 and len(c) <= 4:
                 return True

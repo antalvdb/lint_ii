@@ -728,7 +728,7 @@ report different observation counts — check those before comparing rates.
    word_frequency` continues to score these tokens ~3 Zipf too low, so the
    published metric is affected. Fixing that changes LiNT scores and needs
    validating against the LiNT reference first — deliberately not touched.
-6. **Hunspell mangles valid compounds when BOTH forms are unknown to SUBTLEX**
+6. ~~**Hunspell mangles valid compounds when BOTH forms are unknown to SUBTLEX**~~ — FIXED
    (set 2 clean-8, found 2026-09-11). The Hunspell pass "corrected"
    `banenzwemmen` → `banenzwemmer`, yielding ungrammatical Dutch ("In de
    ochtend is er banenzwemmer") and turning a gerund into a person.
@@ -745,6 +745,24 @@ report different observation counts — check those before comparing rates.
    require at least one of the two forms to be in SUBTLEX — but re-verify the
    gate's existing cases (word/wordt, loop/loopt, aparte/apart, te veel,
    terugzwemmen) before changing it, since it is load-bearing for two passes.
+   **FIXED 2026-09-21.** Neither suggested fix was the right one; the sharp
+   distinction is that a real inflection fix ADDS OR REMOVES A SUFFIX, so one
+   form is a PREFIX of the other (word/wordt, loop/loopt, apart/aparte).
+   Sharing a long prefix and then DIVERGING is a different word — and
+   banenzwemmen → banenzwemmer is a final-letter substitution turning a gerund
+   into a person. The branch now requires the prefix relation plus a ≤3-char
+   length delta (Dutch inflectional suffixes are short: -t, -e, -en, -de, -te,
+   -s). A length ceiling alone would have been fragile, and a known-word
+   requirement would have rejected genuine typo fixes on productive compounds
+   that SUBTLEX lacks — the trap CLAUDE.md warns about.
+   Regression-checked against every spelling correction the engine has ever
+   produced across all stored result files: 9 distinct pairs, 7 kept, 2
+   rejected — the banenzwemmen bug, and `clandestiene → clandestine`, a SECOND
+   hallucination the old rule admitted. That one is worth noting: `clandestiene`
+   is valid Dutch (Hunspell, Zipf 2.70) and `clandestine` is not a Dutch word
+   at all (absent from Hunspell, Zipf 1.66), so the LLM pass was corrupting
+   correct text and shipping it. The strict xfail in `tests/` is now a normal
+   assertion, with parametrised cases for both sides of the distinction.
 7. **`de`/`het` article disagreement reaches the user** (set 3 shortlist-4,
    found 2026-09-11). The word-frequency pass swapped `gereedschapsset →
    gereedschap`, yielding "**De** gereedschap bevat een hamer..." — it is *het*
