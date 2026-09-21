@@ -291,3 +291,60 @@ class TestCorrectionPlausible:
         assert not SuggestionEngine._correction_plausible(
             "banenzwemmen", "banenzwemmer", "spelfout"
         )
+
+
+class TestAbbreviationTokenTrigger:
+    """`_check_word_frequency`'s abbreviation guard (backlog item 5, 23fbe2a).
+
+    spaCy keeps a sentence-final word it treats as an abbreviation as ONE token
+    including the period ("pas.", "vol.", "hand."). SUBTLEX has no entry for
+    that form, so a perfectly common word scores ~3 Zipf too low and fires a
+    spurious trigger. Observed live: clean-1 produced "pas." → "kaart", a real
+    suggestion on a word that was never difficult.
+
+    These lock in BOTH directions, because a guard that suppresses everything
+    would pass a one-sided test: the abbreviation tokens must not trigger, and
+    genuinely rare words must still trigger — including sentence-final ones,
+    where spaCy splits the period so the token is already bare.
+    """
+
+    @staticmethod
+    def _triggers(engine, text):
+        from lint_ii import ReadabilityAnalysis
+
+        analysis = ReadabilityAnalysis.from_text(text)
+        found = []
+        for idx, sent in enumerate(analysis.sentence_analyses):
+            found += [
+                t.word for t in engine._check_word_frequency(sent, idx, sent.doc.text)
+            ]
+        return found
+
+    @pytest.mark.parametrize(
+        "text,token",
+        [
+            ("U kunt boeken lenen met uw pas.", "pas."),
+            ("Reserveer op tijd, want de vakantieweken lopen snel vol.", "vol."),
+        ],
+    )
+    def test_abbreviation_token_does_not_trigger(self, engine, text, token):
+        assert token not in self._triggers(engine, text)
+
+    def test_rare_word_still_triggers(self, engine):
+        assert "reprimande" in self._triggers(
+            engine, "De rechter gaf de advocaat een stevige reprimande wegens de stukken."
+        )
+
+    def test_rare_word_at_sentence_end_still_triggers(self, engine):
+        # spaCy splits the period here, so the token is bare and unaffected.
+        assert "precair" in self._triggers(
+            engine, "De financiering van het jeugdhonk blijft volgens de wethouder uiterst precair."
+        )
+
+    def test_guard_only_fires_when_the_bare_form_is_common(self):
+        # The predicate itself: suppression requires the stripped form to clear
+        # the threshold, so a genuinely rare abbreviation is still reported.
+        from lint_ii.linguistic_data.wordlists import FREQ_DATA
+
+        assert FREQ_DATA.get("pas", 0) >= 3.0 > FREQ_DATA.get("pas.", 0)
+        assert FREQ_DATA.get("vol", 0) >= 3.0 > FREQ_DATA.get("vol.", 0)
