@@ -121,20 +121,31 @@ scoring-convention section — and is the number that reflects the engine.
 
 | Set | Mistral@0.7 | Qwen@0.3 | Qwen + July-30/31 fixes | current engine (legacy) | guard-aware |
 |-----|-------------|----------|--------------------------|-------------------------|-------------|
-| 1 (dev) | 0.84 / 1.00 | 0.93 / 0.98 | — | not re-run | — |
+| 1 (dev) | 0.84 / 1.00 | 0.93 / 0.98 | — | 0.95 / 0.94 (2026-09-21, `3e85b3f`) | **0.98** / 0.94 |
 | 2 | 0.88 / 1.00 | 0.86 / 1.00 | — | 0.86 / 0.97 (2026-09-11, `c60953d`) | **0.93** / 0.97 |
 | 3 | 0.88 / 0.98 | 0.86 / 0.95 | — | 0.92 / 0.89 (2026-09-11, `3e85b3f`) | **0.98** / 0.89 |
 | 4 | — | — | 0.90 / 0.92 | 0.90 / 0.94 (2026-08-11, `c60953d`) | **0.94** / 0.94 |
 | 5 | — | — | 0.94 / 0.95 | 0.95 / 0.94 (2026-08-06, `bb8783d`) | **0.98** / 0.94 |
 
 Recall is identical in both columns: the convention only changes how negatives
-are counted. **Guard violations are 0 on all four sets** — every `must_not` the
+are counted. **Guard violations are 0 on all five sets** — every `must_not` the
 corpora assert has held on the current engine.
 
-The guard-aware numbers are a re-score of the SAME runs (the runner is
-resumable, so pointing it at a stored `results*.json` re-reports without new
-API calls), not fresh measurements. That is deliberate: it isolates the scoring
-change from run variance.
+**Discount the set-1 row.** It is the DEV set: the thresholds were fitted to it,
+which is why it has the table's highest precision and 9/10 connective against
+set 3's 7/10. A strong number there confirms little; a weak one would have been
+the informative outcome. Judge the engine on sets 2-5.
+
+Across all five: precision is 0.93-0.98 everywhere, so **recall is the weak
+axis**, floored by set 3's 0.89 (mostly connective). Under the legacy metric
+alone that reads backwards — precision looks like the problem — which is the
+practical reason the convention needed settling.
+
+Sets 2-5's guard-aware numbers are a RE-SCORE of the same runs, not fresh
+measurements — the runner is resumable, so pointing it at a stored
+`results*.json` re-reports with no new API calls, which isolates the scoring
+change from run variance. Set 1 was measured fresh, with the new scoring already
+in the runner.
 
 Do not read guard-aware precision as "those items are fine". A guarded item can
 hold its guard and still produce something bad — set 3's shortlist-4 kept its
@@ -671,6 +682,19 @@ report different observation counts — check those before comparing rates.
    Fixing it properly means normalising abbreviation-final tokens before the
    frequency lookup, which CHANGES LiNT SCORES and must be validated against
    the LiNT reference first. Left deliberately untouched.
+   **UPGRADED 2026-09-21 — it is worse than "a no-op the guard catches".** Set 1
+   clean-1 produced `pas.` → `kaart` ("U kunt boeken lenen met uw kaart"), a
+   REAL suggestion on a word that was never difficult, and the no-op guard
+   cannot touch it because the text genuinely changed. So the spurious trigger
+   reaches the user whenever the model answers with a different word rather
+   than echoing the original.
+   Confirmed on two sets with two different words, so it is not a `vol.`-specific
+   quirk: spaCy keeps both `pas.` and `vol.` as single tokens, and SUBTLEX has
+   them at Zipf 2.26 / 2.36 against 5.51 / 5.32 for the bare forms — a ~3-point
+   drop that is purely the attached period. Any sentence-final word that spaCy
+   treats as an abbreviation is a candidate.
+   This also raises the priority of the LiNT-score half: the same ~3-point error
+   feeds the frequency metric on every such token.
 6. **Hunspell mangles valid compounds when BOTH forms are unknown to SUBTLEX**
    (set 2 clean-8, found 2026-09-11). The Hunspell pass "corrected"
    `banenzwemmen` → `banenzwemmer`, yielding ungrammatical Dutch ("In de
