@@ -20,17 +20,35 @@ fail-open, so a provider outage silently becomes "no suggestions" and reads as
 a recall collapse. The tell is items losing suggestion types the change under
 test cannot touch. Gate on it:
 
+**The runner now does this itself** (2026-09-24): it reads the service log
+around every item, counts provider-call failures (429 AND 5xx), retries a
+contaminated item up to `--retries` times (default 2), and ends with a
+`VALIDITY:` line — `CLEAN`, `CONTAMINATED` (naming the items), or `NOT CHECKED`
+when the log is unreadable, which is the case on the Mac. Resuming with the same
+`--results` re-runs contaminated items and skips clean ones.
+
+**Why it had to be automatic.** The manual gate below counted only 500s. On
+2026-09-11 set 3 ran through ~30 **429s** with a clean 500 count and was read as
+a healthy run. Six of its seven "misses" — including all three connective ones —
+produced suggestions when re-tested, so the reported 0.89 recall, and the
+conclusion drawn from it that recall/connective was the engine's weak axis, were
+a rate-limit artifact. 429s rose ~40x in September 2026; they are now the
+common failure mode, not the rare one.
+
+Manual equivalent, if you ever need it:
+
 ```
 curl -s -o /dev/null -w "%{http_code}\n" -X POST \
   https://inference.hetzner.com/api/v1/chat/completions \
   -H "Authorization: Bearer $HETZNER_API_KEY" -H 'Content-Type: application/json' \
   -d '{"model":"Qwen/Qwen3.6-35B-A3B-FP8","messages":[{"role":"user","content":"ok"}],
        "max_tokens":5,"chat_template_kwargs":{"enable_thinking":false}}'
-grep -c "500 Internal Server Error" /var/log/lint-ii/app.log   # before vs after
+grep -cE '"HTTP/1.1 (429|5[0-9][0-9])' /var/log/lint-ii/app.log   # before vs after
 ```
 
-A handful of 500s is survivable (81 in the next run cost exactly one item);
-hundreds voids the run.
+Count **429s as well as 5xx** — a clean 500 count proves nothing about 429s. A
+handful of errors can be survivable; with per-item retries the runner now
+decides that per item rather than per run.
 
 - The runner is sequential, resumable (`--fresh` ignores prior results), and
   cache-busts every item with a per-run nonce. It prints presence/absence

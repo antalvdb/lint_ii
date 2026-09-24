@@ -53,6 +53,58 @@ def _analyze(text):
     raise TimeoutError("analysis did not finish in time")
 
 
+# --------------------------------------------------------------------------
+# Provider-error gate
+#
+# Every pass is FAIL-OPEN: a provider call that fails (429 rate limit, 5xx)
+# silently becomes "no suggestion", which this runner then scores as a false
+# negative. The eval cannot see that from the API response -- only the
+# service's log records it. So the runner reads the log around each item.
+#
+# Why this is automatic rather than a checklist step: the manual gate in the
+# README counted only 500s, and on 2026-09-11 set 3 ran through ~30 429s with
+# a clean 500 count. Six of its seven "misses" (incl. all three connective
+# ones) produced suggestions when re-tested, so the reported 0.89 recall -- and
+# the conclusion that recall/connective was the engine's weak axis -- was a
+# rate-limit artifact. 429s rose ~40x in Sep 2026, so this is now the common
+# failure mode, not an edge case.
+#
+# The httpx line below is logged once per provider call, so counting it gives
+# an exact per-item error count. Other traffic on the service (testers, cache
+# warming) can be misattributed to an item; the cost of that is one extra
+# retry, which is acceptable.
+# --------------------------------------------------------------------------
+
+_PROVIDER_ERR_RE = re.compile(
+    r'HTTP Request: POST \S+/chat/completions "HTTP/1\.1 (429|5\d\d)'
+)
+
+
+def _log_size(path):
+    if not path:
+        return None
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return None
+
+
+def _provider_errors_since(path, offset):
+    """(count, {status: n}) of provider-call failures logged after `offset`."""
+    if path is None or offset is None:
+        return 0, {}
+    try:
+        with open(path, "rb") as f:
+            f.seek(offset)
+            chunk = f.read().decode("utf-8", errors="replace")
+    except OSError:
+        return 0, {}
+    counts = {}
+    for m in _PROVIDER_ERR_RE.finditer(chunk):
+        counts[m.group(1)] = counts.get(m.group(1), 0) + 1
+    return sum(counts.values()), counts
+
+
 def _slim(sug):
     out = {k: sug[k] for k in KEEP if k in sug}
     if sug.get("variants"):
@@ -134,6 +186,13 @@ def main():
                          "(bypasses the nginx edge rate limits)")
     ap.add_argument("--corpus", default=os.path.join(HERE, "corpus.json"))
     ap.add_argument("--results", default=os.path.join(HERE, "results.json"))
+    ap.add_argument("--provider-log", default="/var/log/lint-ii/app.log",
+                    help="service log to scan for provider 429/5xx per item "
+                         "(box side). If unreadable, validity is NOT checked "
+                         "and the summary says so.")
+    ap.add_argument("--retries", type=int, default=2,
+                    help="re-run an item up to N times if provider errors were "
+                         "logged during it")
     args = ap.parse_args()
     if args.base:
         global BASE
@@ -148,27 +207,43 @@ def main():
     if os.path.exists(RESULTS) and not args.fresh:
         results = json.load(open(RESULTS, encoding="utf-8")).get("results", {})
 
+    log_path = args.provider_log if _log_size(args.provider_log) is not None else None
     nonce = int(time.time())
     done = 0
     for item in corpus:
         iid = item["id"]
-        if iid in results and not results[iid].get("error"):
+        # Resume skips finished items -- but NOT ones still contaminated by
+        # provider errors, whose outcome may reflect the provider, not the engine.
+        prev = results.get(iid)
+        if prev and not prev.get("error") and not prev.get("provider_errors"):
             continue
         text = item["text"] + f"\n\nTestref {nonce}."
         rec = {"should_suggest": item["should_suggest"],
                "phenomena": item.get("phenomena", []),
                "must_not": item.get("must_not", []),
                "text": item["text"]}
-        try:
-            data = _analyze(text)
-            sugs = data.get("suggestions", {}).get("suggestions", [])
-            # drop suggestions on the cache-busting nonce block
-            sugs = [s for s in sugs if "Testref" not in (s.get("original_text") or "")]
-            rec["produced"] = [_slim(s) for s in sugs]
-            rec["types"] = sorted({s.get("type") for s in sugs})
-            rec["error"] = None
-        except Exception as e:
-            rec["produced"], rec["types"], rec["error"] = [], [], str(e)
+        attempt = 0
+        while True:
+            attempt += 1
+            offset = _log_size(log_path)
+            try:
+                data = _analyze(text)
+                sugs = data.get("suggestions", {}).get("suggestions", [])
+                # drop suggestions on the cache-busting nonce block
+                sugs = [s for s in sugs if "Testref" not in (s.get("original_text") or "")]
+                rec["produced"] = [_slim(s) for s in sugs]
+                rec["types"] = sorted({s.get("type") for s in sugs})
+                rec["error"] = None
+            except Exception as e:
+                rec["produced"], rec["types"], rec["error"] = [], [], str(e)
+            n_err, by_status = _provider_errors_since(log_path, offset)
+            rec["provider_errors"] = by_status
+            rec["attempts"] = attempt
+            if n_err == 0 or attempt > args.retries:
+                break
+            print(f"    {iid}: {n_err} provider error(s) {by_status} — retrying "
+                  f"({attempt}/{args.retries})", flush=True)
+            time.sleep(5 * attempt)
         results[iid] = rec
         done += 1
         with open(RESULTS, "w", encoding="utf-8") as f:
@@ -222,6 +297,26 @@ def main():
           f"   <- genuine precision concern")
     print(f"  guarded items (other type fired) : {guarded_fired}"
           f"   <- not a defect if the guard held; see README")
+    # Validity: was any scored item still contaminated by provider errors after
+    # its retries? Such an item's "miss" may be the provider, not the engine.
+    scored = [results.get(i["id"]) for i in corpus]
+    scored = [r for r in scored if r and not r.get("error")]
+    dirty = [i["id"] for i in corpus
+             if results.get(i["id"]) and results[i["id"]].get("provider_errors")]
+    retried = sum(1 for r in scored if (r.get("attempts") or 1) > 1)
+    print()
+    if log_path is None:
+        print("VALIDITY: NOT CHECKED — provider log unreadable "
+              f"({args.provider_log}). Provider 429/5xx failures are invisible "
+              "to the API and would silently read as false negatives.")
+    elif dirty:
+        print(f"VALIDITY: CONTAMINATED — {len(dirty)} item(s) still saw provider "
+              f"errors after {args.retries} retries: {', '.join(dirty)}")
+        print("  Their outcome may reflect the provider, not the engine. "
+              "Re-run with the same --results (resumable) or treat as void.")
+    else:
+        print(f"VALIDITY: CLEAN — no provider errors on any scored item "
+              f"({retried} item(s) needed a retry to get there).")
     print(f"\nWrote {RESULTS}")
 
 
