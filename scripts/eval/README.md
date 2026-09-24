@@ -28,7 +28,7 @@ when the log is unreadable, which is the case on the Mac. Resuming with the same
 `--results` re-runs contaminated items and skips clean ones.
 
 **Why it had to be automatic.** The manual gate below counted only 500s. On
-2026-09-11 set 3 ran through ~30 **429s** with a clean 500 count and was read as
+2026-09-11 set 3 ran through 19 **429s** with a clean 500 count and was read as
 a healthy run. Six of its seven "misses" — including all three connective ones —
 produced suggestions when re-tested, so the reported 0.89 recall, and the
 conclusion drawn from it that recall/connective was the engine's weak axis, were
@@ -147,9 +147,14 @@ reordering that shortens nothing.
 **Rejected alternative: raise `max_sdl_min_words` 12 → 16.** It would suppress
 those 5 firings, but on POSITIVE items it would also remove 8 max_sdl
 suggestions on ≤15-word sentences — and on 3 of those max_sdl is the item's
-ONLY suggestion, so ~3 items of recall would be lost. That trades recall, the
-axis the five-set sweep showed is weakest (set 3: 0.89), to suppress firings
-that are neither false positives nor bad. Measured:
+ONLY suggestion, so ~3 items of recall would be lost. That trades real recall
+to suppress firings that are neither false positives nor bad. Measured:
+
+*(Corrected 2026-09-24: this paragraph originally also called recall "the axis
+the five-set sweep showed is weakest (set 3: 0.89)". That premise was a
+rate-limit artifact — see the provider-error gate. The decision does not depend
+on it: losing ~3 items of recall to suppress non-defects is a bad trade whichever
+axis is weaker.)*
 
 | sentence length | max_sdl on positives | item's only suggestion |
 |-----------------|----------------------|------------------------|
@@ -204,7 +209,7 @@ scoring-convention section — and is the number that reflects the engine.
 |-----|-------------|----------|--------------------------|-------------------------|-------------|
 | 1 (dev) | 0.84 / 1.00 | 0.93 / 0.98 | — | 0.95 / 0.94 (2026-09-21, `3e85b3f`) | **0.98** / 0.94 |
 | 2 | 0.88 / 1.00 | 0.86 / 1.00 | — | 0.86 / 0.97 (2026-09-11, `c60953d`) | **0.93** / 0.97 |
-| 3 | 0.88 / 0.98 | 0.86 / 0.95 | — | 0.92 / 0.89 (2026-09-11, `3e85b3f`) | **0.98** / 0.89 |
+| 3 | 0.88 / 0.98 | 0.86 / 0.95 | — | 0.93 / 0.97 (2026-09-24, `a9952be`, **VALIDITY: CLEAN**) | **0.98** / 0.97 |
 | 4 | — | — | 0.90 / 0.92 | 0.90 / 0.94 (2026-08-11, `c60953d`) | **0.94** / 0.94 |
 | 5 | — | — | 0.94 / 0.95 | 0.95 / 0.94 (2026-08-06, `bb8783d`) | **0.98** / 0.94 |
 
@@ -217,10 +222,24 @@ which is why it has the table's highest precision and 9/10 connective against
 set 3's 7/10. A strong number there confirms little; a weak one would have been
 the informative outcome. Judge the engine on sets 2-5.
 
-Across all five: precision is 0.93-0.98 everywhere, so **recall is the weak
-axis**, floored by set 3's 0.89 (mostly connective). Under the legacy metric
-alone that reads backwards — precision looks like the problem — which is the
-practical reason the convention needed settling.
+**Set 3 was re-run clean on 2026-09-24** (`results3c.json`, first run under the
+automatic provider-error gate): `VALIDITY: CLEAN`, zero retries needed, 275k
+tokens. Recall **0.89 → 0.97**, connective **7/10 → 10/10**, guard-aware
+precision 0.98. The 11-September figures (0.92 / 0.89) are superseded and should
+not be cited. Its two remaining misses are both word_frequency: `wordfreq-4`
+("inconsistent", missed in both runs — genuine) and `wordfreq-6`
+("ongefundeerd", which fired on 11 September, so ordinary word-frequency wobble).
+
+**CORRECTED 2026-09-24 — recall is NOT the weak axis.** This paragraph used to
+say it was, "floored by set 3's 0.89 (mostly connective)". Set 3's run hit 19
+provider 429s, which the fail-open passes turned into silent misses; re-tested,
+6 of its 7 misses produce suggestions. With that artifact removed, neither axis
+stands out — guard-aware precision and recall both sit in the mid-to-high 0.90s.
+Sets 1 and 2 were also run in September and saw 5 provider 429s each, so their
+recall may be slightly understated as well; only sets 4 and 5 (August, before
+the rate-limit rise) are clean by construction. What survives from the old
+paragraph is the scoring point: under the legacy metric alone, precision looks
+like the problem, which is why the convention needed settling.
 
 Sets 2-5's guard-aware numbers are a RE-SCORE of the same runs, not fresh
 measurements — the runner is resumable, so pointing it at a stored
@@ -544,12 +563,19 @@ Set-3 re-run (2026-09-11, `3e85b3f`): **0.92 / 0.89** against Qwen@0.3's
 0.86 / 0.95 — precision up six points, recall down six. With this, every
 held-out set has been measured against the current engine.
 
-**The recall drop is mostly connective.** Three of the seven FNs are conn-2/3/4,
-including conn-4 ("Het bedrijf boekte recordwinst. De werknemers kregen toch
-geen loonsverhoging"), an unmistakable contrast. Set 3 was never in the
-connective tuning set, so this is the honest held-out picture: **the connective
-pass is weaker on unseen data than sets 4 and 5 imply.** The other FNs are two
-word_frequency (inconsistent, impasse), one max_sdl and one passive.
+~~**The recall drop is mostly connective** … **the connective pass is weaker on
+unseen data than sets 4 and 5 imply.**~~ **WRONG — retracted 2026-09-24.** This
+run saw 19 provider 429s, and every pass is fail-open, so a rate-limited call
+became a silent "miss". Re-tested through the live pipeline, 6 of the 7 FNs
+produce suggestions: conn-2 → "…afgesloten, **want** er wordt…", conn-3 →
+"…niet, **dus** de lessen…", conn-4 → "…recordwinst, **maar** de werknemers…"
+(all three also 6/6 in the connective probe), plus wordfreq-5, long-1 and
+multi-7. Only wordfreq-4 ("inconsistent") is a genuine miss. The honest
+held-out connective picture is ~36/40 on sets 2-5, every remaining miss already
+documented (conn-10's inferential consequences on sets 4 and 5; set 5's
+conn-5/conn-6, ~1-in-6 firers under both prompts). The 500 count for this run
+was clean, and that is exactly why nobody noticed: the gate did not count 429s.
+The runner now does — see the provider-error gate at the top of this file.
 
 **The scoring artefact recurs for a third set.** conj-4 (`, maar ` intact),
 url-1 and url-2 (URLs intact) all had their `must_not` guard hold while a
