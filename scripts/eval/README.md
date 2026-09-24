@@ -106,6 +106,50 @@ loudly: backlog item 6 (`banenzwemmen → banenzwemmer` passes
 touching a guard: it catches shape regressions for free; the eval's job is
 what the units cannot see (LLM behaviour, pass interactions).
 
+### max_sdl on short sentences (DECIDED 2026-09-24: leave as is)
+
+**Decision: no change.** `max_sdl` keeps its gate (SDL > 5 in a sentence of
+≥ `max_sdl_min_words` = 12 words), including on 12–15-word sentences.
+
+The question was first posed as scoring: *should a sound max_sdl rewrite of a
+~13-word sentence count against precision?* The `must_not` convention above
+answered that before anyone had to. Across all five sets on the current engine,
+max_sdl fires on a negative item exactly **5 times, and every one is a guarded
+item** — `url-1` ×3, `shortlist-1`, `family-4` — so none is a false positive
+under the settled scoring. It fires on **zero** silent-required (`must_not=[]`)
+items. There was no scoring decision left to make.
+
+What remained was behavioural: should max_sdl fire on sentences that short at
+all? The 5 firings all sit at the gate's floor (12–15 words), and the rewrites
+are defensible — `url-1` splits cleanly after the URL, `shortlist-1` simplifies
+"In het pakket zitten…" to "Het pakket bevat…". The one borderline case is
+`family-4` ("Wie durft, mag na de les…" → "Na de les mag wie durft…"), a
+reordering that shortens nothing.
+
+**Rejected alternative: raise `max_sdl_min_words` 12 → 16.** It would suppress
+those 5 firings, but on POSITIVE items it would also remove 8 max_sdl
+suggestions on ≤15-word sentences — and on 3 of those max_sdl is the item's
+ONLY suggestion, so ~3 items of recall would be lost. That trades recall, the
+axis the five-set sweep showed is weakest (set 3: 0.89), to suppress firings
+that are neither false positives nor bad. Measured:
+
+| sentence length | max_sdl on positives | item's only suggestion |
+|-----------------|----------------------|------------------------|
+| ≤ 15 words | 8 | 3 |
+| 16–20 words | 2 | 1 |
+| > 20 words | 5 | 4 |
+
+**Caveat, recorded so the evidence is not overstated.** `family-4` counts as
+guarded somewhat incidentally: its `must_not` is about word_frequency, not
+max_sdl, so it is excluded because the *family* guard held, not because anyone
+judged max_sdl fine there. The convention as written treats that correctly,
+but the real evidence is four clear cases and one borderline one.
+
+**Revisit if:** a max_sdl firing appears on a `must_not=[]` item (that would be
+a genuine false positive the convention does not excuse), or reorderings like
+family-4's — moving a clause without shortening anything — recur often enough
+to be a pattern rather than one case.
+
 ## Corpus inventory
 
 Five independent 100-item sets, same label scheme, disjoint texts/domains.
@@ -371,6 +415,8 @@ are now `max_sdl` firing on borderline-length sentences and producing
 DEFENSIBLE rewrites rather than errors. That is a scoring-convention question
 (should a sound rewrite of a 13-word sentence count against precision?) more
 than a quality defect — worth settling before chasing max_sdl precision.
+**DECIDED 2026-09-24: leave max_sdl as is** — see "max_sdl on short sentences"
+in the scoring-convention section.
 
 Set-5 THIRD run (2026-08-04, after `fe0ff4c`): 0.95 / 0.95. **The headline is
 the wrong place to look for this fix, and the reason is a flaw in the harness
