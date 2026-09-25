@@ -219,6 +219,29 @@ is sometimes mislabelled. A deterministic gate (`"conservative": 1` beside
 `"intermediate": 2` in `_VARIANT_SENTENCE_COUNT`) would stop the mislabelling but
 DROP BEHOUDEND on those sentences, changing what the frontend shows by default.
 
+**DECIDED and shipped (2026-09-25, `39607ff`):** Antal approved the gate. A
+BEHOUDEND that splits is now discarded, and the frontend defaults to the
+least-split option that survives, so the "one-sentence" label is always true.
+Checked live on c3-long-1 ×3: no conservative option, the discard logged every
+time.
+
+**Regression gate, set 3 (`results3e.json`)**: `VALIDITY: CLEAN`, 0.91 / 0.98
+(guard-aware 0.97), against 0.93 / 0.97 for `results3d`. This is sampling noise,
+not the change: the gate touches only consolidated rewrites, and none of the six
+items whose output changed involves one. `wordfreq-4` is found this time (a
+previous miss); `good-3` gets a connective merge ("Het probleem is opgelost, dus
+u kunt weer inloggen.", reasonable, but the item is labelled silent). The other
+four gained or lost a word_frequency swap. Guard violations 0.
+Variants: 27 consolidated suggestions. 3 lost their conservative option
+(`long-1`, `long-8`: intermediate + full; `long-5`: only the full rewrite is
+left). On `long-5`, `results3d`'s "one-sentence" option was two sentences, the
+exact mislabelling the gate exists to stop. The run logged four conservative
+discards: two for splitting and two for no-ops. That makes the no-op watch item
+(above) 2 in 27 this time, against 1 in 28. The intermediate count moves by ±3
+between the two runs in both directions, which is ordinary resampling. Cost is
+unchanged at ≈2.9k tokens per item (267k for the 92 items run in one piece; the
+first 8 overlapped Antal's manual testing, so their total is not clean).
+
 ## Corpus inventory
 
 Five independent 100-item sets, same label scheme, disjoint texts/domains.
@@ -255,7 +278,7 @@ scoring-convention section — and is the number that reflects the engine.
 |-----|-------------|----------|--------------------------|-------------------------|-------------|
 | 1 (dev) | 0.84 / 1.00 | 0.93 / 0.98 | — | 0.97 / 0.97 (2026-09-25, `a9952be`, **VALIDITY: CLEAN**) | **1.00** / 0.97 |
 | 2 | 0.88 / 1.00 | 0.86 / 1.00 | — | 0.89 / 1.00 (2026-09-25, `a9952be`, **VALIDITY: CLEAN**) | **0.94** / 1.00 |
-| 3 | 0.88 / 0.98 | 0.86 / 0.95 | — | 0.93 / 0.97 (2026-09-24, `a9952be`, **VALIDITY: CLEAN**) | **0.98** / 0.97 |
+| 3 | 0.88 / 0.98 | 0.86 / 0.95 | — | 0.91 / 0.98 (2026-09-25, `39607ff`, **VALIDITY: CLEAN**) | **0.97** / 0.98 |
 | 4 | — | — | 0.90 / 0.92 | 0.90 / 0.94 (2026-08-11, `c60953d`) | **0.94** / 0.94 |
 | 5 | — | — | 0.94 / 0.95 | 0.95 / 0.94 (2026-08-06, `bb8783d`) | **0.98** / 0.94 |
 
