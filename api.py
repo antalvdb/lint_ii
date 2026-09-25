@@ -291,12 +291,14 @@ def health():
                 "reason": "llm-watchdog-timeout",
                 "wedged_for_seconds": round(time.time() - wedged_since),
                 "model": _provider.model_name if _provider else None,
+                **_deploy_state(),
                 **_pending_job_stats(),
             },
         )
     return {
         "status": "ok",
         "model": _provider.model_name if _provider else None,
+        **_deploy_state(),
         **_pending_job_stats(),
     }
 
@@ -355,6 +357,30 @@ def _code_version() -> str:
 
 
 _CODE_VERSION = _code_version()
+
+
+def _deploy_state() -> dict:
+    """Which code is RUNNING vs which is on DISK.
+
+    `_CODE_VERSION` is captured once, at import, so it is the commit this
+    process is actually executing. The disk commit is read fresh. They differ
+    exactly when code was pulled or merged without a restart -- the trap that
+    has now cost several debug cycles (CLAUDE.md: "verify the fix is actually
+    deployed"). On 2026-09-25 a merged fix sat undeployed for an hour while the
+    frontend, read from disk per request, was already new: the site LOOKED
+    updated and only behaviour showed otherwise. This makes it visible from
+    outside the box without probing behaviour.
+
+    Note a live `git rev-parse` alone would have been wrong here: it reports the
+    disk commit, i.e. the fix, and would have hidden the problem it exists to
+    reveal.
+    """
+    disk = _code_version()
+    return {
+        "commit": _CODE_VERSION or None,
+        "disk_commit": disk or None,
+        "restart_needed": bool(_CODE_VERSION and disk and _CODE_VERSION != disk),
+    }
 
 
 def _cache_key(text: str, max_suggestions: int | None, fmt: str) -> str:

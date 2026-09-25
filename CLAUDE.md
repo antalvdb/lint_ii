@@ -101,6 +101,13 @@ pushing.** Don't assume the other side is idle.
 - Before trusting any eval delta or live probe: verify the fix is actually
   deployed (git HEAD on the box + fresh service start + a probe). Stale-deploy
   false conclusions have cost multiple debug cycles.
+  **`/health` now answers this directly**: `commit` is the code the process is
+  RUNNING (captured at import), `disk_commit` is what is checked out, and
+  `restart_needed` is true when they differ. Check it after every merge —
+  `curl -s https://lint-ii.valkuil.net/health`. The frontend is served from disk
+  per request, so after an unrestarted merge the site LOOKS updated while the
+  backend is not (2026-09-25: 39607ff sat undeployed for an hour and was caught
+  only because Antal saw old behaviour in the UI).
 
 ## Feature gates & env (set in /etc/lint-ii/lint-ii.env on the box)
 
