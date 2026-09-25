@@ -723,6 +723,9 @@ export const css = `
            scroll inside the popup instead of clipping (Henk: "de tweede
            suggestie is maar half zichtbaar"). */
         max-height: calc(100vh - 2rem);
+        /* The visible height on mobile: 100vh includes the area behind the
+           browser's toolbars there. Ignored where dvh is unsupported. */
+        max-height: calc(100dvh - 2rem);
         overflow-y: auto;
         padding: 1rem;
         border: 2px solid #b3b3ab;

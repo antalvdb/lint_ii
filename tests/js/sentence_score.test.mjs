@@ -77,3 +77,29 @@ test('editor: an accepted model option is never "scoring"', () => {
     assert.equal(change.scoring, false)
     assert.notEqual(change.after.score, change.before.score)
 })
+
+// A phone shows only the top of a long popup (it scrolls internally), so the
+// line must come before the option cards, not after them.
+test('popup: the score line sits above the options after Toepassen', async () => {
+    globalThis.document ??= {
+        createElement: () => ({
+            set textContent(t) { this.t = t },
+            get innerHTML() { return this.t.replace(/&/g, '&amp;').replace(/</g, '&lt;') },
+        }),
+    }
+    const { SuggestionPopupController } = await import('../../src/visualizer/core/suggestion-popup.js')
+    const ed = fresh()
+    const popupEl = {
+        innerHTML: '', dataset: {}, style: {}, scrollTop: 120, addEventListener() {},
+        classList: { s: new Set(['visible']), add(c) { this.s.add(c) }, remove(c) { this.s.delete(c) }, contains(c) { return this.s.has(c) } },
+        querySelector: () => ({ value: EDIT, focus() {}, setSelectionRange() {}, hidden: true }),
+    }
+    const popup = new SuggestionPopupController(popupEl, ed)
+    popup._editing = { suggestionId: 'r0' }
+    popup._applyEdit('r0')
+
+    const html = popupEl.innerHTML
+    assert.ok(html.includes('sentence-score'), 'score line rendered')
+    assert.ok(html.indexOf('sentence-score') < html.indexOf('variant-choice'), 'line above the options')
+    assert.equal(popupEl.scrollTop, 0, 'result shown from the top')
+})

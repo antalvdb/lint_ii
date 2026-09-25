@@ -427,6 +427,7 @@ export class SuggestionPopupController {
         }
         this._currentClusterId = cluster.id
         this._popup.innerHTML = this._renderClusterContent(this._editor.getClusterSuggestions(cluster.id))
+        this._popup.scrollTop = 0
     }
 
     /** Re-render the open popup when a suggestion it shows has changed (for
@@ -439,7 +440,8 @@ export class SuggestionPopupController {
         this._popup.innerHTML = this._renderClusterContent(shown)
     }
 
-    /** The sentence-score line under an accepted suggestion. */
+    /** The sentence-score line, directly under an accepted suggestion's header:
+     *  a phone shows only the top of a long popup, which scrolls internally. */
     _sentenceScoreLine(suggestion, status) {
         if (status !== 'accepted' || !this._editor.getSentenceScoreChange) return ''
         const line = sentenceScoreText(this._editor.getSentenceScoreChange(suggestion.sentence_index))
@@ -532,6 +534,7 @@ export class SuggestionPopupController {
                     ${categoryLabel ? `<span class="suggestion-category">${categoryLabel}</span>` : ''}
                     ${statusHTML}
                 </div>
+                ${this._sentenceScoreLine(suggestion, status)}
 
                 <div class="suggestion-comparison">
                     <div class="original">
@@ -543,8 +546,6 @@ export class SuggestionPopupController {
                         <span class="text">${sugHtml}</span>
                     </div>
                 </div>
-
-                ${this._sentenceScoreLine(suggestion, status)}
 
                 ${suggestion.explanation ? `
                     <div class="suggestion-explanation">
@@ -612,6 +613,7 @@ export class SuggestionPopupController {
                     <span class="suggestion-type">${typeLabel}</span>
                     ${statusHTML}
                 </div>
+                ${this._sentenceScoreLine(suggestion, status)}
                 <div class="suggestion-comparison">
                     <div class="original">
                         <span class="label">${origLabel}</span>
@@ -627,7 +629,6 @@ export class SuggestionPopupController {
                         <span class="label">Uitleg:</span>
                         <span class="text">${this._escapeHtml(this._stripBrackets(suggestion.explanation))}</span>
                     </div>` : ''}
-                ${this._sentenceScoreLine(suggestion, status)}
                 ${this._editScoreNote(suggestion)}
                 <div class="suggestion-actions">${footer}</div>
             </div>`
@@ -655,6 +656,7 @@ export class SuggestionPopupController {
                     ${categoryLabel ? `<span class="suggestion-category">${categoryLabel}</span>` : ''}
                     ${statusHTML}
                 </div>
+                ${this._sentenceScoreLine(suggestion, status)}
 
                 <div class="suggestion-comparison">
                     <div class="original">
@@ -666,8 +668,6 @@ export class SuggestionPopupController {
                         <span class="text">${sugHtml}</span>
                     </div>
                 </div>
-
-                ${this._sentenceScoreLine(suggestion, status)}
 
                 ${suggestion.explanation ? `
                     <div class="suggestion-explanation">
