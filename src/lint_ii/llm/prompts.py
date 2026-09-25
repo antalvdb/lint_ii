@@ -185,6 +185,12 @@ Geef DRIE varianten, zodat de gebruiker zelf kan kiezen:
 - TUSSENVORM: los de knelpunten op in precies TWEE zinnen — splits één keer, op de meest natuurlijke plek.
 - VOLLEDIG: de best leesbare herschrijving; splits de zin op in kortere zinnen als dat de leesbaarheid duidelijk verbetert.
 
+Voorbeeld met een lange zin. Let op: BEHOUDEND blijft één zin, ook al is die lang.
+Zin: "Omdat het oude pierenbadje in het wijkpark al maanden lekte en een nieuw bassin te duur bleek, koos het buurtcomité voor een waterspeelplaats met fonteintjes en een smal beekje."
+- BEHOUDEND (één zin): "Omdat het oude pierenbadje in het wijkpark al maanden lekte en een nieuw bassin te duur was, koos het buurtcomité voor een waterspeelplaats met fonteintjes en een smal beekje."
+- TUSSENVORM (twee zinnen): "Het oude pierenbadje in het wijkpark lekte al maanden en een nieuw bassin was te duur. Daarom koos het buurtcomité voor een waterspeelplaats met fonteintjes en een smal beekje."
+- VOLLEDIG (drie zinnen): "Het oude pierenbadje in het wijkpark lekte al maanden. Een nieuw bassin was te duur. Daarom koos het buurtcomité voor een waterspeelplaats met fonteintjes en een smal beekje."
+
 Als varianten inhoudelijk hetzelfde zouden zijn (er valt niets of weinig te splitsen), geef dan bij die varianten dezelfde tekst.
 
 Houd je aan de richtlijnen: behoud de betekenis, de toon en de vakinhoud, voeg niets nieuws toe, en verander niet meer dan nodig is om de genoemde knelpunten op te lossen. Schrijf de uitleg onpersoonlijk: beschrijf wat er is veranderd, niet in de ik-vorm (dus niet "Ik heb ...").
