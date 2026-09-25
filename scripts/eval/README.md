@@ -207,8 +207,8 @@ scoring-convention section — and is the number that reflects the engine.
 
 | Set | Mistral@0.7 | Qwen@0.3 | Qwen + July-30/31 fixes | current engine (legacy) | guard-aware |
 |-----|-------------|----------|--------------------------|-------------------------|-------------|
-| 1 (dev) | 0.84 / 1.00 | 0.93 / 0.98 | — | 0.95 / 0.94 (2026-09-21, `3e85b3f`) | **0.98** / 0.94 |
-| 2 | 0.88 / 1.00 | 0.86 / 1.00 | — | 0.86 / 0.97 (2026-09-11, `c60953d`) | **0.93** / 0.97 |
+| 1 (dev) | 0.84 / 1.00 | 0.93 / 0.98 | — | 0.97 / 0.97 (2026-09-25, `a9952be`, **VALIDITY: CLEAN**) | **1.00** / 0.97 |
+| 2 | 0.88 / 1.00 | 0.86 / 1.00 | — | 0.89 / 1.00 (2026-09-25, `a9952be`, **VALIDITY: CLEAN**) | **0.94** / 1.00 |
 | 3 | 0.88 / 0.98 | 0.86 / 0.95 | — | 0.93 / 0.97 (2026-09-24, `a9952be`, **VALIDITY: CLEAN**) | **0.98** / 0.97 |
 | 4 | — | — | 0.90 / 0.92 | 0.90 / 0.94 (2026-08-11, `c60953d`) | **0.94** / 0.94 |
 | 5 | — | — | 0.94 / 0.95 | 0.95 / 0.94 (2026-08-06, `bb8783d`) | **0.98** / 0.94 |
@@ -235,9 +235,25 @@ say it was, "floored by set 3's 0.89 (mostly connective)". Set 3's run hit 19
 provider 429s, which the fail-open passes turned into silent misses; re-tested,
 6 of its 7 misses produce suggestions. With that artifact removed, neither axis
 stands out — guard-aware precision and recall both sit in the mid-to-high 0.90s.
-Sets 1 and 2 were also run in September and saw 5 provider 429s each, so their
-recall may be slightly understated as well; only sets 4 and 5 (August, before
-the rate-limit rise) are clean by construction. What survives from the old
+Sets 1 and 2, also run in September with 5 provider 429s each, were **re-run
+clean on 2026-09-25** (`results1c.json`, `results2c.json`; `VALIDITY: CLEAN`, zero
+retries, 553k tokens for both). Recall rose in both — set 1 0.94 → 0.97, set 2
+0.97 → 1.00 — and **only by recoveries: no item got worse in either set**
+(recovered: set 1 passive-5/passive-6, set 2 multi-5/wordfreq-5). That
+one-directional pattern is what removing contamination looks like; wobble would
+lose items as well as gain them. The old logs cannot tie individual 429s to
+items, so no single recovery is claimed as a 429. Set 1's remaining misses
+(abstract-5, compound-6) missed in both runs and are genuine.
+
+Two false positives also disappeared, and those ARE attributable — to this
+week's fixes, not to the re-run: set 2's clean-8 was the `banenzwemmen →
+banenzwemmer` Hunspell bug (item 6, `a9952be`), and set 1's clean-1 was
+`pas. → kaart` (item 5's trigger half, `23fbe2a`). The first full-eval
+confirmation of both fixes.
+
+Sets 1-3 are now gate-verified clean. Sets 4 and 5 ran in August, before the
+rate-limit rise and before the gate existed, so they are clean by circumstance
+rather than by measurement. What survives from the old
 paragraph is the scoring point: under the legacy metric alone, precision looks
 like the problem, which is why the convention needed settling.
 
