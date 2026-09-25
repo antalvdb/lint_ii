@@ -6,6 +6,33 @@
     <title>LiNT-II | Leesbaarheidsanalyse</title>
     <!-- Vendored locally: the demo must not depend on a CDN (it can run
          without internet access, and ad blockers break jsdelivr). -->
+    <script>
+        // ?debug=1: show JavaScript errors on the page itself, for phones without
+        // a console. Invisible otherwise. Loaded first so it also catches errors
+        // raised while the modules load.
+        if (new URLSearchParams(location.search).has('debug')) {
+            const lines = []
+            const show = (msg) => {
+                lines.push(new Date().toLocaleTimeString('nl-NL') + '  ' + msg)
+                let box = document.getElementById('debug-errors')
+                if (!box) {
+                    box = document.createElement('pre')
+                    box.id = 'debug-errors'
+                    box.style.cssText = 'position:fixed;left:0;right:0;bottom:0;max-height:40vh;'
+                        + 'overflow:auto;margin:0;padding:6px 8px;z-index:99999;font:11px/1.35 monospace;'
+                        + 'white-space:pre-wrap;background:#fff3f3;color:#8a1010;border-top:2px solid #c33'
+                    document.body.appendChild(box)
+                }
+                box.textContent = lines.join('\n')
+            }
+            const fmt = (x) => x && x.stack ? x.stack : String(x)
+            window.addEventListener('error', e => show('error: ' + (e.error ? fmt(e.error) : e.message)))
+            window.addEventListener('unhandledrejection', e => show('rejection: ' + fmt(e.reason)))
+            const origError = console.error
+            console.error = (...args) => { show('console.error: ' + args.map(fmt).join(' ')); origError.apply(console, args) }
+            document.addEventListener('DOMContentLoaded', () => show('debug on — errors appear here'))
+        }
+    </script>
     <script src="./src/visualizer/vendor/vega.min.js"></script>
     <script src="./src/visualizer/vendor/vega-lite.min.js"></script>
     <script src="./src/visualizer/vendor/vega-embed.min.js"></script>
@@ -430,7 +457,7 @@
         </footer>
     </div>
 
-    <script type="module" src="./src/visualizer/lint_ii_visualizer.js?v=72"></script>
+    <script type="module" src="./src/visualizer/lint_ii_visualizer.js?v=73"></script>
     <script type="module">
         const EXAMPLE_TEXTS = {
             1: `Jan gaat elke zaterdag naar de markt. Hij koopt er groenten en fruit. De markt is groot en druk. Er staan veel kraampjes met eten en drinken. Jan houdt van de kaasmarkt. De man achter de kraam geeft hem een stukje om te proeven. De kaas smaakt lekker. Jan koopt een groot stuk. Daarna drinkt hij een kop koffie bij het café op het plein. Hij fietst blij naar huis met zijn tas vol eten.`,

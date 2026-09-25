@@ -489,63 +489,17 @@ export class LintIIVisualizer extends HTMLElement {
 
         // Listen for editor changes to update UI
         this._editorController.addEventListener('editor-change', (e) => {
-            const { suggestionId, status } = e.detail
-            const beforeScore = this._lastDocScore
-            const beforeLevel = this._lastDocLevel
+            // The score request and the popup refresh run whatever happens in
+            // the UI updates: an exception there (seen on iPhone, WebKit) used
+            // to skip both, leaving an edit's popup on "score wordt berekend".
             try {
-                this.updateSuggestionStatus(suggestionId, status)
+                this._onEditorChange(e)
             } catch (err) {
-                // A diff-application failure on one sentence must not abort
-                // the toolbar/score/split updates below, or the view is left
-                // inconsistent (stale split parts render as duplicated text).
-                console.error('updateSuggestionStatus failed:', err)
+                console.error('editor-change update failed:', err)
+            } finally {
+                this._requestMissingMetrics()
+                this._suggestionPopupController?.refreshFor?.(e.detail.suggestionId)
             }
-            this.updateEditorToolbar()
-            this.updateDocumentScore()
-            const suggestion = this._editorController.getSuggestion(suggestionId)
-            if (suggestion) this.updateSentenceScore(suggestion.sentence_index)
-            // A rewrite of a merge's first sentence composes into the merged
-            // text; if that merge is accepted, re-render it to reflect the graft.
-            if (suggestion && suggestion.type !== 'connective') {
-                const c = this._editorController.getConnectiveForFirstSentence(suggestion.sentence_index)
-                if (c && this._editorController.getState(c.id) === 'accepted') {
-                    try {
-                        this._renderMergedSentence(c.merges_sentences[0], c)
-                        this.updateSentenceScore(c.merges_sentences[0])
-                    } catch (err) { console.error('merge recompose failed:', err) }
-                }
-            }
-            // Reconcile connective chips/merged views with current state: an
-            // accept elsewhere may have auto-ignored (or an undo revived) a
-            // connective whose own change wasn't dispatched to this sentence.
-            try { this._refreshConnectiveMarkers() } catch (err) {
-                console.error('connective refresh failed:', err)
-            }
-
-            const after = this._editorController.computeUpdatedScore()
-            // Suppress the WORSENING flash for edits that raise the score by
-            // design — a connective merge or a compound split both lengthen the
-            // sentence, which the red flash would misread as "you made it worse".
-            // The popup explains the trade-off. An improving (green) flash still
-            // shows, and ordinary rewrites are unaffected.
-            const raisesByDesign = suggestion
-                && (suggestion.type === 'connective' || suggestion.type === 'enumeration'
-                    || this._isCompoundSplit(suggestion))
-            const suppressFlash = raisesByDesign && after.score != null
-                && beforeScore != null && (after.score - beforeScore) > 0
-            if (status === 'accepted' && !suppressFlash
-                && beforeScore != null && after.score != null
-                && Math.abs(after.score - beforeScore) >= 0.05) {
-                try {
-                    this._flashScoreDelta(suggestionId, suggestion, after.score - beforeScore, beforeLevel, after.level)
-                } catch (err) {
-                    console.error('score flash failed:', err)
-                }
-            }
-            this._lastDocScore = after.score
-            this._lastDocLevel = after.level
-            this._requestMissingMetrics()
-            this._suggestionPopupController?.refreshFor?.(suggestionId)
         })
 
         // Suggestion hover handling (cluster-aware, plus connective markers)
@@ -606,6 +560,66 @@ export class LintIIVisualizer extends HTMLElement {
             this._suggestionPopupController._hideNow()
         }
         document.addEventListener('click', this._docClickHandler)
+    }
+
+    /** Bring the view in line with one editor change (accept, ignore, undo,
+     *  or arrived metrics): status, toolbar, scores, merges, score flash. */
+    _onEditorChange(e) {
+        const { suggestionId, status } = e.detail
+        const beforeScore = this._lastDocScore
+        const beforeLevel = this._lastDocLevel
+        try {
+            this.updateSuggestionStatus(suggestionId, status)
+        } catch (err) {
+            // A diff-application failure on one sentence must not abort
+            // the toolbar/score/split updates below, or the view is left
+            // inconsistent (stale split parts render as duplicated text).
+            console.error('updateSuggestionStatus failed:', err)
+        }
+        this.updateEditorToolbar()
+        this.updateDocumentScore()
+        const suggestion = this._editorController.getSuggestion(suggestionId)
+        if (suggestion) this.updateSentenceScore(suggestion.sentence_index)
+        // A rewrite of a merge's first sentence composes into the merged
+        // text; if that merge is accepted, re-render it to reflect the graft.
+        if (suggestion && suggestion.type !== 'connective') {
+            const c = this._editorController.getConnectiveForFirstSentence(suggestion.sentence_index)
+            if (c && this._editorController.getState(c.id) === 'accepted') {
+                try {
+                    this._renderMergedSentence(c.merges_sentences[0], c)
+                    this.updateSentenceScore(c.merges_sentences[0])
+                } catch (err) { console.error('merge recompose failed:', err) }
+            }
+        }
+        // Reconcile connective chips/merged views with current state: an
+        // accept elsewhere may have auto-ignored (or an undo revived) a
+        // connective whose own change wasn't dispatched to this sentence.
+        try { this._refreshConnectiveMarkers() } catch (err) {
+            console.error('connective refresh failed:', err)
+        }
+
+        const after = this._editorController.computeUpdatedScore()
+        // Suppress the WORSENING flash for edits that raise the score by
+        // design — a connective merge or a compound split both lengthen the
+        // sentence, which the red flash would misread as "you made it worse".
+        // The popup explains the trade-off. An improving (green) flash still
+        // shows, and ordinary rewrites are unaffected.
+        const raisesByDesign = suggestion
+            && (suggestion.type === 'connective' || suggestion.type === 'enumeration'
+                || this._isCompoundSplit(suggestion))
+        const suppressFlash = raisesByDesign && after.score != null
+            && beforeScore != null && (after.score - beforeScore) > 0
+        if (status === 'accepted' && !suppressFlash
+            && beforeScore != null && after.score != null
+            && Math.abs(after.score - beforeScore) >= 0.05) {
+            try {
+                this._flashScoreDelta(suggestionId, suggestion, after.score - beforeScore, beforeLevel, after.level)
+            } catch (err) {
+                console.error('score flash failed:', err)
+            }
+        }
+        this._lastDocScore = after.score
+        this._lastDocLevel = after.level
     }
 
     updateSuggestionStatus(suggestionId, status) {
