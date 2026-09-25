@@ -1054,10 +1054,16 @@ export class LintIIVisualizer extends HTMLElement {
                 </section>`
     }
 
-    /** Refresh the summary card in place after a suggestion change. */
+    /** Refresh the summary card in place after a suggestion change. The card
+     *  sits directly in the shadow root, and WebKit (every iPhone browser)
+     *  refuses an outerHTML assignment there (NoModificationAllowedError),
+     *  so build the new card and swap it in instead. */
     updateTextSummary() {
         const el = this.shadowRoot.querySelector('.text-summary')
-        if (el) el.outerHTML = this.renderTextSummary()
+        if (!el) return
+        const tpl = document.createElement('template')
+        tpl.innerHTML = this.renderTextSummary().trim()
+        el.replaceWith(tpl.content)
     }
 
     renderDocumentScores() {

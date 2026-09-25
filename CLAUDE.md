@@ -76,6 +76,13 @@ pushing.** Don't assume the other side is idle.
 - `/analyze` is job+poll (`POST` returns `job_id`, client polls
   `/analyze-result/{id}`). Never collapse it back into one long request:
   iOS WebKit aborts long requests and mobile breaks.
+- Every iPhone browser (Chrome iOS included) runs WebKit, which differs from
+  desktop Chrome in ways the desktop tests cannot show. Known case: WebKit
+  throws NoModificationAllowedError on an `outerHTML` assignment to an element
+  that sits directly in a shadow root (the summary card, 2026-09-25: it
+  silently broke every update after it on iPhones). Swap via `<template>` +
+  `replaceWith` instead. To see errors on a phone, open the tool with
+  `?debug=1`: they appear in a panel at the bottom of the page.
 - Keep the `Cache-Control: no-cache` middleware for HTML responses, and bump
   the `?v=N` query strings on EVERY frontend JS/CSS change (they're the only
   cache busting).
