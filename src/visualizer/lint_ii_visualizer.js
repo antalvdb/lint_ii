@@ -1,9 +1,9 @@
-import { css } from './core/stylesheet.js?v=35'
+import { css } from './core/stylesheet.js?v=36'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
-import { EditorController } from './core/editor.js?v=34'
-import { SuggestionPopupController } from './core/suggestion-popup.js?v=17'
+import { EditorController } from './core/editor.js?v=35'
+import { SuggestionPopupController } from './core/suggestion-popup.js?v=19'
 import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './core/word-diff.js?v=2'
 
 // Suggestion types whose suggested_text is a complete, self-punctuated rewrite
@@ -535,6 +535,7 @@ export class LintIIVisualizer extends HTMLElement {
             this._lastDocScore = after.score
             this._lastDocLevel = after.level
             this._requestMissingMetrics()
+            this._suggestionPopupController?.refreshFor?.(suggestionId)
         })
 
         // Suggestion hover handling (cluster-aware, plus connective markers)

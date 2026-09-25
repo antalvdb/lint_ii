@@ -526,7 +526,28 @@ export class EditorController {
      * its effective metrics (accepted suggestion metrics when available).
      */
     getEffectiveSentenceLevel(sentenceIndex) {
-        const metrics = this._getEffectiveMetrics(sentenceIndex)
+        return this._sentenceScore(this._getEffectiveMetrics(sentenceIndex), sentenceIndex)
+    }
+
+    /**
+     * A sentence's score before any accepted change and now, for the popup.
+     * Both sides use the same formula over metrics, so a difference is the
+     * change itself, not a gap between the backend's and the editor's
+     * arithmetic. `scoring` is true while an accepted edit of this sentence
+     * waits for its metrics (until then "after" still reflects the original).
+     */
+    getSentenceScoreChange(sentenceIndex) {
+        const before = this._sentenceScore(this._originalSentenceMetrics[sentenceIndex], sentenceIndex)
+        const after = this.getEffectiveSentenceLevel(sentenceIndex)
+        const scoring = this.getSuggestionsForSentence(sentenceIndex).some(s =>
+            this._suggestionStates.get(s.id) === 'accepted'
+            && this.getChosenVariantKey(s.id) === 'edited'
+            && !s.new_sentence_metrics
+            && !this._metricsFailed.has(s.suggested_text))
+        return { before, after, scoring }
+    }
+
+    _sentenceScore(metrics, sentenceIndex) {
         const meanFreq = metrics.word_freq_count > 0
             ? metrics.word_freq_sum / metrics.word_freq_count : null
         const meanSdl = metrics.sdl_values.length > 0

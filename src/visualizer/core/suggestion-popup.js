@@ -40,6 +40,30 @@ export function variantLabels(variants) {
     })
 }
 
+const fmtScore = v => v.toFixed(1).replace('.', ',')
+
+/**
+ * The popup's one-line summary of how an accepted change moved its sentence's
+ * LiNT score: { text, trend } with trend 'easier' | 'harder' | 'same' |
+ * 'scoring' (an edit whose score is still being computed). A lower score is
+ * easier to read. Returns null when the sentence has no score.
+ */
+export function sentenceScoreText({ before, after, scoring }) {
+    if (scoring) return { text: 'Deze zin: score wordt berekend…', trend: 'scoring' }
+    if (before?.score == null || after?.score == null) return null
+    const delta = after.score - before.score
+    if (Math.abs(delta) < 0.05) {
+        return { text: `Deze zin: ${fmtScore(after.score)}, geen merkbare verandering`, trend: 'same' }
+    }
+    const levels = before.level != null && after.level != null && before.level !== after.level
+        ? ` · niveau ${before.level} → ${after.level}` : ''
+    return {
+        text: `Deze zin: ${fmtScore(before.score)} → ${fmtScore(after.score)} `
+            + `(${delta < 0 ? 'makkelijker' : 'moeilijker'})${levels}`,
+        trend: delta < 0 ? 'easier' : 'harder',
+    }
+}
+
 export class SuggestionPopupController {
     constructor(popupElement, editorController) {
         this._popup = popupElement
@@ -64,12 +88,17 @@ export class SuggestionPopupController {
             if (!suggestionId) return
 
             // Edit actions first: the apply/cancel buttons also carry the
-            // accept/ignore classes for their styling.
+            // accept/ignore classes for their styling. Both re-render the popup,
+            // detaching the clicked button; the page's outside-click handler
+            // would then see a target outside the popup and close it, so the
+            // click must not reach it.
             if (button.classList.contains('edit-btn')) {
+                e.stopPropagation()
                 this._startEditing(suggestionId, button.dataset.variantKey)
                 return
             }
             if (button.classList.contains('edit-apply-btn')) {
+                e.stopPropagation()
                 this._applyEdit(suggestionId)
                 return
             }
@@ -383,7 +412,39 @@ export class SuggestionPopupController {
         }
         this._stopEditing()
         this._editor.accept(suggestionId)
-        this._hideNow()
+        this._showResult(suggestionId)
+    }
+
+    /** After applying an edit, keep the popup open on the accepted suggestion
+     *  so its sentence-score line is visible (on a phone the document score is
+     *  usually scrolled out of view). refreshFor updates it once the edit's
+     *  score arrives. */
+    _showResult(suggestionId) {
+        const cluster = this._editor.getClusterForSuggestion(suggestionId)
+        if (!cluster) {
+            this._hideNow()
+            return
+        }
+        this._currentClusterId = cluster.id
+        this._popup.innerHTML = this._renderClusterContent(this._editor.getClusterSuggestions(cluster.id))
+    }
+
+    /** Re-render the open popup when a suggestion it shows has changed (for
+     *  instance its score arrived). Never while the user is editing. */
+    refreshFor(suggestionId) {
+        if (this._editing || this._currentClusterId == null) return
+        if (!this._popup.classList.contains('visible')) return
+        const shown = this._editor.getClusterSuggestions(this._currentClusterId)
+        if (!shown.some(s => s.id === suggestionId)) return
+        this._popup.innerHTML = this._renderClusterContent(shown)
+    }
+
+    /** The sentence-score line under an accepted suggestion. */
+    _sentenceScoreLine(suggestion, status) {
+        if (status !== 'accepted' || !this._editor.getSentenceScoreChange) return ''
+        const line = sentenceScoreText(this._editor.getSentenceScoreChange(suggestion.sentence_index))
+        if (!line) return ''
+        return `<div class="sentence-score sentence-score-${line.trend}">${this._escapeHtml(line.text)}</div>`
     }
 
     _stopEditing() {
@@ -483,6 +544,8 @@ export class SuggestionPopupController {
                     </div>
                 </div>
 
+                ${this._sentenceScoreLine(suggestion, status)}
+
                 ${suggestion.explanation ? `
                     <div class="suggestion-explanation">
                         <span class="label">Uitleg:</span>
@@ -564,6 +627,7 @@ export class SuggestionPopupController {
                         <span class="label">Uitleg:</span>
                         <span class="text">${this._escapeHtml(this._stripBrackets(suggestion.explanation))}</span>
                     </div>` : ''}
+                ${this._sentenceScoreLine(suggestion, status)}
                 ${this._editScoreNote(suggestion)}
                 <div class="suggestion-actions">${footer}</div>
             </div>`
@@ -602,6 +666,8 @@ export class SuggestionPopupController {
                         <span class="text">${sugHtml}</span>
                     </div>
                 </div>
+
+                ${this._sentenceScoreLine(suggestion, status)}
 
                 ${suggestion.explanation ? `
                     <div class="suggestion-explanation">

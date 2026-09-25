@@ -694,6 +694,16 @@ export const css = `
     .edit-message { color: hsl(0, 65%, 50%); font-size: 0.85em; margin: 0.2em 0 0.4em; }
     .edit-message[hidden] { display: none; }
 
+    /* How an accepted change moved its sentence's LiNT score (lower = easier). */
+    .sentence-score { margin: 0.5em 0 0.35em; font-size: 0.9em; font-weight: 600; }
+    .sentence-score-easier { color: hsl(145, 55%, 32%); }
+    .sentence-score-harder { color: hsl(0, 60%, 45%); }
+    .sentence-score-same, .sentence-score-scoring { font-weight: 400; opacity: 0.75; }
+    @media (prefers-color-scheme: dark) {
+        .sentence-score-easier { color: hsl(145, 50%, 60%); }
+        .sentence-score-harder { color: hsl(0, 70%, 68%); }
+    }
+
     /* Bullet-list preview inside the popup. */
     .enum-preview-intro { display: block; font-weight: 600; }
     .enum-preview {
