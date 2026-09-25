@@ -282,6 +282,9 @@ class SuggestionEngine:
                 True if env is None else env.lower() in ("1", "true", "yes", "on")
             )
         self._consolidate_sentence_rewrites = consolidate_sentence_rewrites
+        # How the analysed text addresses its reader: "u", "je" or None (neither
+        # or both). Set per analysis in generate_suggestions; see _address_form.
+        self._address: str | None = None
 
     def identify_triggers(
         self,
@@ -1207,6 +1210,12 @@ class SuggestionEngine:
                     "'%s' -> '%s' (%s)", word, correction, error_category,
                 )
                 continue
+            if self._introduces_other_address(word, correction):
+                logger.info(
+                    "Spelling suggestion skipped: '%s' -> '%s' switches the form of "
+                    "address (text uses '%s')", word, correction, self._address,
+                )
+                continue
 
             suggestions.append(Suggestion(
                 id=str(uuid.uuid4())[:8],
@@ -1303,6 +1312,9 @@ class SuggestionEngine:
             )
 
         import time
+
+        self._address = self._address_form(
+            " ".join(s.doc.text for s in analysis.sentences))
 
         # Step 1a: LLM spelling/grammar pass (single call for entire document)
         t0 = time.perf_counter()
@@ -1636,6 +1648,37 @@ class SuggestionEngine:
             return raw
         return None
 
+    # Forms of address. "jullie" addresses a group informally, so it clashes
+    # with "u" just as "je" does; "u" serves both singular and plural.
+    _ADDRESS_FORMS = {
+        "u": frozenset({"u", "uw"}),
+        "je": frozenset({"je", "jij", "jou", "jouw", "jezelf", "jullie"}),
+    }
+
+    @classmethod
+    def _address_form(cls, text: str) -> str | None:
+        """How a text addresses its reader: "u", "je", or None when it uses
+        neither or already mixes both (then there is no single form to keep)."""
+        tokens = {t.lower() for t in cls._word_tokens(text)}
+        found = [form for form, words in cls._ADDRESS_FORMS.items() if tokens & words]
+        return found[0] if len(found) == 1 else None
+
+    def _introduces_other_address(self, original: str, suggested: str) -> str | None:
+        """Return a form-of-address word the rewrite introduced that clashes with
+        how the whole text addresses its reader, else None. A text written with
+        "u" must not get a "je" in one rewritten sentence, nor the reverse: the
+        tool rewrites only some sentences, so the text would end up mixing both.
+        Words already in the original sentence are the writer's own, not ours."""
+        if self._address is None:
+            return None
+        other = self._ADDRESS_FORMS["je" if self._address == "u" else "u"]
+        present = {t.lower() for t in self._word_tokens(original)}
+        for raw in self._word_tokens(suggested):
+            low = raw.lower()
+            if low in other and low not in present:
+                return raw
+        return None
+
     # A definite/demonstrative/possessive determiner makes an -e adjective
     # correct, so its presence suppresses the de/het check below.
     _DEFINITE_DET_TAG_PREFIXES = ("LID|bep", "VNW|aanw", "VNW|bez")
@@ -1927,6 +1970,10 @@ class SuggestionEngine:
             return None
         if self._dehet_disagreement(suggested):
             return None
+        if self._introduces_other_address(original_pair, suggested):
+            logger.info("Connective discarded: introduced the other form of address, "
+                        "sentences %d-%d", n, n1)
+            return None
 
         # Precompute exact metrics for composing with each full rewrite of the
         # FIRST sentence, so the UI scores that combination precisely rather than
@@ -2032,6 +2079,10 @@ class SuggestionEngine:
                 "Enumeration discarded: introduced content (%r), sentence %d",
                 invented, trigger.sentence_index,
             )
+            return None
+        if self._introduces_other_address(original, intro + " " + " ".join(items)):
+            logger.info("Enumeration discarded: introduced the other form of address, "
+                        "sentence %d", trigger.sentence_index)
             return None
 
         plain = intro + "\n" + "\n".join(f"- {it}" for it in items)
@@ -2142,6 +2193,9 @@ class SuggestionEngine:
         disagreement = self._dehet_disagreement(candidate)
         if disagreement:
             return f"de/het disagreement '{disagreement}'"
+        address = self._introduces_other_address(sentence_text, candidate)
+        if address:
+            return f"introduced '{address}' in a text that uses '{self._address}'"
         return None
 
     # Sentence count each rewrite variant must have, where the variant's contract
@@ -2409,6 +2463,10 @@ class SuggestionEngine:
             return None
         if self._introduces_misspelling(original, suggested_text):
             return None
+        if self._introduces_other_address(original, suggested_text):
+            logger.info("Dropping word_frequency suggestion: it introduces the other "
+                        "form of address (text uses '%s')", self._address)
+            return None
 
         return Suggestion(
             id=str(uuid.uuid4())[:8],
@@ -2572,6 +2630,14 @@ class SuggestionEngine:
                 logger.info(
                     "Trigger suggestion discarded: %s rewrite has de/het disagreement '%s'",
                     trigger.type.value, disagreement,
+                )
+                return None
+
+            address = self._introduces_other_address(trigger.sentence_text or "", suggested_text)
+            if address:
+                logger.info(
+                    "Trigger suggestion discarded: %s rewrite introduced '%s' in a text "
+                    "that uses '%s'", trigger.type.value, address, self._address,
                 )
                 return None
 

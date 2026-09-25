@@ -91,7 +91,8 @@ pushing.** Don't assume the other side is idle.
   invisible to all watchdogs). Don't raise it casually.
 - Hard constraints on LLM output need DETERMINISTIC post-filters, not prompt
   lines (conjunction-split guard, URL guard, invented-content guard, relation
-  whitelist, `_correction_plausible`, the word-family guard). Prompt-only rules
+  whitelist, `_correction_plausible`, the word-family guard, the
+  form-of-address guard `_introduces_other_address`). Prompt-only rules
   were tried and failed. Related lesson: rhetorical questions in a
   structured-output prompt make Qwen answer in prose and break block parsing.
 - When a prompt rule IS the right tool, Qwen moves on WORKED EXAMPLES, not on
