@@ -124,6 +124,10 @@ loudly: backlog item 6 (`banenzwemmen → banenzwemmer` passes
 touching a guard: it catches shape regressions for free; the eval's job is
 what the units cannot see (LLM behaviour, pass interactions).
 
+Frontend logic that is pure enough to run outside a browser has Node tests in
+`tests/js/` (`node --test tests/js/`, built-in runner, no npm install); the
+first covers the variant labels in `suggestion-popup.js`.
+
 ### max_sdl on short sentences (DECIDED 2026-09-24: leave as is)
 
 **Decision: no change.** `max_sdl` keeps its gate (SDL > 5 in a sentence of

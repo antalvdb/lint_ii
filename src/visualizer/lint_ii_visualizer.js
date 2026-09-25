@@ -3,7 +3,7 @@ import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
 import { EditorController } from './core/editor.js?v=33'
-import { SuggestionPopupController } from './core/suggestion-popup.js?v=15'
+import { SuggestionPopupController } from './core/suggestion-popup.js?v=16'
 import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './core/word-diff.js?v=2'
 
 // Suggestion types whose suggested_text is a complete, self-punctuated rewrite

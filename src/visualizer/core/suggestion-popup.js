@@ -4,6 +4,39 @@
  * Shows cluster suggestions with original text, suggested replacement,
  * explanation in Dutch, and Accept/Ignore buttons per suggestion.
  */
+// Plain, transparent labels for rewrite variants (not the jargon
+// "Behoudend"/"Volledig"). The conservative and intermediate variants carry a
+// sentence-count contract the backend enforces, so their labels are fixed; the
+// full variant is labelled by its actual count ("Drie zinnen"), which also
+// keeps it honest when it collapses to two sentences. Falls back to the fixed
+// labels when a result predates the n_sentences metric.
+const FIXED_VARIANT_LABELS = {
+    conservative: 'Eén zin, niet gesplitst',
+    intermediate: 'Twee zinnen',
+    full: 'Opgesplitst',
+}
+const COUNT_WORDS = ['', 'Eén', 'Twee', 'Drie', 'Vier', 'Vijf', 'Zes', 'Zeven', 'Acht']
+
+function sentenceCountLabel(n) {
+    const word = COUNT_WORDS[n] || String(n)
+    return n === 1 ? `${word} zin` : `${word} zinnen`
+}
+
+const CONTRACT_COUNTS = { conservative: 1, intermediate: 2 }
+
+export function variantLabels(variants) {
+    return variants.map(v => {
+        const n = v.new_sentence_metrics?.n_sentences
+        if (v.key !== 'full' || !Number.isInteger(n) || n < 1) {
+            return FIXED_VARIANT_LABELS[v.key] || v.label || ''
+        }
+        // A full variant with the same count as another offered variant is a
+        // different rewrite of that length; say so, or the two read as duplicates.
+        const clash = variants.some(o => o !== v && CONTRACT_COUNTS[o.key] === n)
+        return clash ? `${sentenceCountLabel(n)}, verder herschreven` : sentenceCountLabel(n)
+    })
+}
+
 export class SuggestionPopupController {
     constructor(popupElement, editorController) {
         this._popup = popupElement
@@ -352,10 +385,9 @@ export class SuggestionPopupController {
         const currentOriginal = this._editor.getCurrentOriginalForSuggestion(suggestion.id)
         const origLabel = currentOriginal !== suggestion.original_text ? 'Huidig:' : 'Origineel:'
         const chosen = this._editor.getChosenVariantKey(suggestion.id)
-        // Plain, transparent labels (not the jargon "Behoudend"/"Volledig").
-        const descr = { conservative: 'Eén zin, niet gesplitst', intermediate: 'Twee zinnen', full: 'Opgesplitst' }
+        const labels = variantLabels(suggestion.variants)
 
-        const variantsHtml = suggestion.variants.map(v => {
+        const variantsHtml = suggestion.variants.map((v, i) => {
             const { sugHtml } = this._renderDiff(currentOriginal, v.suggested_text)
             const isChosen = v.key === chosen
             // Only mark a variant as "chosen" once accepted; while pending both
@@ -367,7 +399,7 @@ export class SuggestionPopupController {
             return `
                 <div class="variant${markChosen ? ' variant-chosen' : ''}">
                     <div class="variant-head">
-                        <span class="variant-label">${descr[v.key] || this._escapeHtml(v.label)}</span>
+                        <span class="variant-label">${this._escapeHtml(labels[i])}</span>
                     </div>
                     <span class="text">${sugHtml}</span>
                     <div class="variant-action">${action}</div>
