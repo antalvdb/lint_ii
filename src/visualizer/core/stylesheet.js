@@ -624,7 +624,7 @@ export const css = `
     }
     .enum-accepted .enum-item { margin: 0.1em 0; }
 
-    /* Two-variant sentence rewrite: a conservative vs full choice. */
+    /* Multi-variant sentence rewrite: a choice among conservative, intermediate and full. */
     .variant-choice-label {
         font-weight: 600;
         margin: 0.5em 0 0.25em;

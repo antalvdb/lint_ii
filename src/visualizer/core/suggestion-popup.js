@@ -341,7 +341,8 @@ export class SuggestionPopupController {
 
     /**
      * Render a sentence rewrite offered as a choice between a conservative
-     * (one-sentence) and a full (possibly split) variant. Each variant shows its
+     * (one-sentence), an intermediate (two-sentence) and a full (possibly split)
+     * variant — whichever of them survived. Each variant shows its
      * own diff and a "Kies deze" button; the whole suggestion has one Negeren /
      * Ongedaan maken. Choosing a variant points the suggestion at that rewrite.
      */
@@ -352,7 +353,7 @@ export class SuggestionPopupController {
         const origLabel = currentOriginal !== suggestion.original_text ? 'Huidig:' : 'Origineel:'
         const chosen = this._editor.getChosenVariantKey(suggestion.id)
         // Plain, transparent labels (not the jargon "Behoudend"/"Volledig").
-        const descr = { conservative: 'Eén zin, niet gesplitst', full: 'Opgesplitst' }
+        const descr = { conservative: 'Eén zin, niet gesplitst', intermediate: 'Twee zinnen', full: 'Opgesplitst' }
 
         const variantsHtml = suggestion.variants.map(v => {
             const { sugHtml } = this._renderDiff(currentOriginal, v.suggested_text)

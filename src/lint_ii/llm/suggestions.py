@@ -1462,6 +1462,7 @@ class SuggestionEngine:
             # adjust document-level means when a single original sentence
             # is replaced by potentially multiple new sentences.
             return {
+                "n_sentences": len(analysis.sentences),
                 "word_freq_sum": sum(word_freqs),
                 "word_freq_count": len(word_freqs),
                 "sdl_values": [s.max_sdl for s in analysis.sentences if s.max_sdl is not None],
@@ -2143,6 +2144,28 @@ class SuggestionEngine:
             return f"de/het disagreement '{disagreement}'"
         return None
 
+    # Sentence count each rewrite variant must have, where the variant's contract
+    # fixes one. The prompt asks for it; this enforces it.
+    _VARIANT_SENTENCE_COUNT = {"intermediate": 2}
+    _VARIANT_ORDER = {"conservative": 0, "intermediate": 1, "full": 2}
+
+    @classmethod
+    def _variant_shape_failure(cls, key: str, metrics: dict[str, Any] | None) -> str | None:
+        """Why a variant breaks its sentence-count contract, else None.
+
+        An intermediate variant that is not exactly two sentences would sit in
+        the choice labelled "Twee zinnen" while showing one or three; an
+        unparseable one cannot be checked and is dropped too."""
+        expected = cls._VARIANT_SENTENCE_COUNT.get(key)
+        if expected is None:
+            return None
+        n = (metrics or {}).get("n_sentences")
+        if n is None:
+            return "sentence count unavailable"
+        if n != expected:
+            return f"{n} sentences, expected {expected}"
+        return None
+
     def _generate_consolidated_suggestion(
         self,
         job: "SuggestionJob",
@@ -2176,21 +2199,25 @@ class SuggestionEngine:
             parsed = parse_llm_response(response.content, "sentence_rewrite")
             explanation = parsed.get("UITLEG", "")
 
-            # Two offered rewrites: BEHOUDEND (one sentence, no split) and
-            # VOLLEDIG (may split). Fall back to the old single HERSCHRIJVING
-            # field when the model does not produce the pair.
+            # Offered rewrites: BEHOUDEND (one sentence, no split), TUSSENVORM
+            # (exactly two sentences) and VOLLEDIG (may split). Fall back to the
+            # old single HERSCHRIJVING field when the model does not produce them.
             conservative = self._clean_variant(sentence_text or "", parsed.get("BEHOUDEND", ""))
+            intermediate = self._clean_variant(sentence_text or "", parsed.get("TUSSENVORM", ""))
             full = self._clean_variant(
                 sentence_text or "", parsed.get("VOLLEDIG") or parsed.get("HERSCHRIJVING", ""))
 
             def _norm(t):
                 return " ".join(t.lower().split())
 
+            # The intermediate variant comes last so that when it duplicates
+            # the full or conservative text, the dedup keeps that one instead.
             survivors = []
             seen = set()
             for key, label, text in (
                 ("full", "Volledig", full),
                 ("conservative", "Behoudend", conservative),
+                ("intermediate", "Tussenvorm", intermediate),
             ):
                 if not text:
                     continue
@@ -2204,12 +2231,20 @@ class SuggestionEngine:
                 norm = _norm(text)
                 if norm in seen:
                     continue
+                metrics = self._analyze_suggested_text(text)
+                reason = self._variant_shape_failure(key, metrics)
+                if reason:
+                    logger.info(
+                        "Consolidated %s variant discarded (%s) for sentence %d",
+                        key, reason, job.sentence_index,
+                    )
+                    continue
                 seen.add(norm)
                 survivors.append({
                     "key": key,
                     "label": label,
                     "suggested_text": text,
-                    "new_sentence_metrics": self._analyze_suggested_text(text),
+                    "new_sentence_metrics": metrics,
                 })
 
             if not survivors:
@@ -2220,11 +2255,12 @@ class SuggestionEngine:
                 return None
 
             # Primary (applied by variant-unaware code / accept-all) = the full
-            # variant when present, else the sole survivor. Offer a choice only
-            # when both a conservative and a full variant survived and differ.
+            # variant when present, else the first survivor. Offer a choice only
+            # when at least two distinct variants survived; list them from
+            # least to most split.
             primary = next((s for s in survivors if s["key"] == "full"), survivors[0])
             variants = (
-                sorted(survivors, key=lambda s: 0 if s["key"] == "conservative" else 1)
+                sorted(survivors, key=lambda s: self._VARIANT_ORDER[s["key"]])
                 if len(survivors) >= 2 else []
             )
 

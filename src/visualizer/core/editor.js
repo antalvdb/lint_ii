@@ -54,7 +54,7 @@ export class EditorController {
         // accepterId -> Set(ids it auto-ignored) for connective conflicts, so
         // undoing a merge-vs-rewrite choice reopens the alternative.
         this._autoIgnored = new Map()
-        // suggestionId -> chosen variant key for a two-variant sentence_rewrite.
+        // suggestionId -> chosen variant key for a multi-variant sentence_rewrite.
         this._chosenVariant = new Map()
 
         // Initialize all suggestions as pending
@@ -650,8 +650,8 @@ export class EditorController {
         return this.suggestions.filter(s => s.type === "enumeration")
     }
 
-    /** True if a suggestion is a sentence rewrite offered as a conservative-vs-full
-     *  choice (>= 2 variants). */
+    /** True if a suggestion is a sentence rewrite offered as a choice between
+     *  variants (>= 2). */
     static hasVariants(suggestion) {
         return Array.isArray(suggestion?.variants) && suggestion.variants.length >= 2
     }
@@ -666,7 +666,7 @@ export class EditorController {
         this._chosenVariant.set(suggestion.id, key)
     }
 
-    /** Default every two-variant rewrite to the conservative (one-sentence) option. */
+    /** Default every multi-variant rewrite to the conservative (one-sentence) option. */
     _initVariantDefaults() {
         for (const s of this.suggestions) {
             if (EditorController.hasVariants(s)) this._applyVariant(s, 'conservative')

@@ -180,16 +180,18 @@ Zin: "{sentence}"
 Knelpunten:
 {issues}
 
-Geef TWEE varianten, zodat de gebruiker zelf kan kiezen:
+Geef DRIE varianten, zodat de gebruiker zelf kan kiezen:
 - BEHOUDEND: los de knelpunten op maar houd het één zin — splits NIET en herstructureer zo min mogelijk. Vervang moeilijke woorden en maak passief actief voor zover dat kan zonder de zin op te splitsen.
+- TUSSENVORM: los de knelpunten op in precies TWEE zinnen — splits één keer, op de meest natuurlijke plek.
 - VOLLEDIG: de best leesbare herschrijving; splits de zin op in kortere zinnen als dat de leesbaarheid duidelijk verbetert.
 
-Als de twee varianten inhoudelijk hetzelfde zouden zijn (er valt niets te splitsen), geef dan bij beide dezelfde tekst.
+Als varianten inhoudelijk hetzelfde zouden zijn (er valt niets of weinig te splitsen), geef dan bij die varianten dezelfde tekst.
 
 Houd je aan de richtlijnen: behoud de betekenis, de toon en de vakinhoud, voeg niets nieuws toe, en verander niet meer dan nodig is om de genoemde knelpunten op te lossen. Schrijf de uitleg onpersoonlijk: beschrijf wat er is veranderd, niet in de ik-vorm (dus niet "Ik heb ...").
 
 Geef je antwoord in het volgende formaat:
 BEHOUDEND: [de herschreven zin, niet gesplitst]
+TUSSENVORM: [de herschreven tekst in precies twee zinnen]
 VOLLEDIG: [de herschreven zin of zinnen]
 UITLEG: [hoogstens tien woorden, onpersoonlijk: wat er is veranderd — geen vakjargon]"""
     ),
@@ -432,7 +434,7 @@ def parse_llm_response(response: str, template_name: str) -> dict[str, str]:
         "passive": ["PROBLEEM", "HERSCHRIJVING", "UITLEG"],
         "subordinate_clause": ["PROBLEEM", "HERSCHRIJVING", "UITLEG"],
         "sentence_length": ["PROBLEEM", "HERSCHRIJVING", "UITLEG"],
-        "sentence_rewrite": ["BEHOUDEND", "VOLLEDIG", "HERSCHRIJVING", "UITLEG"],
+        "sentence_rewrite": ["BEHOUDEND", "TUSSENVORM", "VOLLEDIG", "HERSCHRIJVING", "UITLEG"],
     }
 
     fields = expected_fields.get(template_name, [])
