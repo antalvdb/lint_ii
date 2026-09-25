@@ -62,8 +62,8 @@ export class EditorController {
             for (const suggestion of this.suggestions) {
                 this._suggestionStates.set(suggestion.id, 'pending')
             }
-            // Default a variant rewrite to the conservative (one-sentence) option
-            // before clustering so the pending highlight reflects that choice.
+            // Default a variant rewrite to its least-split option before
+            // clustering so the pending highlight reflects that choice.
             this._initVariantDefaults()
             this._buildClusters()
         }
@@ -666,10 +666,12 @@ export class EditorController {
         this._chosenVariant.set(suggestion.id, key)
     }
 
-    /** Default every multi-variant rewrite to the conservative (one-sentence) option. */
+    /** Default every multi-variant rewrite to its least-split option. The backend
+     *  lists variants least to most split and drops any that break their
+     *  sentence-count contract, so the first is not always 'conservative'. */
     _initVariantDefaults() {
         for (const s of this.suggestions) {
-            if (EditorController.hasVariants(s)) this._applyVariant(s, 'conservative')
+            if (EditorController.hasVariants(s)) this._applyVariant(s, s.variants[0].key)
         }
     }
 

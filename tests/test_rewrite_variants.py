@@ -100,10 +100,21 @@ class TestVariantShapeFailure:
     def test_intermediate_without_metrics_fails(self):
         assert SuggestionEngine._variant_shape_failure("intermediate", None)
 
-    @pytest.mark.parametrize("key", ["conservative", "full"])
-    def test_other_variants_have_no_count_contract(self, key):
-        assert SuggestionEngine._variant_shape_failure(key, {"n_sentences": 5}) is None
-        assert SuggestionEngine._variant_shape_failure(key, None) is None
+    @pytest.mark.parametrize("n", [2, 3])
+    def test_split_conservative_fails(self, n):
+        assert SuggestionEngine._variant_shape_failure(
+            "conservative", {"n_sentences": n}
+        )
+
+    def test_one_sentence_conservative_passes(self):
+        assert (
+            SuggestionEngine._variant_shape_failure("conservative", {"n_sentences": 1})
+            is None
+        )
+
+    def test_full_has_no_count_contract(self):
+        assert SuggestionEngine._variant_shape_failure("full", {"n_sentences": 5}) is None
+        assert SuggestionEngine._variant_shape_failure("full", None) is None
 
 
 class TestConsolidatedVariants:
@@ -136,6 +147,23 @@ class TestConsolidatedVariants:
         garbled = TWO.replace("werkzaamheden", "blorptek")
         s = _generate(engine, _response(tussenvorm=garbled))
         assert _keys(s) == ["conservative", "full"]
+
+    def test_split_conservative_is_dropped(self, engine):
+        # A BEHOUDEND that split anyway would sit under "Eén zin, niet
+        # gesplitst" as the frontend's default.
+        split = (
+            "De aannemer begint pas na de zomervakantie aan de werkzaamheden "
+            "aan de Stationsstraat. Dat heeft de gemeente besloten."
+        )
+        s = _generate(engine, _response(behoudend=split))
+        assert _keys(s) == ["intermediate", "full"]
+
+    def test_three_sentence_conservative_near_duplicate_of_full_is_dropped(self, engine):
+        # Box case c5-long-7: BEHOUDEND came back as three sentences, worded
+        # just differently enough from VOLLEDIG to pass the dedup.
+        near_full = THREE.replace("Dat doet hij", "Hij doet dat")
+        s = _generate(engine, _response(behoudend=near_full))
+        assert _keys(s) == ["intermediate", "full"]
 
     def test_legacy_two_variant_response_unchanged(self, engine):
         s = _generate(engine, _response(tussenvorm=None))

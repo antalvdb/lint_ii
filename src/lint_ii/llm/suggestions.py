@@ -2146,16 +2146,18 @@ class SuggestionEngine:
 
     # Sentence count each rewrite variant must have, where the variant's contract
     # fixes one. The prompt asks for it; this enforces it.
-    _VARIANT_SENTENCE_COUNT = {"intermediate": 2}
+    _VARIANT_SENTENCE_COUNT = {"conservative": 1, "intermediate": 2}
     _VARIANT_ORDER = {"conservative": 0, "intermediate": 1, "full": 2}
 
     @classmethod
     def _variant_shape_failure(cls, key: str, metrics: dict[str, Any] | None) -> str | None:
         """Why a variant breaks its sentence-count contract, else None.
 
-        An intermediate variant that is not exactly two sentences would sit in
-        the choice labelled "Twee zinnen" while showing one or three; an
-        unparseable one cannot be checked and is dropped too."""
+        The popup labels each variant by its contract ("Eén zin, niet
+        gesplitst", "Twee zinnen"), so a variant that breaks it would be
+        mislabelled. The model splits BEHOUDEND on roughly a third of long
+        sentences whatever the prompt says. An unparseable variant cannot be
+        checked and is dropped too."""
         expected = cls._VARIANT_SENTENCE_COUNT.get(key)
         if expected is None:
             return None
