@@ -173,6 +173,46 @@ a genuine false positive the convention does not excuse), or reorderings like
 family-4's — moving a clause without shortening anything — recur often enough
 to be a pattern rather than one case.
 
+### Intermediate (two-sentence) rewrite variant — shipped 2026-09-25
+
+`476cb6b` merges the Mac's TUSSENVORM feature (`0d6ba5e`) plus a box-side fix
+(`35099a5`). Measure with `rewrite_variant_probe.py`; presence/absence cannot
+see this feature at all, since adding a variant changes what is inside a
+suggestion, not whether one appears.
+
+**The probe caught a regression the branch was waiting to find.** Asking for a
+third variant pushed BEHOUDEND to split on long sentences — one-sentence
+compliance fell from 46/72 to 30-37/72, one-directionally (4 sentences worse,
+0 better), and on c5-long-7 BEHOUDEND came back as essentially VOLLEDIG
+reworded. The one-sentence option had not moved to the middle; it had vanished.
+A worked example (BEHOUDEND explicitly one sentence "ook al is die lang"),
+vetted against all five corpora, restored it to 47/72 and raised TUSSENVORM
+usability to 43/72, with VOLLEDIG stable and no content loss.
+
+**Regression gate, set 3 (`results3d.json`)**: `VALIDITY: CLEAN`, 0.93 / 0.97 —
+identical to the pre-feature run on every count (same two misses, same silent
+FP, 0 guard violations). 17 of 28 consolidated suggestions offer all three
+variants; 10 collapse to conservative+full (a sentence with one natural split
+point, as designed). Cost: 286k tokens vs 275k, **+4% per run** — much less than
+the +26% per consolidated call, because consolidated calls are a minority. The
+gate's per-item retry fired for the first time in real use (one 429, recovered).
+
+**Watch item — BEHOUDEND sometimes returns the sentence unchanged.** The example's
+BEHOUDEND changes one word, and occasionally the model reads "minimal" as "none".
+The no-op guard then drops it and the popup falls back to intermediate (1 of 28
+in the gate; long-3). It fails gracefully, and on long-3 it replaced a worse
+failure — before the feature that sentence's "one-sentence" option was actually
+two sentences. The probe's 12 sentences showed zero no-ops, so this is exactly
+the kind of thing a larger or different sample finds. Revisit if it becomes
+common.
+
+**Pre-existing, and a decision rather than a bug:** even the original prompt leaves
+BEHOUDEND split on roughly a third of long sentences, and some (c3-long-1,
+c5-long-2) split under every prompt in every run — so the "one-sentence" option
+is sometimes mislabelled. A deterministic gate (`"conservative": 1` beside
+`"intermediate": 2` in `_VARIANT_SENTENCE_COUNT`) would stop the mislabelling but
+DROP BEHOUDEND on those sentences, changing what the frontend shows by default.
+
 ## Corpus inventory
 
 Five independent 100-item sets, same label scheme, disjoint texts/domains.
