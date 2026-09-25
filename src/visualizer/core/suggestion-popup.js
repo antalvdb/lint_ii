@@ -45,10 +45,17 @@ const fmtScore = v => v.toFixed(1).replace('.', ',')
 /**
  * The popup's one-line summary of how an accepted change moved its sentence's
  * LiNT score: { text, trend } with trend 'easier' | 'harder' | 'same' |
- * 'scoring' (an edit whose score is still being computed). A lower score is
+ * 'scoring' (an edit whose score is still being computed) | 'failed'. A lower score is
  * easier to read. Returns null when the sentence has no score.
  */
-export function sentenceScoreText({ before, after, scoring }) {
+export function sentenceScoreText({ before, after, scoring, failed, reason }) {
+    if (failed) {
+        return {
+            text: `Deze zin: score kon niet worden berekend${reason ? ` (${reason})` : ''}; `
+                + 'de score telt de oorspronkelijke zin nog.',
+            trend: 'failed',
+        }
+    }
     if (scoring) return { text: 'Deze zin: score wordt berekend…', trend: 'scoring' }
     if (before?.score == null || after?.score == null) return null
     const delta = after.score - before.score
@@ -488,14 +495,6 @@ export class SuggestionPopupController {
         return `<button class="edit-btn" data-suggestion-id="${suggestion.id}"${keyAttr} title="Deze tekst zelf aanpassen">Bewerk</button>`
     }
 
-    /** Shown when an edited version is chosen but could not be scored. */
-    _editScoreNote(suggestion) {
-        if (!this._editor.editedMetricsFailed?.(suggestion.id)) return ''
-        return `
-            <div class="suggestion-note">
-                De score van je eigen versie kon niet worden berekend; voor deze zin telt nog de oorspronkelijke tekst.
-            </div>`
-    }
 
     /**
      * Render popup content for a cluster of suggestions.
@@ -629,7 +628,6 @@ export class SuggestionPopupController {
                         <span class="label">Uitleg:</span>
                         <span class="text">${this._escapeHtml(this._stripBrackets(suggestion.explanation))}</span>
                     </div>` : ''}
-                ${this._editScoreNote(suggestion)}
                 <div class="suggestion-actions">${footer}</div>
             </div>`
     }

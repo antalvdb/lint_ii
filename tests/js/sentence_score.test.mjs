@@ -103,3 +103,53 @@ test('popup: the score line sits above the options after Toepassen', async () =>
     assert.ok(html.indexOf('sentence-score') < html.indexOf('variant-choice'), 'line above the options')
     assert.equal(popupEl.scrollTop, 0, 'result shown from the top')
 })
+
+test('formatter: a failed score says so, with the reason when known', () => {
+    assert.equal(
+        sentenceScoreText({ before: { score: 40 }, after: { score: 40 }, failed: true, reason: 'fout 429' }).text,
+        'Deze zin: score kon niet worden berekend (fout 429); de score telt de oorspronkelijke zin nog.')
+    const bare = sentenceScoreText({ before: { score: 40 }, after: { score: 40 }, failed: true, reason: null })
+    assert.equal(bare.trend, 'failed')
+    assert.ok(!bare.text.includes('('))
+})
+
+test('editor: a failure is reported with its reason and announced', () => {
+    const ed = fresh()
+    ed.setEditedText('r0', EDIT)
+    ed.accept('r0')
+    const announced = []
+    ed.addEventListener('editor-change', e => announced.push(e.detail.suggestionId))
+    ed.markMetricsFailed(EDIT, 'time-out')
+    assert.deepEqual(announced, ['r0'])
+    const change = ed.getSentenceScoreChange(0)
+    assert.equal(change.failed, true)
+    assert.equal(change.reason, 'time-out')
+    assert.equal(change.scoring, false)
+})
+
+// Antal's phone: the edit was accepted and the popup said "score wordt
+// berekend…" forever. If the score request fails, the OPEN popup must update.
+test('popup: an open popup turns "wordt berekend" into the failure', async () => {
+    globalThis.document ??= {
+        createElement: () => ({
+            set textContent(t) { this.t = t },
+            get innerHTML() { return this.t.replace(/&/g, '&amp;').replace(/</g, '&lt;') },
+        }),
+    }
+    const { SuggestionPopupController } = await import('../../src/visualizer/core/suggestion-popup.js')
+    const ed = fresh()
+    const popupEl = {
+        innerHTML: '', dataset: {}, style: {}, scrollTop: 0, addEventListener() {},
+        classList: { s: new Set(['visible']), add(c) { this.s.add(c) }, remove(c) { this.s.delete(c) }, contains(c) { return this.s.has(c) } },
+        querySelector: () => ({ value: EDIT, focus() {}, setSelectionRange() {}, hidden: true }),
+    }
+    const popup = new SuggestionPopupController(popupEl, ed)
+    ed.addEventListener('editor-change', e => popup.refreshFor(e.detail.suggestionId))  // as the page does
+    popup._editing = { suggestionId: 'r0' }
+    popup._applyEdit('r0')
+    assert.ok(popupEl.innerHTML.includes('score wordt berekend'))
+
+    ed.markMetricsFailed(EDIT, 'fout 429')
+    assert.ok(popupEl.innerHTML.includes('score kon niet worden berekend (fout 429)'))
+    assert.ok(!popupEl.innerHTML.includes('score wordt berekend'))
+})

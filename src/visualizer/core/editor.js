@@ -65,7 +65,7 @@ export class EditorController {
         // suggestion, or a merge composed with a non-primary rewrite. Filled
         // by the page through /sentence-metrics (see textsNeedingMetrics).
         this._metricsByText = new Map()
-        this._metricsFailed = new Set()
+        this._metricsFailed = new Map()  // text -> short reason ("HTTP 429", "time-out")
 
         // Initialize all suggestions as pending
         if (data.suggestions?.suggestions) {
@@ -539,12 +539,16 @@ export class EditorController {
     getSentenceScoreChange(sentenceIndex) {
         const before = this._sentenceScore(this._originalSentenceMetrics[sentenceIndex], sentenceIndex)
         const after = this.getEffectiveSentenceLevel(sentenceIndex)
-        const scoring = this.getSuggestionsForSentence(sentenceIndex).some(s =>
+        const edits = this.getSuggestionsForSentence(sentenceIndex).filter(s =>
             this._suggestionStates.get(s.id) === 'accepted'
             && this.getChosenVariantKey(s.id) === 'edited'
-            && !s.new_sentence_metrics
-            && !this._metricsFailed.has(s.suggested_text))
-        return { before, after, scoring }
+            && !s.new_sentence_metrics)
+        const failed = edits.find(s => this._metricsFailed.has(s.suggested_text))
+        if (failed) {
+            return { before, after, scoring: false, failed: true,
+                     reason: this._metricsFailed.get(failed.suggested_text) || null }
+        }
+        return { before, after, scoring: edits.length > 0, failed: false, reason: null }
     }
 
     _sentenceScore(metrics, sentenceIndex) {
@@ -813,28 +817,38 @@ export class EditorController {
         if (!text || !metrics) return
         this._metricsByText.set(text, metrics)
         this._metricsFailed.delete(text)
-        const affected = new Set()
         for (const s of this.suggestions) {
             for (const v of s.variants || []) {
                 if (v.suggested_text === text && !v.new_sentence_metrics) {
                     v.new_sentence_metrics = metrics
-                    if (s.suggested_text === text) {
-                        s.new_sentence_metrics = metrics
-                        affected.add(s.id)
-                    }
+                    if (s.suggested_text === text) s.new_sentence_metrics = metrics
                 }
             }
         }
-        for (const conn of this.connectiveSuggestions) {
-            if (this._suggestionStates.get(conn.id) === 'accepted'
-                && this._composedMergeText(conn) === text) affected.add(conn.id)
-        }
-        for (const id of affected) this._dispatchChange(id, this.getState(id))
+        this._announceText(text)
     }
 
-    /** Record that a text could not be scored; it is not requested again. */
-    markMetricsFailed(text) {
-        if (text) this._metricsFailed.add(text)
+    /** Record that a text could not be scored, and why (shown to the user). It
+     *  is not requested again until the user edits. Announced like a success,
+     *  or an open popup would keep saying the score is being computed. */
+    markMetricsFailed(text, reason = null) {
+        if (!text) return
+        this._metricsFailed.set(text, reason)
+        this._announceText(text)
+    }
+
+    /** Re-announce every suggestion currently showing `text`, and every
+     *  accepted merge composed into it, so the page re-renders them. */
+    _announceText(text) {
+        const ids = new Set()
+        for (const s of this.suggestions) {
+            if (s.suggested_text === text) ids.add(s.id)
+        }
+        for (const conn of this.connectiveSuggestions) {
+            if (this._suggestionStates.get(conn.id) === 'accepted'
+                && this._composedMergeText(conn) === text) ids.add(conn.id)
+        }
+        for (const id of ids) this._dispatchChange(id, this.getState(id))
     }
 
     /** True when a suggestion shows an edited text whose scoring failed, so

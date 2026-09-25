@@ -1,9 +1,9 @@
-import { css } from './core/stylesheet.js?v=37'
+import { css } from './core/stylesheet.js?v=38'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
-import { EditorController } from './core/editor.js?v=35'
-import { SuggestionPopupController } from './core/suggestion-popup.js?v=20'
+import { EditorController } from './core/editor.js?v=36'
+import { SuggestionPopupController } from './core/suggestion-popup.js?v=21'
 import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './core/word-diff.js?v=2'
 
 // Suggestion types whose suggested_text is a complete, self-punctuated rewrite
@@ -243,20 +243,30 @@ export class LintIIVisualizer extends HTMLElement {
         for (const text of editor.textsNeedingMetrics()) {
             if (this._metricsInFlight.has(text)) continue
             this._metricsInFlight.add(text)
+            // A stalled mobile connection must end as a visible failure, not
+            // an endless "score wordt berekend…". The call itself takes ms.
+            const timeout = new AbortController()
+            const timer = setTimeout(() => timeout.abort(), 15000)
             fetch('/sentence-metrics', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text }),
+                signal: timeout.signal,
             })
-                .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+                .then(r => r.ok ? r.json() : Promise.reject(new Error(`fout ${r.status}`)))
                 .then(metrics => {
                     if (this._editorController === editor) editor.setTextMetrics(text, metrics)
                 })
                 .catch(err => {
-                    console.warn('sentence-metrics failed:', err)
-                    if (this._editorController === editor) editor.markMetricsFailed(text)
+                    const reason = err.name === 'AbortError' ? 'time-out'
+                        : /^fout \d+$/.test(err.message) ? err.message : 'netwerkfout'
+                    console.warn('sentence-metrics failed:', reason, err)
+                    if (this._editorController === editor) editor.markMetricsFailed(text, reason)
                 })
-                .finally(() => this._metricsInFlight.delete(text))
+                .finally(() => {
+                    clearTimeout(timer)
+                    this._metricsInFlight.delete(text)
+                })
         }
     }
 

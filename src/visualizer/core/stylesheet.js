@@ -699,6 +699,7 @@ export const css = `
     .sentence-score-easier { color: hsl(145, 55%, 32%); }
     .sentence-score-harder { color: hsl(0, 60%, 45%); }
     .sentence-score-same, .sentence-score-scoring { font-weight: 400; opacity: 0.75; }
+    .sentence-score-failed { font-weight: 400; color: hsl(0, 60%, 45%); }
     @media (prefers-color-scheme: dark) {
         .sentence-score-easier { color: hsl(145, 50%, 60%); }
         .sentence-score-harder { color: hsl(0, 70%, 68%); }
