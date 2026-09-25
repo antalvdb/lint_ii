@@ -1,9 +1,9 @@
-import { css } from './core/stylesheet.js?v=34'
+import { css } from './core/stylesheet.js?v=35'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
-import { EditorController } from './core/editor.js?v=33'
-import { SuggestionPopupController } from './core/suggestion-popup.js?v=16'
+import { EditorController } from './core/editor.js?v=34'
+import { SuggestionPopupController } from './core/suggestion-popup.js?v=17'
 import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './core/word-diff.js?v=2'
 
 // Suggestion types whose suggested_text is a complete, self-punctuated rewrite
@@ -226,6 +226,37 @@ export class LintIIVisualizer extends HTMLElement {
                 this._editorController
             )
             this.setupEditorEventListeners()
+        }
+    }
+
+    /**
+     * Fetch metrics for text the backend did not score up front (an edited
+     * suggestion, or a merge composed with one) and hand them to the editor,
+     * which re-announces the affected suggestions so the score updates. A
+     * failed text is marked and not retried. Responses for an editor that has
+     * since been replaced (a new analysis) are dropped.
+     */
+    _requestMissingMetrics() {
+        const editor = this._editorController
+        if (!editor?.textsNeedingMetrics) return
+        if (!this._metricsInFlight) this._metricsInFlight = new Set()
+        for (const text of editor.textsNeedingMetrics()) {
+            if (this._metricsInFlight.has(text)) continue
+            this._metricsInFlight.add(text)
+            fetch('/sentence-metrics', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text }),
+            })
+                .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+                .then(metrics => {
+                    if (this._editorController === editor) editor.setTextMetrics(text, metrics)
+                })
+                .catch(err => {
+                    console.warn('sentence-metrics failed:', err)
+                    if (this._editorController === editor) editor.markMetricsFailed(text)
+                })
+                .finally(() => this._metricsInFlight.delete(text))
         }
     }
 
@@ -503,6 +534,7 @@ export class LintIIVisualizer extends HTMLElement {
             }
             this._lastDocScore = after.score
             this._lastDocLevel = after.level
+            this._requestMissingMetrics()
         })
 
         // Suggestion hover handling (cluster-aware, plus connective markers)

@@ -659,6 +659,41 @@ export const css = `
         .variant { border-color: hsl(145, 35%, 42%); }
     }
 
+    /* "Bewerk": edit a rewrite before accepting it. Secondary to accepting, so
+       an outline; inside .suggestion-actions the shared button rule wins. */
+    .edit-btn {
+        margin-left: 0.4em;
+        padding: 0.15em 0.6em;
+        font-size: 0.85em;
+        color: currentColor;
+        background: transparent;
+        border: 1px solid color-mix(in oklch, currentColor 45%, transparent);
+        border-radius: 0.25rem;
+        cursor: pointer;
+    }
+    .edit-btn:hover { background: color-mix(in oklch, currentColor 10%, transparent); }
+
+    /* The edit box. 16px keeps iOS from zooming the page when it gets focus. */
+    .edit-text {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+        min-height: 5em;
+        margin: 0.5em 0 0.25em;
+        padding: 0.45em 0.55em;
+        font: inherit;
+        font-size: 16px;
+        line-height: 1.4;
+        color: inherit;
+        background: color-mix(in oklch, currentColor 4%, transparent);
+        border: 1px solid color-mix(in oklch, currentColor 35%, transparent);
+        border-radius: 0.3rem;
+        resize: vertical;
+    }
+    .edit-text:focus { outline: 2px solid hsl(145, 50%, 45%); outline-offset: 1px; }
+    .edit-message { color: hsl(0, 65%, 50%); font-size: 0.85em; margin: 0.2em 0 0.4em; }
+    .edit-message[hidden] { display: none; }
+
     /* Bullet-list preview inside the popup. */
     .enum-preview-intro { display: block; font-weight: 600; }
     .enum-preview {

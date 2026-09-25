@@ -1,0 +1,351 @@
+{
+ "sentences": [
+  {
+   "word_features": [
+    {
+     "text": "De",
+     "tag": "LID|bep|stan|rest",
+     "pos": "DET"
+    },
+    {
+     "text": "fiets",
+     "tag": "N|soort|ev|basis|zijd|stan",
+     "pos": "NOUN",
+     "word_frequency": 4.33786549558074,
+     "super_sem_type": "concrete"
+    },
+    {
+     "text": "ging",
+     "tag": "WW|pv|verl|ev",
+     "pos": "VERB",
+     "word_frequency": 5.702597747423797
+    },
+    {
+     "text": "vorige",
+     "tag": "ADJ|prenom|basis|met-e|stan",
+     "pos": "ADJ",
+     "word_frequency": 4.9380968758622945
+    },
+    {
+     "text": "week",
+     "tag": "N|soort|ev|basis|zijd|stan",
+     "pos": "NOUN",
+     "word_frequency": 5.372234397212003,
+     "dep_length": 1,
+     "super_sem_type": "concrete"
+    },
+    {
+     "text": "onverwacht",
+     "tag": "ADJ|vrij|basis|zonder",
+     "pos": "ADJ",
+     "word_frequency": 3.9008077911428467
+    },
+    {
+     "text": "kapot",
+     "tag": "ADJ|vrij|basis|zonder",
+     "pos": "ADJ",
+     "word_frequency": 4.920806915497226,
+     "dep_length": 3
+    },
+    {
+     "text": "door",
+     "tag": "VZ|init",
+     "pos": "ADP",
+     "dep_length": 1
+    },
+    {
+     "text": "een",
+     "tag": "LID|onbep|stan|agr",
+     "pos": "DET"
+    },
+    {
+     "text": "defect",
+     "tag": "N|soort|ev|basis|onz|stan",
+     "pos": "NOUN",
+     "word_frequency": 3.7036208208813766,
+     "dep_length": 6,
+     "super_sem_type": "abstract"
+    },
+    {
+     "text": "aan",
+     "tag": "VZ|init",
+     "pos": "ADP",
+     "dep_length": 1
+    },
+    {
+     "text": "de",
+     "tag": "LID|bep|stan|rest",
+     "pos": "DET"
+    },
+    {
+     "text": "ketting",
+     "tag": "N|soort|ev|basis|zijd|stan",
+     "pos": "NOUN",
+     "word_frequency": 4.282472565826542,
+     "dep_length": 2,
+     "super_sem_type": "concrete",
+     "punctuation": {
+      "trailing": "."
+     }
+    },
+    {
+     "text": ".",
+     "tag": "LET",
+     "pos": "PUNCT"
+    }
+   ],
+   "lint_score": 41.96794060660923,
+   "difficulty_level": 2,
+   "mean_log_word_frequency": 4.644812826178353,
+   "max_sdl": 6,
+   "proportion_of_concrete_nouns": 0.75,
+   "content_words_per_clause": 8.0
+  },
+  {
+   "word_features": [
+    {
+     "text": "Hij",
+     "tag": "VNW|pers|pron|nomin|vol|3|ev|masc",
+     "pos": "PRON"
+    },
+    {
+     "text": "kwam",
+     "tag": "WW|pv|verl|ev",
+     "pos": "VERB",
+     "word_frequency": 5.680225963990487
+    },
+    {
+     "text": "daardoor",
+     "tag": "BW",
+     "pos": "ADV"
+    },
+    {
+     "text": "veel",
+     "tag": "VNW|onbep|grad|stan|vrij|zonder|basis",
+     "pos": "PRON"
+    },
+    {
+     "text": "te",
+     "tag": "BW",
+     "pos": "ADV"
+    },
+    {
+     "text": "laat",
+     "tag": "ADJ|vrij|basis|zonder",
+     "pos": "ADJ",
+     "word_frequency": 6.308086339120347,
+     "dep_length": 3
+    },
+    {
+     "text": "op",
+     "tag": "VZ|init",
+     "pos": "ADP",
+     "dep_length": 1
+    },
+    {
+     "text": "zijn",
+     "tag": "VNW|bez|det|stan|vol|3|ev|prenom|zonder|agr",
+     "pos": "PRON"
+    },
+    {
+     "text": "werk",
+     "tag": "N|soort|ev|basis|onz|stan",
+     "pos": "NOUN",
+     "word_frequency": 5.832671720651028,
+     "dep_length": 6,
+     "super_sem_type": "undefined",
+     "punctuation": {
+      "trailing": "."
+     }
+    },
+    {
+     "text": ".",
+     "tag": "LET",
+     "pos": "PUNCT"
+    }
+   ],
+   "lint_score": 18.893630539990113,
+   "difficulty_level": 1,
+   "mean_log_word_frequency": 5.940328007920621,
+   "max_sdl": 6,
+   "proportion_of_concrete_nouns": 0.0,
+   "content_words_per_clause": 3.0
+  }
+ ],
+ "blocks": [
+  {
+   "type": "sentence",
+   "sentence_index": 0
+  },
+  {
+   "type": "sentence",
+   "sentence_index": 1
+  }
+ ],
+ "document_lint_score": 31.919447988440396,
+ "document_difficulty_level": 1,
+ "sentence_count": 2,
+ "min_lint_score": 18.893630539990113,
+ "max_lint_score": 41.96794060660923,
+ "suggestions": {
+  "suggestions": [
+   {
+    "id": "r0",
+    "type": "sentence_rewrite",
+    "sentence_index": 0,
+    "original_text": "De fiets ging vorige week onverwacht kapot door een defect aan de ketting.",
+    "suggested_text": "De fiets ging vorige week kapot. De ketting was defect.",
+    "new_sentence_metrics": {
+     "n_sentences": 2,
+     "word_freq_sum": 33.25769481828398,
+     "word_freq_count": 7,
+     "sdl_values": [
+      2,
+      1
+     ],
+     "cwpc_values": [
+      5.0,
+      2.0
+     ],
+     "n_concrete": 3,
+     "n_abstract": 0,
+     "n_undefined": 0
+    },
+    "explanation": "",
+    "variants": [
+     {
+      "key": "conservative",
+      "label": "Behoudend",
+      "suggested_text": "De fiets ging vorige week kapot door een defect aan de ketting.",
+      "new_sentence_metrics": {
+       "n_sentences": 1,
+       "word_freq_sum": 33.25769481828398,
+       "word_freq_count": 7,
+       "sdl_values": [
+        5
+       ],
+       "cwpc_values": [
+        7.0
+       ],
+       "n_concrete": 3,
+       "n_abstract": 1,
+       "n_undefined": 0
+      }
+     },
+     {
+      "key": "full",
+      "label": "Volledig",
+      "suggested_text": "De fiets ging vorige week kapot. De ketting was defect.",
+      "new_sentence_metrics": {
+       "n_sentences": 2,
+       "word_freq_sum": 33.25769481828398,
+       "word_freq_count": 7,
+       "sdl_values": [
+        2,
+        1
+       ],
+       "cwpc_values": [
+        5.0,
+        2.0
+       ],
+       "n_concrete": 3,
+       "n_abstract": 0,
+       "n_undefined": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": "r1",
+    "type": "passive",
+    "sentence_index": 1,
+    "original_text": "Hij kwam daardoor veel te laat op zijn werk.",
+    "suggested_text": "Daardoor kwam hij veel te laat op zijn werk.",
+    "new_sentence_metrics": {
+     "n_sentences": 1,
+     "word_freq_sum": 17.820984023761863,
+     "word_freq_count": 3,
+     "sdl_values": [
+      6
+     ],
+     "cwpc_values": [
+      3.0
+     ],
+     "n_concrete": 0,
+     "n_abstract": 0,
+     "n_undefined": 1
+    },
+    "explanation": ""
+   },
+   {
+    "id": "w1",
+    "type": "word_frequency",
+    "sentence_index": 1,
+    "original_text": "Hij kwam daardoor veel te laat op zijn werk.",
+    "suggested_text": "Hij kwam daardoor veel te laat op zijn baan.",
+    "new_sentence_metrics": {
+     "n_sentences": 1,
+     "word_freq_sum": 17.18827408491891,
+     "word_freq_count": 3,
+     "sdl_values": [
+      6
+     ],
+     "cwpc_values": [
+      3.0
+     ],
+     "n_concrete": 0,
+     "n_abstract": 0,
+     "n_undefined": 1
+    },
+    "explanation": ""
+   },
+   {
+    "id": "c1",
+    "type": "connective",
+    "sentence_index": 0,
+    "merges_sentences": [
+     0,
+     1
+    ],
+    "original_text": "De fiets ging vorige week onverwacht kapot door een defect aan de ketting. Hij kwam daardoor veel te laat op zijn werk.",
+    "suggested_text": "De fiets ging vorige week onverwacht kapot door een defect aan de ketting, dus hij kwam veel te laat op zijn werk.",
+    "relation": "gevolg",
+    "new_sentence_metrics": {
+     "n_sentences": 1,
+     "word_freq_sum": 54.97948663318869,
+     "word_freq_count": 11,
+     "sdl_values": [
+      13
+     ],
+     "cwpc_values": [
+      5.5
+     ],
+     "n_concrete": 3,
+     "n_abstract": 1,
+     "n_undefined": 1
+    },
+    "composed_metrics": {
+     "r0": {
+      "n_sentences": 2,
+      "word_freq_sum": 51.07867884204584,
+      "word_freq_count": 10,
+      "sdl_values": [
+       2,
+       5
+      ],
+      "cwpc_values": [
+       5.0,
+       2.5
+      ],
+      "n_concrete": 3,
+      "n_abstract": 1,
+      "n_undefined": 1
+     }
+    }
+   }
+  ],
+  "triggers_found": 4,
+  "triggers_processed": 4,
+  "model": "fixture"
+ }
+}

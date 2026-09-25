@@ -14,6 +14,9 @@ const FIXED_VARIANT_LABELS = {
     conservative: 'Eén zin, niet gesplitst',
     intermediate: 'Twee zinnen',
     full: 'Opgesplitst',
+    // A single model rewrite becomes a choice once the user edits it.
+    suggestion: 'Suggestie',
+    edited: 'Eigen versie',
 }
 const COUNT_WORDS = ['', 'Eén', 'Twee', 'Drie', 'Vier', 'Vijf', 'Zes', 'Zeven', 'Acht']
 
@@ -43,6 +46,10 @@ export class SuggestionPopupController {
         this._editor = editorController
         this._currentClusterId = null
         this._hideTimeout = null
+        // { suggestionId } while the user is editing a suggestion's text. The
+        // popup is pinned meanwhile: hover-out, other words and outside clicks
+        // must not throw away what they typed.
+        this._editing = null
 
         this._setupEventListeners()
     }
@@ -55,6 +62,22 @@ export class SuggestionPopupController {
 
             const suggestionId = button.dataset.suggestionId
             if (!suggestionId) return
+
+            // Edit actions first: the apply/cancel buttons also carry the
+            // accept/ignore classes for their styling.
+            if (button.classList.contains('edit-btn')) {
+                this._startEditing(suggestionId, button.dataset.variantKey)
+                return
+            }
+            if (button.classList.contains('edit-apply-btn')) {
+                this._applyEdit(suggestionId)
+                return
+            }
+            if (button.classList.contains('edit-cancel-btn')) {
+                this._stopEditing()
+                this._hideNow()
+                return
+            }
 
             if (button.classList.contains('accept-btn')) {
                 // A variant rewrite: pick the chosen alternative, then accept.
@@ -69,6 +92,19 @@ export class SuggestionPopupController {
             } else if (button.classList.contains('reset-btn')) {
                 this._editor.reset(suggestionId)
                 this._hideNow()
+            }
+        })
+
+        // In the edit box: Escape cancels, Ctrl/Cmd+Enter applies.
+        this._popup.addEventListener('keydown', (e) => {
+            if (!this._editing || !e.target.classList?.contains('edit-text')) return
+            if (e.key === 'Escape') {
+                e.preventDefault()
+                this._stopEditing()
+                this._hideNow()
+            } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault()
+                this._applyEdit(this._editing.suggestionId)
             }
         })
 
@@ -88,6 +124,7 @@ export class SuggestionPopupController {
      * Cancels any pending hide so the popup stays visible.
      */
     showCluster(clusterId, targetElement) {
+        if (this._editing) return
         this._cancelHide()
 
         const suggestions = this._editor.getClusterSuggestions(clusterId)
@@ -122,6 +159,7 @@ export class SuggestionPopupController {
      * merged result directly (no per-sentence LCS relocation).
      */
     showConnective(suggestionId, targetElement) {
+        if (this._editing) return
         this._cancelHide()
         const suggestion = this._editor.getSuggestion(suggestionId)
         if (!suggestion) return
@@ -198,6 +236,7 @@ export class SuggestionPopupController {
      * point and a render that previews the lead-in + bullet items.
      */
     showEnumeration(suggestionId, targetElement) {
+        if (this._editing) return
         this._cancelHide()
         const suggestion = this._editor.getSuggestion(suggestionId)
         if (!suggestion) return
@@ -281,6 +320,7 @@ export class SuggestionPopupController {
      * (or between cluster words) without the popup disappearing.
      */
     hide() {
+        if (this._editing) return
         if (this._hideTimeout) return // already scheduled
         this._hideTimeout = setTimeout(() => {
             this._hideTimeout = null
@@ -299,12 +339,99 @@ export class SuggestionPopupController {
         }
     }
 
-    /** Hide immediately (used after button actions). */
+    /** Hide immediately (used after button actions and outside clicks). Does
+     *  nothing while editing: only Toepassen or Annuleren ends an edit. */
     _hideNow() {
+        if (this._editing) return
         this._cancelHide()
         delete this._popup.dataset.hovered
         this._popup.classList.remove('visible')
         this._currentClusterId = null
+    }
+
+    /**
+     * Replace the popup content with an edit box holding the chosen rewrite
+     * (or the variant whose "Bewerk" was clicked).
+     */
+    _startEditing(suggestionId, variantKey) {
+        const s = this._editor.getSuggestion(suggestionId)
+        if (!s || !this._editor.constructor.isEditable?.(s)) return
+        const v = variantKey ? (s.variants || []).find(x => x.key === variantKey) : null
+        const startText = v ? v.suggested_text : s.suggested_text
+        this._cancelHide()
+        this._editing = { suggestionId }
+        this._popup.innerHTML = this._renderEditPanel(s, startText)
+        const ta = this._popup.querySelector('.edit-text')
+        if (ta) {
+            ta.focus()
+            ta.setSelectionRange(ta.value.length, ta.value.length)
+        }
+    }
+
+    _applyEdit(suggestionId) {
+        const ta = this._popup.querySelector('.edit-text')
+        if (!ta) return
+        if (!this._editor.setEditedText(suggestionId, ta.value)) {
+            const msg = this._popup.querySelector('.edit-message')
+            if (msg) {
+                msg.textContent = ta.value.trim()
+                    ? 'Je versie is gelijk aan de huidige zin; pas de tekst eerst aan.'
+                    : 'Vul eerst een tekst in.'
+                msg.hidden = false
+            }
+            return
+        }
+        this._stopEditing()
+        this._editor.accept(suggestionId)
+        this._hideNow()
+    }
+
+    _stopEditing() {
+        this._editing = null
+    }
+
+    _renderEditPanel(suggestion, startText) {
+        const currentOriginal = this._editor.getCurrentOriginalForSuggestion(suggestion.id)
+        const origLabel = currentOriginal !== suggestion.original_text ? 'Huidig:' : 'Origineel:'
+        const id = suggestion.id
+        return `
+            <div class="suggestion-popup-content edit-panel">
+                <div class="suggestion-header">
+                    <span class="suggestion-type">Eigen versie</span>
+                </div>
+                <div class="suggestion-comparison">
+                    <div class="original">
+                        <span class="label">${origLabel}</span>
+                        <span class="text">${this._escapeHtml(currentOriginal)}</span>
+                    </div>
+                </div>
+                <textarea class="edit-text" rows="4" lang="nl" spellcheck="true"
+                    aria-label="Eigen versie van de zin">${this._escapeHtml(startText)}</textarea>
+                <div class="edit-message" role="alert" hidden></div>
+                <div class="suggestion-note">
+                    Je eigen versie wordt niet door het taalmodel gecontroleerd. De score wordt opnieuw berekend zodra je hem toepast.
+                </div>
+                <div class="suggestion-actions">
+                    <button class="accept-btn edit-apply-btn" data-suggestion-id="${id}" title="Toepassen (Ctrl+Enter)">Toepassen</button>
+                    <button class="ignore-btn edit-cancel-btn" data-suggestion-id="${id}" title="Annuleren (Esc)">Annuleren</button>
+                </div>
+            </div>`
+    }
+
+    /** A "Bewerk" button, only on editable suggestions that are still pending. */
+    _editButton(suggestion, status, variantKey = null) {
+        if (status !== 'pending' || !this._editor.constructor.isEditable?.(suggestion)) return ''
+        const keyAttr = variantKey ? ` data-variant-key="${variantKey}"` : ''
+        return `<button class="edit-btn" data-suggestion-id="${suggestion.id}"${keyAttr} title="Deze tekst zelf aanpassen">Bewerk</button>`
+    }
+
+    /** Shown when an edited version is chosen but could not be scored. */
+    _editScoreNote(suggestion) {
+        if (!this._editor.editedMetricsFailed?.(suggestion.id)) return ''
+        return `
+            <div class="suggestion-note">
+                De score van je eigen versie kon niet worden berekend; voor deze zin telt nog de oorspronkelijke tekst.
+            </div>`
     }
 
     /**
@@ -332,7 +459,7 @@ export class SuggestionPopupController {
         const status = this._editor.getState(suggestion.id)
         const typeLabel = this._suggestionLabel(suggestion)
         const categoryLabel = suggestion.error_category ? this._errorCategoryLabel(suggestion.error_category) : null
-        const { statusHTML, buttonsHTML } = this._statusAndButtons(suggestion.id, status)
+        const { statusHTML, buttonsHTML } = this._statusAndButtons(suggestion.id, status, suggestion)
         const currentOriginal = this._editor.getCurrentOriginalForSuggestion(suggestion.id)
         const origLabel = currentOriginal !== suggestion.original_text ? 'Huidig:' : 'Origineel:'
         const { origHtml, sugHtml } = this._renderDiff(currentOriginal, suggestion.suggested_text)
@@ -394,7 +521,8 @@ export class SuggestionPopupController {
             // options are equal (styled the same, emphasised on hover).
             const markChosen = isChosen && status === 'accepted'
             const action = status === 'pending'
-                ? `<button class="accept-btn" data-suggestion-id="${suggestion.id}" data-variant-key="${v.key}" title="Deze herschrijving kiezen">Kies deze</button>`
+                ? `<button class="accept-btn" data-suggestion-id="${suggestion.id}" data-variant-key="${v.key}" title="Deze herschrijving kiezen">Kies deze</button>
+                   ${this._editButton(suggestion, status, v.key)}`
                 : (isChosen ? '<span class="status-badge accepted">Gekozen</span>' : '')
             return `
                 <div class="variant${markChosen ? ' variant-chosen' : ''}">
@@ -436,6 +564,7 @@ export class SuggestionPopupController {
                         <span class="label">Uitleg:</span>
                         <span class="text">${this._escapeHtml(this._stripBrackets(suggestion.explanation))}</span>
                     </div>` : ''}
+                ${this._editScoreNote(suggestion)}
                 <div class="suggestion-actions">${footer}</div>
             </div>`
     }
@@ -450,7 +579,7 @@ export class SuggestionPopupController {
         const status = this._editor.getState(suggestion.id)
         const typeLabel = this._suggestionLabel(suggestion)
         const categoryLabel = suggestion.error_category ? this._errorCategoryLabel(suggestion.error_category) : null
-        const { statusHTML, buttonsHTML } = this._statusAndButtons(suggestion.id, status)
+        const { statusHTML, buttonsHTML } = this._statusAndButtons(suggestion.id, status, suggestion)
         const currentOriginal = this._editor.getCurrentOriginalForSuggestion(suggestion.id)
         const origLabel = currentOriginal !== suggestion.original_text ? 'Huidig:' : 'Origineel:'
         const { origHtml, sugHtml } = this._renderDiff(currentOriginal, suggestion.suggested_text)
@@ -572,7 +701,7 @@ export class SuggestionPopupController {
         return labels[category] || null
     }
 
-    _statusAndButtons(suggestionId, status) {
+    _statusAndButtons(suggestionId, status, suggestion = null) {
         let statusHTML = ''
         let buttonsHTML = ''
 
@@ -580,6 +709,7 @@ export class SuggestionPopupController {
             statusHTML = '<span class="status-badge pending">In behandeling</span>'
             buttonsHTML = `
                 <button class="accept-btn" data-suggestion-id="${suggestionId}" title="Suggestie accepteren">Accepteren</button>
+                ${suggestion ? this._editButton(suggestion, status) : ''}
                 <button class="ignore-btn" data-suggestion-id="${suggestionId}" title="Suggestie negeren">Negeren</button>
             `
         } else if (status === 'accepted') {

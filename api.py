@@ -316,6 +316,31 @@ async def analyze_lint(request: AnalyzeRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class SentenceMetricsRequest(BaseModel):
+    # One edited sentence, or a merge composed with one: a few hundred
+    # characters in practice.
+    text: str = Field(..., min_length=1, max_length=2_000)
+
+
+@app.post("/sentence-metrics")
+async def sentence_metrics(request: SentenceMetricsRequest):
+    """Per-sentence LiNT metrics for text the user wrote: an edited suggestion,
+    or a connective merge composed with one. The same shape as a suggestion's
+    new_sentence_metrics, so the editor scores it the same way. spaCy only —
+    no LLM call, and no suggestion backstops: the text is the user's choice."""
+    from lint_ii.llm.suggestions import SuggestionEngine
+
+    if not request.text.strip():
+        raise HTTPException(status_code=422, detail="Lege tekst.")
+    loop = asyncio.get_event_loop()
+    metrics = await loop.run_in_executor(
+        _executor, SuggestionEngine._analyze_suggested_text, request.text
+    )
+    if metrics is None:
+        raise HTTPException(status_code=422, detail="Tekst kon niet worden geanalyseerd.")
+    return metrics
+
+
 # Job store for the async analyze flow. A single long /analyze request was
 # aborted by iOS WebKit mid-run (idle connection), so the client kicks off a
 # job and then polls a fast status endpoint instead — no long-lived request.

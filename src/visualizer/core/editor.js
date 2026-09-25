@@ -56,11 +56,22 @@ export class EditorController {
         this._autoIgnored = new Map()
         // suggestionId -> chosen variant key for a multi-variant sentence_rewrite.
         this._chosenVariant = new Map()
+        // suggestionId -> the text the backend delivered as suggested_text (the
+        // full variant for a multi-variant rewrite). A connective's
+        // composed_metrics were computed from this text, so they are only valid
+        // while the rewrite still shows it.
+        this._primaryText = new Map()
+        // Metrics for text the backend did not score up front: an edited
+        // suggestion, or a merge composed with a non-primary rewrite. Filled
+        // by the page through /sentence-metrics (see textsNeedingMetrics).
+        this._metricsByText = new Map()
+        this._metricsFailed = new Set()
 
         // Initialize all suggestions as pending
         if (data.suggestions?.suggestions) {
             for (const suggestion of this.suggestions) {
                 this._suggestionStates.set(suggestion.id, 'pending')
+                this._primaryText.set(suggestion.id, suggestion.suggested_text)
             }
             // Default a variant rewrite to its least-split option before
             // clustering so the pending highlight reflects that choice.
@@ -595,9 +606,17 @@ export class EditorController {
                 // If a first-sentence rewrite is also accepted and the backend
                 // precomputed exact metrics for that composition, use them;
                 // otherwise fall back to the (original-based) merge metrics.
+                // composed_metrics were computed from the rewrite's primary
+                // text; after the user picks another variant or edits it, only
+                // metrics fetched for the actual composed text are exact.
                 const r0 = accepted.find(s => COMPOSABLE_REWRITE_TYPES.has(s.type))
-                if (r0 && conn.composed_metrics && conn.composed_metrics[r0.id]) {
-                    return conn.composed_metrics[r0.id]
+                if (r0) {
+                    if (r0.suggested_text === this._primaryText.get(r0.id)
+                        && conn.composed_metrics?.[r0.id]) {
+                        return conn.composed_metrics[r0.id]
+                    }
+                    const fetched = this._metricsByText.get(this._composedMergeText(conn))
+                    if (fetched) return fetched
                 }
                 return conn.new_sentence_metrics
             }
@@ -688,6 +707,121 @@ export class EditorController {
     /** The chosen variant key for a suggestion (null if not a variant rewrite). */
     getChosenVariantKey(suggestionId) {
         return this._chosenVariant.get(suggestionId) || null
+    }
+
+    /** Whether the user may edit a suggestion's text before accepting it. Only
+     *  prose rewrites of a whole sentence: word-level edits co-apply by word
+     *  diff, which a free rewrite would break, and a list or a merge has its
+     *  own structure that a text box cannot express. */
+    static isEditable(suggestion) {
+        return !!suggestion && COMPOSABLE_REWRITE_TYPES.has(suggestion.type)
+    }
+
+    /**
+     * Store the user's own version of a rewrite as an extra variant ("Eigen
+     * versie") and select it, so every consumer of suggested_text (diff, score,
+     * output, summary) follows it. A single-rewrite suggestion first gets its
+     * model text as a variant, so the two can be chosen between. The edit is
+     * kept across undo; editing again replaces it. Metrics arrive later
+     * (setTextMetrics); until then the sentence scores as the original.
+     * Returns false, changing nothing, for empty text or text identical to
+     * the sentence as it currently stands.
+     */
+    setEditedText(suggestionId, text) {
+        const s = this.getSuggestion(suggestionId)
+        if (!EditorController.isEditable(s)) return false
+        const clean = (text || '').replace(/\s+/g, ' ').trim()
+        if (!clean) return false
+        const norm = t => (t || '').replace(/\s+/g, ' ').trim()
+        if (clean === norm(this.getCurrentOriginalForSuggestion(suggestionId))) return false
+
+        if (!EditorController.hasVariants(s)) {
+            s.variants = [{
+                key: 'suggestion',
+                label: 'Suggestie',
+                suggested_text: this._primaryText.get(s.id) ?? s.suggested_text,
+                new_sentence_metrics: s.new_sentence_metrics ?? null,
+            }]
+        }
+        const edited = {
+            key: 'edited',
+            label: 'Eigen versie',
+            suggested_text: clean,
+            new_sentence_metrics: this._metricsByText.get(clean) ?? null,
+        }
+        const i = s.variants.findIndex(v => v.key === 'edited')
+        if (i >= 0) s.variants[i] = edited
+        else s.variants.push(edited)
+        s.edited = true
+        this._metricsFailed.delete(clean)
+        this._applyVariant(s, 'edited')
+        this._buildClusters()
+        return true
+    }
+
+    /**
+     * Texts whose metrics the page should fetch: edited variants not yet
+     * scored, and accepted merges composed with a rewrite that no longer
+     * shows its primary text (an edit, or a variant other than the one the
+     * backend composed with). Texts that already failed are left out, so a
+     * dead endpoint does not cause a request loop.
+     */
+    textsNeedingMetrics() {
+        const out = new Set()
+        const want = t => {
+            if (t && !this._metricsByText.has(t) && !this._metricsFailed.has(t)) out.add(t)
+        }
+        for (const s of this.suggestions) {
+            for (const v of s.variants || []) {
+                if (v.key === 'edited' && !v.new_sentence_metrics) want(v.suggested_text)
+            }
+        }
+        for (const conn of this.connectiveSuggestions) {
+            if (this._suggestionStates.get(conn.id) !== 'accepted') continue
+            const r0 = this._acceptedFirstRewrite(conn)
+            if (r0 && r0.suggested_text !== this._primaryText.get(r0.id)) {
+                want(this._composedMergeText(conn))
+            }
+        }
+        return [...out]
+    }
+
+    /** Record fetched metrics for a text and re-announce every suggestion they
+     *  affect, so the page re-scores it. */
+    setTextMetrics(text, metrics) {
+        if (!text || !metrics) return
+        this._metricsByText.set(text, metrics)
+        this._metricsFailed.delete(text)
+        const affected = new Set()
+        for (const s of this.suggestions) {
+            for (const v of s.variants || []) {
+                if (v.suggested_text === text && !v.new_sentence_metrics) {
+                    v.new_sentence_metrics = metrics
+                    if (s.suggested_text === text) {
+                        s.new_sentence_metrics = metrics
+                        affected.add(s.id)
+                    }
+                }
+            }
+        }
+        for (const conn of this.connectiveSuggestions) {
+            if (this._suggestionStates.get(conn.id) === 'accepted'
+                && this._composedMergeText(conn) === text) affected.add(conn.id)
+        }
+        for (const id of affected) this._dispatchChange(id, this.getState(id))
+    }
+
+    /** Record that a text could not be scored; it is not requested again. */
+    markMetricsFailed(text) {
+        if (text) this._metricsFailed.add(text)
+    }
+
+    /** True when a suggestion shows an edited text whose scoring failed, so
+     *  the popup can say the score does not reflect it. */
+    editedMetricsFailed(suggestionId) {
+        const s = this.getSuggestion(suggestionId)
+        return !!s && this.getChosenVariantKey(suggestionId) === 'edited'
+            && this._metricsFailed.has(s.suggested_text)
     }
 
     /** The accepted enumeration for a sentence, or null. */
@@ -943,6 +1077,7 @@ export class EditorController {
      */
     addSuggestion(suggestion) {
         this._suggestionStates.set(suggestion.id, 'pending')
+        this._primaryText.set(suggestion.id, suggestion.suggested_text)
         this._clusters.clear()
         this._suggestionToCluster.clear()
         this._wordToCluster.clear()
@@ -1003,14 +1138,18 @@ export class EditorController {
      * Falls back to the connective's own suggested_text when there is no
      * first-sentence rewrite, or when the join can't be located.
      */
-    _composedMergeText(connective) {
+    /** The accepted full rewrite of a merge's first sentence, or null. */
+    _acceptedFirstRewrite(connective) {
         const m = connective.merges_sentences || []
-        if (m.length < 2) return connective.suggested_text
-        const first = m[0]
-        const r0 = this.getSuggestionsForSentence(first).find(s =>
+        if (m.length < 2) return null
+        return this.getSuggestionsForSentence(m[0]).find(s =>
             s.id !== connective.id
             && COMPOSABLE_REWRITE_TYPES.has(s.type)
-            && this._suggestionStates.get(s.id) === 'accepted')
+            && this._suggestionStates.get(s.id) === 'accepted') || null
+    }
+
+    _composedMergeText(connective) {
+        const r0 = this._acceptedFirstRewrite(connective)
         if (!r0) return connective.suggested_text
 
         const cw = this._connectiveWord(connective)
@@ -1032,11 +1171,8 @@ export class EditorController {
     connectiveOriginalPair(connective) {
         const m = connective.merges_sentences || []
         if (m.length < 2) return connective.original_text
-        const first = m[0], second = m[m.length - 1]
-        const r0 = this.getSuggestionsForSentence(first).find(s =>
-            s.id !== connective.id
-            && COMPOSABLE_REWRITE_TYPES.has(s.type)
-            && this._suggestionStates.get(s.id) === 'accepted')
+        const second = m[m.length - 1]
+        const r0 = this._acceptedFirstRewrite(connective)
         if (!r0) return connective.original_text
         const secondText = this._data.sentences[second]
             ? this._reconstructSentenceText(this._data.sentences[second]) : ''
