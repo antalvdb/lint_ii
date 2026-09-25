@@ -8,8 +8,9 @@
          without internet access, and ad blockers break jsdelivr). -->
     <script>
         // ?debug=1: show JavaScript errors on the page itself, for phones without
-        // a console. Invisible otherwise. Loaded first so it also catches errors
-        // raised while the modules load.
+        // a console. The panel appears only on the first error, and a tap folds it
+        // to one line. Invisible without the parameter. Loaded first so it also
+        // catches errors raised while the modules load.
         if (new URLSearchParams(location.search).has('debug')) {
             const lines = []
             const show = (msg) => {
@@ -21,16 +22,29 @@
                     box.style.cssText = 'position:fixed;left:0;right:0;bottom:0;max-height:40vh;'
                         + 'overflow:auto;margin:0;padding:6px 8px;z-index:99999;font:11px/1.35 monospace;'
                         + 'white-space:pre-wrap;background:#fff3f3;color:#8a1010;border-top:2px solid #c33'
-                    document.body.appendChild(box)
+                    // Tap to fold it to one line: expanded, it covers the
+                    // bottom of the popup (and its Accepteer button) on a phone.
+                    box.addEventListener('click', () => { collapsed = !collapsed; render(box) })
+                    ;(document.body || document.documentElement).appendChild(box)
                 }
-                box.textContent = lines.join('\n')
+                render(box)
+            }
+            let collapsed = false
+            const render = (box) => {
+                box.style.maxHeight = collapsed ? '1.6em' : '40vh'
+                box.style.overflow = collapsed ? 'hidden' : 'auto'
+                box.textContent = collapsed
+                    ? `${lines.length} fout(en) — tik om te openen`
+                    : lines.join('\n') + '\n(tik om in te klappen)'
             }
             const fmt = (x) => x && x.stack ? x.stack : String(x)
             window.addEventListener('error', e => show('error: ' + (e.error ? fmt(e.error) : e.message)))
             window.addEventListener('unhandledrejection', e => show('rejection: ' + fmt(e.reason)))
             const origError = console.error
             console.error = (...args) => { show('console.error: ' + args.map(fmt).join(' ')); origError.apply(console, args) }
-            document.addEventListener('DOMContentLoaded', () => show('debug on — errors appear here'))
+            // No panel until there is an error: an empty panel only hides the page.
+            // Confirm debug mode is on via the page title instead.
+            document.addEventListener('DOMContentLoaded', () => { document.title = '[debug] ' + document.title })
         }
     </script>
     <script src="./src/visualizer/vendor/vega.min.js"></script>
