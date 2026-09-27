@@ -975,3 +975,39 @@ report different observation counts — check those before comparing rates.
    that data dependency, and its licensing, as the actual task. Until then the
    500-item sweep is the acceptance test: a candidate guard must fire on "De
    gereedschap bevat..." and hit 0 of the 500.
+8. **A score-stratified set (PLANNED 2026-09-27, not started).** The five sets
+   are phenomenon-targeted: short items (corpus3 median 16 words) built to
+   make one pass fire, scored by presence/absence. They cannot see how the
+   tool behaves across the LiNT range, and in particular:
+   - the level constraint every rewrite prompt carries
+     (`_append_level_constraint`: "aim one level lower, don't over-simplify")
+     is barely exercised by one-sentence items, so we have never measured
+     whether a level-1 text is left mostly alone and a level-4 text drops by
+     about one level;
+   - over-editing of EASY text, where it does the most harm, has no test.
+
+   Plan:
+   - **Real paragraphs, 100–300 words each.** LiNT is a document-level score
+     and is unstable on single sentences. LLM-written texts cluster in a
+     narrow middle band and share one register; real sources (gemeente
+     letters, news, encyclopaedia text, children's non-fiction,
+     policy/legal text) spread naturally over levels 1–4. Use public or
+     anonymised text only: the cloud provider sees everything analysed.
+   - **Select by score, not by phenomenon.** Collect more candidates than
+     needed, score all of them with `/analyze-lint` (LLM-free, ~0.02 s each),
+     and fill equal bins (e.g. 10 texts per level or per score band). Balance
+     length within each bin, or length will quietly drive the level effect.
+   - **New metrics, per level** (there are no `should_suggest` labels, so
+     presence/absence does not apply): suggestions per sentence; LiNT score
+     before vs after accepting everything (does it land about one level
+     lower?); meaning-changing rewrites (LLM-as-judge, as now); guard
+     violations. Needs a small new mode in `run_eval.py`, reusing the
+     job/poll loop and the provider-error gate.
+   - **Bonus:** texts that come with a reference score from the original
+     LiNT tool also serve the open LiNT-score half of item 5.
+   - Held-out like sets 2–5: judge the engine on it, never tune thresholds
+     to it.
+
+   Cheap first step: score the candidate pool through `/analyze-lint` and
+   look at the distribution and the thin bins before labelling or running
+   anything.
