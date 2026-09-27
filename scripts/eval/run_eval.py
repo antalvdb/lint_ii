@@ -13,6 +13,17 @@ Each item is cache-busted with a per-run nonce so a run always re-analyses
 The LLM-as-judge scoring (wrong/debatable/right + precision/recall) is done
 separately from results.json; this script only gathers raw output and a
 presence/absence summary.
+
+Kleijn mode (backlog item 8) runs the LIN cloze texts instead of a corpus and
+scores the run against the ground truth from kleijn_truth.py:
+
+    python3 scripts/eval/run_eval.py --kleijn --owners-ok \
+        --base http://127.0.0.1:8000 [--versions moei,mak] [--limit 2]
+
+The texts are likely copyrighted and a run sends them to the LLM provider, so
+the mode refuses without --owners-ok (the text owners' permission, which is
+Antal's to obtain). Its results quote the texts and default to the gitignored
+private/kleijn/results.json.
 """
 import argparse
 import json
@@ -29,7 +40,9 @@ HERE = os.path.dirname(__file__)
 # spelling failures were mis-attributed to the LLM for lack of it.
 KEEP = ("type", "sentence_index", "original_text", "suggested_text",
         "replacement_word", "relation", "list_intro", "list_items",
-        "model", "error_category", "word")
+        "model", "error_category", "word", "component_types", "merges_sentences")
+
+KLEIJN_DIR = os.path.join(HERE, "private", "kleijn")
 
 
 def _post(path, payload):
@@ -39,8 +52,8 @@ def _post(path, payload):
         return json.load(r)
 
 
-def _analyze(text):
-    job = _post("/analyze", {"text": text, "max_suggestions": 50})["job_id"]
+def _analyze(text, fmt="text"):
+    job = _post("/analyze", {"text": text, "max_suggestions": 50, "format": fmt})["job_id"]
     for _ in range(90):
         with urllib.request.urlopen(BASE + "/analyze-result/" + job, timeout=30) as r:
             res = json.load(r)
@@ -78,6 +91,11 @@ def _analyze(text):
 _PROVIDER_ERR_RE = re.compile(
     r'HTTP Request: POST \S+/chat/completions "HTTP/1\.1 (429|5\d\d)'
 )
+# A call that never gets an HTTP answer (connection refused, timeout, network
+# failure) logs no request line at all, only a traceback ending in the httpx
+# exception. Without this the gate read an unreachable provider as CLEAN: a
+# Kleijn smoke test on 2026-09-27 had every LLM call refused and still passed.
+_TRANSPORT_ERR_RE = re.compile(r"^httpx\.(\w+(?:Error|Timeout))\b", re.M)
 
 
 def _log_size(path):
@@ -100,8 +118,9 @@ def _provider_errors_since(path, offset):
     except OSError:
         return 0, {}
     counts = {}
-    for m in _PROVIDER_ERR_RE.finditer(chunk):
-        counts[m.group(1)] = counts.get(m.group(1), 0) + 1
+    for rx in (_PROVIDER_ERR_RE, _TRANSPORT_ERR_RE):
+        for m in rx.finditer(chunk):
+            counts[m.group(1)] = counts.get(m.group(1), 0) + 1
     return sum(counts.values()), counts
 
 
@@ -176,6 +195,65 @@ def guard_violations(must_not, produced):
     return viols
 
 
+def kleijn_items(text_dir, versions):
+    """The Kleijn texts as run items: [{"id": "T01_moei", "text": ...}], in
+    text order. The ground truth is keyed by the same ids."""
+    items = []
+    for name in sorted(os.listdir(text_dir)):
+        m = re.fullmatch(r"(T\d\d)_(mak|moei)\.txt", name)
+        if m and m.group(2) in versions:
+            with open(os.path.join(text_dir, name), encoding="utf-8-sig") as f:
+                items.append({"id": f"{m.group(1)}_{m.group(2)}", "text": f.read()})
+    return items
+
+
+def kleijn_report(results, truth_path):
+    """Score a Kleijn run against the ground truth (kleijn_truth.score)."""
+    import sys
+    sys.path.insert(0, HERE)
+    from kleijn_truth import score
+    with open(truth_path, encoding="utf-8") as f:
+        truth = json.load(f)
+    runs = {iid: r["produced"] for iid, r in results.items() if not r.get("error")}
+    out = score(truth, runs)
+    wf, wo, cn = out["word_frequency"], out["word_order"], out["connectives"]
+    pct = lambda a, b: f"{a}/{b} ({a / b:.0%})" if b else f"{a}/0"
+    print("\n== Kleijn ground truth (difficult versions)")
+    print(f"  rarer words   targeted {pct(wf['targeted'], wf['hard_words'])}, "
+          f"easy original restored {pct(wf['restored'], wf['hard_words'])}, "
+          f"hard word gone from some suggestion {pct(wf['changed_any'], wf['hard_words'])}")
+    print(f"  word order    rewrite on a reordered sentence {pct(wo['fired'], wo['manipulated'])}; "
+          f"on the ones our parser measures {pct(wo['measurable_fired'], wo['measurable'])}; "
+          f"on untouched sentences {pct(wo['other_fired'], wo['other'])}")
+    print(f"  connectives   merge at a removal {pct(cn['found'], cn['expected'])}, "
+          f"same relation {pct(cn['relation_match'], cn['expected'])}")
+    if out["per_sentence"]:
+        print("  suggestions per sentence (over-editing check: easy should be lower):")
+        for key, (n, sents) in sorted(out["per_sentence"].items()):
+            print(f"    {key:22s} {n / sents:.2f}  ({n} on {sents} sentences)")
+    return out
+
+
+def validity_report(results, ids, log_path, provider_log, retries):
+    """Was any scored item still contaminated by provider errors after its
+    retries? Such an item's "miss" may be the provider, not the engine."""
+    scored = [results[i] for i in ids if results.get(i) and not results[i].get("error")]
+    dirty = [i for i in ids if results.get(i) and results[i].get("provider_errors")]
+    retried = sum(1 for r in scored if (r.get("attempts") or 1) > 1)
+    print()
+    if log_path is None:
+        print("VALIDITY: NOT CHECKED — provider log unreadable "
+              f"({provider_log}). Provider 429/5xx failures are invisible "
+              "to the API and would silently read as false negatives.")
+    elif dirty:
+        print(f"VALIDITY: CONTAMINATED — {len(dirty)} item(s) still saw provider "
+              f"errors after {retries} retries: {', '.join(dirty)}")
+        print("  Their outcome may reflect the provider, not the engine. "
+              "Re-run with the same --results (resumable) or treat as void.")
+    else:
+        print(f"VALIDITY: CLEAN — no provider errors on any scored item "
+              f"({retried} item(s) needed a retry to get there).")
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -185,7 +263,15 @@ def main():
                     help="API base URL; on the Strato box use http://127.0.0.1:8000 "
                          "(bypasses the nginx edge rate limits)")
     ap.add_argument("--corpus", default=os.path.join(HERE, "corpus.json"))
-    ap.add_argument("--results", default=os.path.join(HERE, "results.json"))
+    ap.add_argument("--results", default=None,
+                    help="default: results.json, or private/kleijn/results.json with --kleijn")
+    ap.add_argument("--kleijn", action="store_true",
+                    help="run the Kleijn LIN texts (private/kleijn/texts) instead of a corpus")
+    ap.add_argument("--versions", default="moei",
+                    help="Kleijn versions to run: moei, mak, or moei,mak")
+    ap.add_argument("--owners-ok", action="store_true",
+                    help="confirm the Kleijn text owners agreed to sending the texts "
+                         "to the LLM provider; the Kleijn mode refuses without it")
     ap.add_argument("--provider-log", default="/var/log/lint-ii/app.log",
                     help="service log to scan for provider 429/5xx per item "
                          "(box side). If unreadable, validity is NOT checked "
@@ -197,9 +283,22 @@ def main():
     if args.base:
         global BASE
         BASE = args.base.rstrip("/")
-    CORPUS, RESULTS = args.corpus, args.results
-
-    corpus = json.load(open(CORPUS, encoding="utf-8"))["items"]
+    if args.kleijn:
+        if not args.owners_ok:
+            raise SystemExit(
+                "Kleijn mode sends the texts to the LLM provider. The texts are likely "
+                "copyrighted: run it only once the owners have agreed, and then pass "
+                "--owners-ok. (Local scoring needs no run: see kleijn_lint.py.)")
+        versions = {v.strip() for v in args.versions.split(",") if v.strip()}
+        if not versions or not versions <= {"mak", "moei"}:
+            raise SystemExit("--versions must be moei, mak or moei,mak")
+        corpus = kleijn_items(os.path.join(KLEIJN_DIR, "texts"), versions)
+        RESULTS = args.results or os.path.join(KLEIJN_DIR, "results.json")
+        fmt = "markdown"  # sentence numbers must match the ground truth's
+    else:
+        corpus = json.load(open(args.corpus, encoding="utf-8"))["items"]
+        RESULTS = args.results or os.path.join(HERE, "results.json")
+        fmt = "text"
     if args.limit:
         corpus = corpus[:args.limit]
 
@@ -217,17 +316,27 @@ def main():
         prev = results.get(iid)
         if prev and not prev.get("error") and not prev.get("provider_errors"):
             continue
-        text = item["text"] + f"\n\nTestref {nonce}."
-        rec = {"should_suggest": item["should_suggest"],
-               "phenomena": item.get("phenomena", []),
-               "must_not": item.get("must_not", []),
-               "text": item["text"]}
+        if args.kleijn:
+            rec = {"format": fmt}  # the text stays in the private text folder
+        else:
+            rec = {"should_suggest": item["should_suggest"],
+                   "phenomena": item.get("phenomena", []),
+                   "must_not": item.get("must_not", []),
+                   "text": item["text"]}
         attempt = 0
         while True:
             attempt += 1
+            # A fresh marker per ATTEMPT: the service caches every result, the
+            # degraded ones included, so a retry of the identical text was
+            # answered from that cache, made no provider calls, logged no
+            # errors, and was recorded as clean (found 2026-09-27; every retry
+            # since the retry was added did this).
+            text = item["text"] + f"\n\nTestref {nonce}-{attempt}."
             offset = _log_size(log_path)
             try:
-                data = _analyze(text)
+                data = _analyze(text, fmt)
+                rec["document_lint_score"] = data.get("document_lint_score")
+                rec["document_level"] = data.get("document_difficulty_level")
                 sugs = data.get("suggestions", {}).get("suggestions", [])
                 # drop suggestions on the cache-busting nonce block
                 sugs = [s for s in sugs if "Testref" not in (s.get("original_text") or "")]
@@ -252,6 +361,14 @@ def main():
         print(f"[{done}] {iid}: {rec['types'] or ('ERROR: ' + rec['error'] if rec['error'] else 'none')}",
               flush=True)
         time.sleep(0.4)
+
+    ids = [item["id"] for item in corpus]
+    if args.kleijn:
+        kleijn_report({i: results[i] for i in ids if i in results},
+                      os.path.join(KLEIJN_DIR, "truth.json"))
+        validity_report(results, ids, log_path, args.provider_log, args.retries)
+        print(f"\nWrote {RESULTS} (private)")
+        return
 
     # Presence/absence summary (precision/recall of "produced any suggestion").
     tp = fp = fn = tn = 0
@@ -297,26 +414,7 @@ def main():
           f"   <- genuine precision concern")
     print(f"  guarded items (other type fired) : {guarded_fired}"
           f"   <- not a defect if the guard held; see README")
-    # Validity: was any scored item still contaminated by provider errors after
-    # its retries? Such an item's "miss" may be the provider, not the engine.
-    scored = [results.get(i["id"]) for i in corpus]
-    scored = [r for r in scored if r and not r.get("error")]
-    dirty = [i["id"] for i in corpus
-             if results.get(i["id"]) and results[i["id"]].get("provider_errors")]
-    retried = sum(1 for r in scored if (r.get("attempts") or 1) > 1)
-    print()
-    if log_path is None:
-        print("VALIDITY: NOT CHECKED — provider log unreadable "
-              f"({args.provider_log}). Provider 429/5xx failures are invisible "
-              "to the API and would silently read as false negatives.")
-    elif dirty:
-        print(f"VALIDITY: CONTAMINATED — {len(dirty)} item(s) still saw provider "
-              f"errors after {args.retries} retries: {', '.join(dirty)}")
-        print("  Their outcome may reflect the provider, not the engine. "
-              "Re-run with the same --results (resumable) or treat as void.")
-    else:
-        print(f"VALIDITY: CLEAN — no provider errors on any scored item "
-              f"({retried} item(s) needed a retry to get there).")
+    validity_report(results, ids, log_path, args.provider_log, args.retries)
     print(f"\nWrote {RESULTS}")
 
 

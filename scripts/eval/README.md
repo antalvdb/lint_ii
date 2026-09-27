@@ -1162,8 +1162,45 @@ report different observation counts — check those before comparing rates.
    `kleijn_truth.py score --results run.json` computes all of these
    (results: `{"T01_moei": [suggestion dicts], ...}`, the fields run_eval
    already keeps). Tested on invented pairs (`tests/test_kleijn_truth.py`,
-   mutation-checked). The run_eval mode to produce the results is not built;
-   it waits for the owners' OK.
+   mutation-checked).
+
+   **The run (built 2026-09-27, NOT run: waits for the owners' OK).**
+   ```
+   python3 scripts/eval/run_eval.py --kleijn --owners-ok \
+       --base http://127.0.0.1:8000 [--versions moei,mak] [--limit 2]
+   ```
+   It sends each text with `format: "markdown"` and `max_suggestions: 50`,
+   keeps the provider-error gate and retries, records the document score
+   and level, and then prints the ground-truth metrics instead of
+   presence/absence. It refuses without `--owners-ok`. Results default to
+   the private `private/kleijn/results.json`, with no text stored per item.
+   Start with the 60 difficult versions (the default); add `mak` for the
+   over-editing check. The token estimate is ~40–50k per text, so ~2.5M for
+   the difficult versions: within a day under the September Hetzner limits,
+   but use `--limit` for a first pass.
+
+   **Two runner bugs the smoke test exposed (fixed, and they affect ALL
+   runs).** The smoke test ran against a local server with no reachable
+   model:
+   - **An unanswered call was invisible to the gate.** Connection refused
+     or a timeout logs no HTTP request line, only a traceback ending in
+     `httpx.ConnectError` / `ReadTimeout`. The gate now counts those too.
+     Before, a run whose every LLM call failed reported `VALIDITY: CLEAN`.
+   - **A retry never re-analysed.** It resent the identical text, the
+     service answered from its result cache (which stores degraded results
+     too), no provider calls were logged, and the item was recorded as
+     clean. Every retry since `b183810` did this, so an item that
+     "recovered after a retry" in the box's later runs very likely kept
+     its degraded first result (check: its retry's job line in the
+     service log says "served from cache"). Now
+     each attempt gets its own cache-busting marker
+     (`tests/test_run_eval.py`, mutation-checked).
+   - **Not fixed, flagged: the SERVICE caches degraded results.** When
+     provider calls fail, the result (with suggestions missing) is cached
+     like any other, and the cache survives restarts. So a tester who hit
+     a 429 on a text gets that degraded result again until the next deploy.
+     Fixing it needs the engine to report "some calls failed" so the API
+     skips caching; that is a backend change for the live service.
 
    **Pipeline finding on the way:** spaCy's sentence segmenter splits a few
    long sentences in the middle, e.g. "…is ten slotte geregeld | hoe lang
