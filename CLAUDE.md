@@ -32,7 +32,11 @@ pushing.** Don't assume the other side is idle.
   `billing_customer_monthly_spending_limit_reached`. UU (Frank) confirmed no UU
   user has API credits — a UU-wide issue they are raising with Mistral, not a
   problem with our keys. Don't rotate or retry keys; stay on hetzner until UU
-  reports back.
+  reports back. **When it is unblocked, pin a dated model via
+  `LINT_II_LLM_MODEL`** rather than the code default `mistral-large-latest`:
+  that alias moves, and which Large answered in the July 2026 Mistral era
+  cannot be recovered (every result file from then predates `c7fdb54`, which
+  first serialized `Suggestion.model`).
 - Result cache: disk-persisted (`~/.cache/lint-ii/result_cache.json`), survives
   restarts BY DESIGN; the key includes the running git commit + model name, so
   deploys invalidate naturally and startup re-warms the example texts.
