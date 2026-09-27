@@ -1128,3 +1128,47 @@ report different observation counts — check those before comparing rates.
      thin**; level 2 is over-full. Ours: 15 / 56 / 35 / 14 of 120 versions,
      range 22.5–67.0. This is what Florian's texts or the synthetic block
      would have to fill.
+
+   **Kleijn ground truth (2026-09-27, `kleijn_truth.py`, local).** Each
+   difficult version differs from its easy version by one known
+   manipulation, and the easy version is a human simplification of it. So
+   the pairs give right answers that no other set has. `kleijn_truth.py
+   extract` diffs every pair WORD BY WORD over the whole text (not sentence
+   by sentence: removing "want" can split a sentence, and the sentence
+   counts need not match). It maps each change to the difficult version's
+   sentence, split exactly as the tool splits Markdown input, so the numbers
+   equal the `sentence_index` a suggestion carries. **A run must send the
+   texts with `format: "markdown"`.** The output, `private/kleijn/truth.json`,
+   quotes words from the texts and stays private.
+   - **Connectives:** 165 removals in 20 texts (maar 34, namelijk 23, daarom
+     18, want 18, dus 15, daardoor 12, …). **68 are expected for the
+     connective pass**: at a sentence boundary in the difficult version
+     (sentence-initial, or a "…, want …" that became two sentences) AND a
+     relation it may propose (reden / gevolg / tegenstelling). The rest are
+     mid-sentence adverbs or "toevoeging" (daarnaast, ook), which the pass
+     never restores by design. Target: a connective suggestion with
+     `sentence_index == merge_at`, and the same relation.
+   - **Word order:** 198 reordered sentences, but **our parser measures a
+     longer max dependency in the difficult version for only 116 (59%)**.
+     The sentence-structure trigger cannot be expected to see the rest, so
+     the scorer reports "fired on measurable" separately from "fired on
+     all".
+   - **Rarer words:** 673 swaps in 400 sentences, each with the easy
+     original ("militairen" ← "soldaten"). Targets: a word suggestion on
+     that word, a replacement equal to the original, or any suggestion that
+     removes the hard word.
+   - **Over-editing:** with both versions run, suggestions per sentence on
+     easy vs difficult, per manipulation.
+   `kleijn_truth.py score --results run.json` computes all of these
+   (results: `{"T01_moei": [suggestion dicts], ...}`, the fields run_eval
+   already keeps). Tested on invented pairs (`tests/test_kleijn_truth.py`,
+   mutation-checked). The run_eval mode to produce the results is not built;
+   it waits for the owners' OK.
+
+   **Pipeline finding on the way:** spaCy's sentence segmenter splits a few
+   long sentences in the middle, e.g. "…is ten slotte geregeld | hoe lang
+   een uitkering mag duren." This happens in 0.4% of the easy and 0.7% of
+   the difficult versions' sentences (19 in ~3,200); the source files are
+   intact. It shortens the measured dependency length (and so lowers LiNT
+   scores a little), and the tool can offer rewrites of the fragments.
+   Rare; noted, not chased.
