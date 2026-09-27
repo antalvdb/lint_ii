@@ -1055,3 +1055,76 @@ report different observation counts — check those before comparing rates.
      120 versions locally, then correlate LiNT score with cloze (and with the
      reference scores if available), and look at the level spread. That
      decides how much Florian's texts and the synthetic block must fill.
+
+   **Kleijn: first results (2026-09-27, Mac, `kleijn_lint.py`, all local).**
+   Data: `~/Experiments/HyTec-Cloze/` on Antal's Mac. `LIN-teksten/` has the
+   120 texts (T01–T60, `_mak`/`_moei`); `Clozedata2016_…csv` has one row per
+   student response (370,599); `~/Documents/Projects/LiNT/LINdocs_2023_nosplitting.jasp.csv`
+   has the original tool's features and LiNT scores per text version. Copies of
+   the texts are in `private/kleijn/texts`; the per-text table is written to
+   `private/kleijn/kleijn_scores.csv`. Rerun:
+   `python scripts/eval/kleijn_lint.py --cloze <Clozedata csv> --lindocs <LINdocs csv>`.
+
+   Facts read from the data (the handover's two questions):
+   - **Design.** `Tekstversie` 1 = `_mak`, 2 = `_moei`. `Manipulatie`, 20
+     texts each, is what the DIFFICULT version changes: **1 connectives
+     REMOVED** (T01–10, T31–40), **2 word order / longer dependencies**
+     (T11–20, T41–50), **3 rarer words** (T21–30, T51–60). So only 20 pairs
+     are connective pairs, and the easy version is the one WITH connectives.
+   - **Was LiNT fitted on this data? Yes — CONFIRMED by the paper**
+     (Pander Maat, Kleijn & Frissen 2023, *Tijdschrift voor
+     Taalbeheersing* 45.1, §3 and Table 3; PDF in Antal's Downloads). The
+     published formula is `cloze = 3.204 + 15.845·freq + 13.096·concrete
+     − 1.331·dependency length − 3.829·clause length`, fitted on these 120
+     texts read by ~2,700 secondary-school students. `LiNT_score23` in the
+     table is exactly 100 minus that (R² = 1.0000 on the original
+     features). `clozepred_perc` is NOT a prediction: it is the fitted
+     outcome, the cloze proportion corrected for the reader sample's
+     ability. LiNT-II's own coefficients differ (−4.21, +17.28, −1.62,
+     −2.54, +16.00); what they were refitted on is still worth asking
+     Jenia/Henk.
+
+   Results:
+   - **Ours vs the original tool:** r = +0.97 with `LiNT_score23`, mean
+     difference **+0.07** points (mean |diff| 1.74). **Levels agree 88%**
+     with the same bands, all disagreements adjacent (mostly ours 3 vs ref
+     2, 8 cases). Two opposite shifts cancel: our spaCy features read the
+     texts as harder than the original T-Scan/Alpino ones (+3.77 points:
+     frequency +1.67, dependency length +1.12, content words per clause
+     +1.13, concreteness −0.15), and our coefficients score the same
+     features 3.70 points easier. That is what a refit on our own pipeline
+     would produce. Features: freq r .94, max_sdl .86 (the parser
+     difference; ours +0.69 longer on average), cwpc .92, concreteness .98.
+   - **Item 5 cannot be closed here:** only 2 abbreviation-final tokens
+     ("nl.") in ~41k words, so the normalisation would change nothing
+     measurable. The implementation as a whole is validated.
+   - **Ours vs cloze — as good as the published formula on its own data:**
+     against the ability-corrected cloze, ours r = **−0.861**, the
+     published formula −0.865 (the paper's R = .865). Against the raw cloze
+     means, −0.87 vs −0.875; per version −0.86 / −0.88; per manipulation
+     −0.81 / −0.89 / −0.90. This is in-sample for the published formula,
+     so it validates our IMPLEMENTATION, not LiNT as such.
+   - **Level bands differ:** the paper puts the 3/4 boundary at **60**
+     (Table 6, "4 (> 60)"); LiNT-II uses **58** (`lint_scorer.py`,
+     `editor.js`). With the paper's bands our reconstruction reproduces
+     Table 6 exactly (16 / 62 / 31 / 11) and the range 24.0–69.2.
+     Agreement with ours is 88% under either band set. Which boundary is
+     intended is a question for Henk/Jenia; not changed.
+   - **Pairs (difficult minus easy):**
+     | manipulation | LiNT says harder | readers' cloze lower |
+     |---|---|---|
+     | connectives removed | **2/20** (mean −0.9) | 12/20 (−0.8 pts) |
+     | word order | 18/20 (+1.2) | 12/20 (−0.4 pts) |
+     | rarer words | 20/20 (+4.2) | 17/20 (−3.6 pts) |
+     LiNT has no coherence feature and scores the connective-removed texts
+     as slightly EASIER (shorter sentences). That confirms the popup note
+     that the LiNT score cannot reward a connective. But readers barely
+     noticed the removal either (12/20, −0.8 pts), so these pairs are a weak
+     test for the connective pass. Only the word-frequency manipulation
+     moved readers clearly.
+   - **Level spread** (the paper's Table 6 over all 120 versions: 16 / 62
+     / 31 / 11; as ~60 distinct texts, since the two versions nearly
+     always share a level: about 8 / 31 / 15 / 6). **Levels 1 and 4 are
+     thin**; level 2 is over-full. Ours: 15 / 56 / 35 / 14 of 120 versions,
+     range 22.5–67.0. This is what Florian's texts or the synthetic block
+     would have to fill.
