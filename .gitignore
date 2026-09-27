@@ -149,3 +149,5 @@ test_suggestions_output.json
 henk-email-draft.md
 scripts/eval/results*.json
 scripts/eval/run.log
+# Licensed / third-party eval texts (e.g. Kleijn's cloze texts): never commit.
+scripts/eval/private/

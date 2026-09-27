@@ -1011,3 +1011,47 @@ report different observation counts — check those before comparing rates.
    Cheap first step: score the candidate pool through `/analyze-lint` and
    look at the distribution and the thin bins before labelling or running
    anything.
+
+   **Synthetic pilot (2026-09-27, `corpus_synthetic_pilot.json`).** Two
+   same-content sets written by Claude (a gemeente roadworks letter and a heat
+   leaflet, each at four target levels, 144–186 words). The first draft landed
+   5 of 8 in their target level; after one revision round all 8 did (roadworks
+   17.3 / 44.1 / 53.9 / 84.6, heat 13.2 / 34.5 / 54.0 / 80.4). Lessons:
+   - the 12-point middle bands need steering by the score, which tunes the
+     texts to LiNT's own features: mildly circular if the set then measures
+     LiNT drops. Always report synthetic items separately;
+   - heat-L2 (34.5) sits right on a boundary; aim mid-band;
+   - revising for difficulty lengthened the L2 texts: write to a word budget;
+   - level 4 overshoots (80–85; one draft hit the 100 ceiling), a caricature
+     of officialese. Real level-4 text probably sits nearer 60–70; the real
+     candidates will show it.
+   Conclusion: synthesis works for a same-content block (level separated from
+   topic, which real texts cannot give) and for filling thin bins, but it does
+   not replace real texts.
+
+   **Real-text sources (Antal, 2026-09-27):**
+   - **Kleijn's 60 texts** (PhD thesis), each in two variants: the original,
+     and one manipulated on connectives, with CLOZE SCORES for all of them.
+     This is the priority source, and it gives more than a score spread:
+     (a) an external, human difficulty criterion: do our LiNT scores track
+     cloze? (b) an implementation check: LiNT was, we believe, fitted partly
+     on this data (CONFIRM with Suzanne/Henk), so it is not an independent
+     validation of LiNT itself, but a worse fit for our implementation than
+     for the original tool means a bug; with the original tool's scores it
+     closes item 5's LiNT-score half; (c) connective minimal pairs: a natural
+     experiment for the connective pass, which should suggest where
+     connectives were removed and stay quiet where present (CONFIRM the
+     direction of the manipulation: added, removed, or both); (d) the level
+     spread, possibly narrow, as the texts were written for one readership.
+   - **Florian Kunneman's collection** (from students' LiNT work), expected.
+     Establish provenance, any scores/level labels, and permissions before
+     planning around it; it could fill the bins Kleijn leaves thin.
+   - **Handling:** both are likely copyrighted, and the repo is public. Keep
+     the texts in `scripts/eval/private/` (gitignored). Scoring
+     (`/analyze-lint`, or the local pipeline on the Mac) never leaves the
+     machine; a suggestion run sends text to Hetzner, so get the owners' OK
+     before any full run.
+   - **Order:** Kleijn first, on the Mac (the data lives there). Score all
+     120 versions locally, then correlate LiNT score with cloze (and with the
+     reference scores if available), and look at the level spread. That
+     decides how much Florian's texts and the synthetic block must fill.

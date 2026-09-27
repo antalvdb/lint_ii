@@ -1,0 +1,69 @@
+{
+  "_about": "PILOT for backlog item 8 (2026-09-27): SYNTHETIC same-content sets, written by Claude, one topic at four intended LiNT levels. Report separately from real texts; never tune on it.",
+  "items": [
+    {
+      "id": "syn-weg-L1",
+      "topic": "wegwerkzaamheden",
+      "target_level": 1,
+      "text": "Vanaf maandag 3 november gaan we de Lindelaan opnieuw bestraten. Het werk duurt vier weken. In die tijd kunt u niet met de auto door de straat. U kunt wel lopen en fietsen. Uw huis blijft altijd bereikbaar.\n\nWaar laat u uw auto? U kunt gratis parkeren op het plein bij de sporthal. Dat is vijf minuten lopen. Heeft u moeite met lopen? Bel ons dan. We zoeken samen met u een plek dicht bij huis.\n\nDe vuilnisbak wordt op de gewone dag geleegd. Zet hem op de hoek van de straat. Daar haalt de wagen hem op.\n\nHet werk maakt soms lawaai. We werken alleen overdag, van zeven uur 's ochtends tot vijf uur 's middags. In het weekend werken we niet.\n\nHeeft u een vraag? Bel ons op werkdagen. U kunt ook langskomen bij de bouwkeet aan het begin van de straat.",
+      "lint_score": 17.3,
+      "lint_level": 1
+    },
+    {
+      "id": "syn-weg-L2",
+      "topic": "wegwerkzaamheden",
+      "target_level": 2,
+      "text": "Op maandag 3 november beginnen we met het vernieuwen van de bestrating in de Lindelaan, omdat het oude wegdek op veel plaatsen is verzakt. De werkzaamheden duren naar verwachting ongeveer vier weken. Omdat de straat in die periode is afgesloten voor autoverkeer, kunt u uw auto niet voor de deur parkeren. Voetgangers en fietsers kunnen er wel langs, en uw woning blijft tijdens het hele project bereikbaar.\n\nTijdens de werkzaamheden kunt u gratis parkeren op het plein naast de sporthal, op ongeveer vijf minuten lopen. Bent u slecht ter been, neem dan contact met ons op, zodat we samen een passende oplossing dichter bij uw woning kunnen zoeken.\n\nDe afvalinzameling gaat gewoon door op de vaste dag. Wilt u uw container tijdens deze periode wel aan het begin van de straat zetten, zodat de vuilniswagen hem kan bereiken?\n\nWe proberen de overlast zoveel mogelijk te beperken. Daarom wordt er alleen op werkdagen gewerkt, tussen zeven uur 's ochtends en vijf uur 's middags.\n\nVoor vragen over de planning of de bereikbaarheid kunt u ons bellen of langskomen bij de bouwkeet op de hoek.",
+      "lint_score": 44.1,
+      "lint_level": 2
+    },
+    {
+      "id": "syn-weg-L3",
+      "topic": "wegwerkzaamheden",
+      "target_level": 3,
+      "text": "Met ingang van maandag 3 november wordt de bestrating van de Lindelaan vernieuwd. Het huidige wegdek voldoet door boomwortels en verzakkingen niet langer aan de eisen voor verkeersveiligheid. De uitvoering neemt naar verwachting vier weken in beslag. Gedurende deze periode is de straat afgesloten voor gemotoriseerd verkeer; voetgangers en fietsers behouden doorgang, en de bereikbaarheid van woningen blijft gegarandeerd.\n\nAls alternatief voor parkeren voor de deur stelt de gemeente kosteloos parkeerruimte beschikbaar op het plein naast de sporthal. Bewoners met een mobiliteitsbeperking kunnen contact opnemen voor een passende voorziening in de nabijheid van hun woning.\n\nDe inzameling van huishoudelijk afval vindt plaats volgens het gebruikelijke schema. Containers moeten in deze periode wel aan het begin van de straat worden aangeboden.\n\nOm geluidsoverlast te beperken, vinden de werkzaamheden uitsluitend op werkdagen plaats, tussen 07.00 en 17.00 uur. Voor vragen en opmerkingen is de uitvoerder aanwezig in de bouwkeet op de hoek van de straat.",
+      "lint_score": 53.9,
+      "lint_level": 3
+    },
+    {
+      "id": "syn-weg-L4",
+      "topic": "wegwerkzaamheden",
+      "target_level": 4,
+      "text": "Ter uitvoering van het in het kader van het meerjarenprogramma openbare ruimte vastgestelde onderhoudsbeleid, waarbij prioritering plaatsvindt op basis van periodieke weginspecties, wordt met ingang van 3 november de verharding van de Lindelaan integraal gereconstrueerd, nu gebleken is dat de door wortelopdruk en zettingsverschillen ontstane oneffenheden de verkeersveiligheid in onaanvaardbare mate compromitteren.\n\nGedurende de uitvoeringsperiode, waarvan de duur op circa vier weken wordt geraamd, geldt een inrijverbod voor gemotoriseerd verkeer, onverminderd de handhaving van de toegankelijkheid van percelen voor langzaam verkeer en hulpdiensten.\n\nTer compensatie van de tijdelijke onbruikbaarheid van parkeervoorzieningen in de openbare ruimte wordt kosteloos parkeercapaciteit ter beschikking gesteld op het terrein nabij de sporthal, terwijl voor belanghebbenden met een mobiliteitsbeperking op aanvraag maatwerkvoorzieningen worden getroffen.\n\nDe inzameling van huishoudelijke afvalstoffen geschiedt conform de reguliere frequentie, met dien verstande dat aanbieding van minicontainers dient te geschieden op het door de uitvoerder aangewezen verzamelpunt. Ter beperking van geluidsemissie worden de werkzaamheden uitsluitend op werkdagen tussen 07.00 en 17.00 uur verricht.",
+      "lint_score": 84.6,
+      "lint_level": 4
+    },
+    {
+      "id": "syn-hitte-L1",
+      "topic": "hitte",
+      "target_level": 1,
+      "text": "Het wordt de komende dagen erg warm. Warm weer is fijn, maar het kan ook gevaarlijk zijn. Vooral voor oude mensen, kleine kinderen en mensen die ziek zijn.\n\nDrink genoeg water. Wacht niet tot u dorst krijgt. Drink elke dag zeker anderhalve liter. Koffie en alcohol tellen niet mee.\n\nBlijf zo veel mogelijk binnen als de zon fel schijnt. Dat is tussen twaalf uur en vier uur. Doe de gordijnen dicht. Zet 's avonds en 's nachts de ramen open als het buiten koeler is.\n\nDraag dunne kleren met lichte kleuren. Zet een hoed of pet op als u naar buiten gaat. Smeer uw huid in tegen de zon.\n\nKent u iemand die alleen woont? Ga even langs of bel op. Vraag of het goed gaat.\n\nVoelt u zich duizelig of heel moe? Heeft u hoofdpijn? Ga dan in de schaduw zitten en drink water. Wordt het niet beter? Bel dan de huisarts.",
+      "lint_score": 13.2,
+      "lint_level": 1
+    },
+    {
+      "id": "syn-hitte-L2",
+      "topic": "hitte",
+      "target_level": 2,
+      "text": "De komende dagen wordt het erg warm. Hoewel veel mensen van het mooie weer genieten, kan langdurige hitte ook gezondheidsklachten veroorzaken. Vooral ouderen, jonge kinderen en mensen met een chronische ziekte lopen een verhoogd risico.\n\nZorg ervoor dat u gedurende de dag voldoende drinkt, ook als u geen dorst heeft. Water is het beste, want koffie en alcohol zorgen er juist voor dat uw lichaam vocht verliest.\n\nProbeer tussen twaalf en vier uur, wanneer de zon het felst is, zoveel mogelijk binnen te blijven en zware inspanning te vermijden. Houd overdag de gordijnen en ramen gesloten, en zet ze 's avonds open zodra het buiten afkoelt.\n\nDraag luchtige kleding in lichte kleuren en bescherm uw hoofd met een hoed of pet. Vergeet ook niet uw huid regelmatig in te smeren met zonnebrandcrème.\n\nWoont er iemand bij u in de buurt die alleen is of weinig bezoek krijgt? Kijk dan even of alles goed met diegene gaat.\n\nKrijgt u last van duizeligheid, hoofdpijn of grote vermoeidheid, ga dan op een koele plek zitten en drink water. Neem contact op met uw huisarts als de klachten niet verdwijnen.",
+      "lint_score": 34.5,
+      "lint_level": 2
+    },
+    {
+      "id": "syn-hitte-L3",
+      "topic": "hitte",
+      "target_level": 3,
+      "text": "Voor de komende dagen worden aanhoudend hoge temperaturen verwacht. Hoewel warm weer door velen als aangenaam wordt ervaren, brengt langdurige hitte gezondheidsrisico's met zich mee, met name voor ouderen, jonge kinderen en personen met een chronische aandoening of een verminderde weerstand.\n\nHet is van belang om gedurende de dag voldoende vocht op te nemen, ook wanneer er geen dorstgevoel optreedt. Dranken met cafeïne of alcohol werken vochtafdrijvend en zijn daarom minder geschikt.\n\nVermijd zoveel mogelijk inspanning en verblijf in de volle zon tijdens de warmste uren van de dag. Door overdag zonwering en ramen gesloten te houden en 's avonds te ventileren, blijft de binnentemperatuur beter beheersbaar.\n\nLichte, luchtige kleding en bescherming van hoofd en huid verkleinen de kans op oververhitting en verbranding.\n\nBij klachten als duizeligheid, hoofdpijn, misselijkheid of verwardheid kan sprake zijn van oververhitting. Zoek in dat geval een koele omgeving op, neem vocht tot u en raadpleeg bij aanhoudende verschijnselen de huisarts.",
+      "lint_score": 54.0,
+      "lint_level": 3
+    },
+    {
+      "id": "syn-hitte-L4",
+      "topic": "hitte",
+      "target_level": 4,
+      "text": "In verband met de verwachte langdurige periode van extreme temperaturen treedt het regionale hitteprotocol in werking. Dit protocol voorziet in een gecoördineerde inzet van preventieve maatregelen ter beperking van hittegerelateerde gezondheidsschade onder kwetsbare bevolkingsgroepen.\n\nGezien de verhoogde vatbaarheid voor uitdroging en ontregeling van de lichaamstemperatuur bij ouderen, zuigelingen en personen met hart- en vaatziekten of aandoeningen van de luchtwegen, wordt nadrukkelijk geadviseerd tot een adequate vochtinname, onafhankelijk van het subjectieve dorstgevoel. Consumpties met een vochtafdrijvende werking dienen te worden vermeden.\n\nBlootstelling aan directe zonnestraling en fysieke inspanning gedurende de periode van maximale instraling dienen tot een minimum te worden beperkt. Beheersing van het binnenklimaat wordt bevorderd door overdag zonwering toe te passen en nachtelijke ventilatie te benutten.\n\nIndien zich symptomen voordoen die wijzen op oververhitting, zoals duizeligheid, hoofdpijn, misselijkheid of desoriëntatie, verdient onverwijlde verplaatsing naar een koelere omgeving aanbeveling. Bij aanhoudende klachten is consultatie van de huisarts geïndiceerd.",
+      "lint_score": 80.4,
+      "lint_level": 4
+    }
+  ]
+}
