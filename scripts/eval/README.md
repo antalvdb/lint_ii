@@ -1261,6 +1261,47 @@ report different observation counts — check those before comparing rates.
      Still open: whether the ~0.4 suggestions per sentence on level-1 text
      are useful or over-editing. That needs the LLM-as-judge pass on those
      texts' suggestions, which presence counts cannot show.
+   - **Judge pass on the level-1 texts (2026-09-28): over-editing
+     confirmed.** Claude judged all 207 suggestions on the 15 level-1
+     versions, before reading them, against a fixed rubric: useful (correct,
+     keeps the meaning, clearly easier) / neutral (correct, no real gain) /
+     harmful (meaning change, invented content, ungrammatical, harder, or a
+     lost connective or nuance), judging the preselected option. Verdicts
+     with reasons are in `private/kleijn/level1_judgments.json`.
+     - **One systematic error is 30 of the 207:** T46 (both versions)
+       *introduces* the term "glucose" ("Die suiker in het bloed noemen we
+       glucose"), and the word pass replaced it with "suiker" at every
+       occurrence, once per occurrence, including "…noemen we suiker",
+       which destroys the definition. Counted separately below.
+     - **The other 177: 24% useful, 25% neutral, 51% harmful.** Harmful =
+       22% clear errors (meaning 33, grammar 4, invented 2; e.g. a sentence
+       inverted into its opposite, "nomaden" → "zwervers" ×3, a "spelling
+       fix" that introduced a dt-error, "houd je" → "houdt je") plus 29%
+       minor losses (a harder word or structure 17, a lost connective or
+       nuance 17, clumsy repetition or pleonasm 18).
+     - **By type:** word swaps are the best (59% useful, 29% harmful:
+       zetelt → zit, neerslag → regen, consumeren → eten). The
+       sentence-structure pass `max_sdl` is 22% useful / 53% harmful,
+       mostly splitting short sentences that were already easy.
+       `abstract_nouns` is the worst (5% useful / 70% harmful: longer
+       paraphrases of words that were not hard). The connective merges are
+       mostly correct but never useful here (0% useful / 60% neutral / 40%
+       harmful): they lengthen easy sentences, and two had the wrong
+       relation.
+     - **Caveats:** a single strict judge, and no matched judging of level
+       3–4 texts yet, so this does not separate "over-editing EASY text"
+       from the general error rate. That comparison is the next step. The
+       "link-lost" category is strict by design: explicit connectives help
+       exactly the readers level-1 text is for.
+     - **Candidate levers (not built; for Antal):**
+       (1) `_append_level_constraint` on a level-1 document asks to "lower
+       the complexity by one level (to level 1)", which is self-contradictory
+       and invites edits; for level 1 it could say "change only clear
+       problems", or skip `max_sdl` / `abstract_nouns` there;
+       (2) the word pass should not replace a term the text itself defines
+       ("… noemen we X", "X is …"), a deterministic guard;
+       (3) one word-swap suggestion per word per document, not one per
+       occurrence (T46 got 15 identical swaps per version).
    - Scorer fix found on the way: the report scored only the current run's
      items, and the scorer skipped a text whose difficult version was
      absent, so an easy-only run reported nothing. It now scores the whole
