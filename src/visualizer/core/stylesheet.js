@@ -913,6 +913,38 @@ export const css = `
         background: color-mix(in oklch, #d8a200 12%, transparent);
     }
 
+    .suggestion-group {
+        font-size: 0.85em;
+        line-height: 1.45;
+        padding: 0.4rem 0.5rem;
+        border-radius: 0.25rem;
+        background: color-mix(in oklch, #5cb87a 12%, transparent);
+
+        .suggestion-group-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.4rem;
+        }
+
+        button {
+            flex: 1;
+            padding: 0.35rem 0.75rem;
+            font-size: 0.95em;
+            color: currentColor;
+            background: transparent;
+            border: 1px solid currentColor;
+            border-radius: 0.25rem;
+            cursor: pointer;
+        }
+
+        .group-accept-btn {
+            background: #9defb6;
+            border-color: #5cb87a;
+            color: #2a5c38;
+        }
+    }
+
     .suggestion-actions {
         display: flex;
         gap: 0.5rem;

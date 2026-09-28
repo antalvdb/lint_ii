@@ -125,3 +125,26 @@ class TestSteering:
         out = E._append_level_constraint("P", 1)
         assert "al LiNT-niveau 1" in out and "verlaagt" not in out
         assert "naar niveau 2" in E._append_level_constraint("P", 3)
+
+
+class TestSwapGroups:
+    def _s(self, sid, typ, idx, word, repl):
+        from lint_ii.llm.suggestions import Suggestion
+        return Suggestion(id=sid, type=typ, sentence_index=idx, original_text="",
+                          suggested_text="", explanation="", word=word, word_index=0,
+                          replacement_word=repl)
+
+    def test_identical_swaps_are_linked_in_document_order(self):
+        from lint_ii.llm.suggestions import SuggestionType as Y
+        sugs = [self._s("c", Y.WORD_FREQUENCY, 5, "Nomaden", "zwervers"),
+                self._s("a", Y.WORD_FREQUENCY, 1, "nomaden", "Zwervers"),
+                self._s("b", Y.WORD_FREQUENCY, 3, "nomaden", "reizigers"),
+                self._s("d", Y.SPELLING, 4, "acomodatie", "accommodatie"),
+                self._s("e", Y.SPELLING, 6, "acomodatie", "accommodatie")]
+        E._group_identical_swaps(sugs)
+        by = {s.id: s.group_ids for s in sugs}
+        assert by["a"] == by["c"] == ["a", "c"]
+        assert by["b"] == []
+        assert by["d"] == by["e"] == ["d", "e"]
+        assert sugs[0].as_dict()["group_ids"] == ["a", "c"]
+        assert "group_ids" not in sugs[2].as_dict()

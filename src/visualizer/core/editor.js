@@ -952,6 +952,28 @@ export class EditorController {
     }
 
     /**
+     * The still-pending members of a suggestion's identical-swap group
+     * (group_ids, set by the backend: same word, same replacement), itself
+     * included when pending. Empty for an ungrouped suggestion.
+     */
+    groupPending(suggestionId) {
+        const s = this.getSuggestion(suggestionId)
+        return (s?.group_ids || []).filter(id => this._suggestionStates.get(id) === 'pending')
+    }
+
+    /** Accept every pending occurrence of a grouped swap, one by one, so each
+     * goes through the normal accept path (cluster and connective exclusivity). */
+    acceptGroup(suggestionId) {
+        for (const id of this.groupPending(suggestionId)) {
+            if (this._suggestionStates.get(id) === 'pending') this.accept(id)
+        }
+    }
+
+    ignoreGroup(suggestionId) {
+        for (const id of this.groupPending(suggestionId)) this.ignore(id)
+    }
+
+    /**
      * Accept a suggestion.
      *
      * Auto-ignores other pending suggestions in the SAME cluster: clustered

@@ -178,6 +178,10 @@ class Suggestion:
     # split) variant meaningfully differ; the top-level suggested_text mirrors the
     # full variant so variant-unaware code still works.
     variants: list[dict[str, Any]] = field(default_factory=list)
+    # For a word swap or spelling fix that recurs identically (same word, same
+    # replacement) elsewhere in the text: the ids of every occurrence, in
+    # document order, so the UI can offer one action for all of them.
+    group_ids: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         """Serialize suggestion to dictionary."""
@@ -215,6 +219,8 @@ class Suggestion:
             result["list_items"] = self.list_items
         if self.variants:
             result["variants"] = self.variants
+        if self.group_ids:
+            result["group_ids"] = self.group_ids
         return result
 
 
@@ -1020,6 +1026,27 @@ class SuggestionEngine:
         return result
 
     @staticmethod
+    def _group_identical_swaps(suggestions: list[Suggestion]) -> None:
+        """Link word swaps and spelling fixes that make the same change (same
+        word, same replacement, ignoring case) in several places: each keeps
+        its own suggestion and sentence metrics, and gets the group's ids in
+        group_ids. The Kleijn texts produced one identical swap per sentence
+        up to 15 times (glucose -> suiker), each needing its own click."""
+        groups: dict[tuple[str, str], list[Suggestion]] = {}
+        for sug in suggestions:
+            if (sug.type in (SuggestionType.WORD_FREQUENCY, SuggestionType.SPELLING)
+                    and sug.word and sug.replacement_word):
+                key = (sug.word.lower(), sug.replacement_word.lower())
+                groups.setdefault(key, []).append(sug)
+        for members in groups.values():
+            if len(members) < 2:
+                continue
+            members.sort(key=lambda m: (m.sentence_index, m.word_index or 0))
+            ids = [m.id for m in members]
+            for m in members:
+                m.group_ids = ids
+
+    @staticmethod
     def _steer_triggers(
         triggers: list[SuggestionTrigger], document_level: int | None,
     ) -> list[SuggestionTrigger]:
@@ -1595,6 +1622,7 @@ class SuggestionEngine:
                 time.perf_counter() - t_conn, len(connective_suggestions),
             )
         suggestions.extend(connective_suggestions)
+        self._group_identical_swaps(suggestions)
 
         return SuggestionsResult(
             suggestions=suggestions,

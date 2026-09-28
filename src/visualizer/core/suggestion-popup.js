@@ -115,6 +115,17 @@ export class SuggestionPopupController {
                 return
             }
 
+            if (button.classList.contains('group-accept-btn')) {
+                this._editor.acceptGroup(suggestionId)
+                this._hideNow()
+                return
+            }
+            if (button.classList.contains('group-ignore-btn')) {
+                this._editor.ignoreGroup(suggestionId)
+                this._hideNow()
+                return
+            }
+
             if (button.classList.contains('accept-btn')) {
                 // A variant rewrite: pick the chosen alternative, then accept.
                 if (button.dataset.variantKey) {
@@ -258,6 +269,7 @@ export class SuggestionPopupController {
                 ` : ''}
 
                 ${this._suggestionNote(suggestion)}
+                ${this._groupRow(suggestion)}
 
                 <div class="suggestion-actions">
                     ${buttonsHTML}
@@ -554,6 +566,7 @@ export class SuggestionPopupController {
                 ` : ''}
 
                 ${this._suggestionNote(suggestion)}
+                ${this._groupRow(suggestion)}
 
                 <div class="suggestion-actions">
                     ${buttonsHTML}
@@ -675,6 +688,7 @@ export class SuggestionPopupController {
                 ` : ''}
 
                 ${this._suggestionNote(suggestion)}
+                ${this._groupRow(suggestion)}
 
                 <div class="suggestion-actions">
                     ${buttonsHTML}
@@ -729,6 +743,26 @@ export class SuggestionPopupController {
                 </div>`
         }
         return ''
+    }
+
+    /**
+     * For a swap that recurs identically (same word, same replacement) in
+     * other sentences: one action for every occurrence still open. Each
+     * occurrence stays its own suggestion, so it can be overridden singly.
+     */
+    _groupRow(suggestion) {
+        const ids = suggestion.group_ids || []
+        if (ids.length < 2) return ''
+        const open = this._editor.groupPending?.(suggestion.id) || []
+        const buttons = open.length
+            ? `<button class="group-btn group-accept-btn" data-suggestion-id="${suggestion.id}" title="Deze vervanging in alle zinnen accepteren">Overal accepteren (${open.length})</button>
+               <button class="group-btn group-ignore-btn" data-suggestion-id="${suggestion.id}" title="Deze vervanging in alle zinnen negeren">Overal negeren</button>`
+            : ''
+        return `
+            <div class="suggestion-group">
+                <span>Dezelfde vervanging staat in ${ids.length} zinnen${open.length ? `; nog ${open.length} open` : ''}.</span>
+                ${buttons ? `<div class="suggestion-group-actions">${buttons}</div>` : ''}
+            </div>`
     }
 
     _typeLabel(type) {
