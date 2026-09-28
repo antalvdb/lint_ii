@@ -202,6 +202,13 @@ variants; 10 collapse to conservative+full (a sentence with one natural split
 point, as designed). Cost: 286k tokens vs 275k, **+4% per run** — much less than
 the +26% per consolidated call, because consolidated calls are a minority. The
 gate's per-item retry fired for the first time in real use (one 429, recovered).
+**CORRECTION (2026-09-28): it did NOT recover.** The retry re-sent identical
+text and was `served from cache` 11 s later (job 394a15026b35), i.e. it
+re-read the incomplete first attempt: `enum-3` lost its word-frequency bundle
+to a 429 (08:10:20) and was recorded clean without it. All retries before
+`b6a1d0e` (per-attempt marker) were fake in this way. The headline is
+unaffected (enum-3 still produced its enumeration, so it stays a TP), but
+`results3d` under-reports enum-3 by one word swap.
 
 **Watch item — BEHOUDEND sometimes returns the sentence unchanged.** The example's
 BEHOUDEND changes one word, and occasionally the model reads "minimal" as "none".
@@ -231,7 +238,8 @@ not the change: the gate touches only consolidated rewrites, and none of the six
 items whose output changed involves one. `wordfreq-4` is found this time (a
 previous miss); `good-3` gets a connective merge ("Het probleem is opgelost, dus
 u kunt weer inloggen.", reasonable, but the item is labelled silent). The other
-four gained or lost a word_frequency swap. Guard violations 0.
+four gained or lost a word_frequency swap. Guard violations 0. (Correction 2026-09-28: one of those four, enum-3, was not
+noise. Its `results3d` baseline had lost the swap to a 429, as noted above.)
 Variants: 27 consolidated suggestions. 3 lost their conservative option
 (`long-1`, `long-8`: intermediate + full; `long-5`: only the full rewrite is
 left). On `long-5`, `results3d`'s "one-sentence" option was two sentences, the
