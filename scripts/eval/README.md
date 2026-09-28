@@ -1302,6 +1302,42 @@ report different observation counts — check those before comparing rates.
        ("… noemen we X", "X is …"), a deterministic guard;
        (3) one word-swap suggestion per word per document, not one per
        occurrence (T46 got 15 identical swaps per version).
+   - **Level-3/4 comparison (2026-09-28), BLIND.** 196 suggestions sampled
+     from the 49 level-3/4 versions (at most 4 per version, seed 20260928),
+     mixed with 20 already-judged level-1 items as a hidden consistency
+     check. The items were shuffled and shown without source or level;
+     same rubric. **Consistency: 20/20 re-judged identically.**
+     | | useful | neutral | harmful | of which clear errors | minor |
+     |---|---|---|---|---|---|
+     | level 1 (177, glucose excluded) | 24% | 25% | 51% | 22% | 29% |
+     | level 3/4 (196) | **39%** | 12% | 49% | **34%** | 15% |
+     - **The harmful rate does not depend on the level (~50% at both); its
+       kind does.** On EASY text the tool makes fewer real improvements and
+       more unnecessary edits (neutral + minor: 54% vs 27%): that is the
+       over-editing. On HARD text it makes more real improvements AND more
+       clear errors, mostly meaning shifts in dense legal and technical
+       prose: legal terms paraphrased ("educatieve maatregel" -> "actie"),
+       quotations altered (a law text, a Cals quote), "blijven zitten"
+       introduced (repeating a year), information dropped.
+     - **Consistent across levels:** word swaps are the best (≈60% useful
+       at both); `abstract_nouns` is harmful 65–70% at both.
+     - **Spelling suggestions are almost all wrong on this edited text:** 8
+       of 10 judged are harmful. Hunspell 4/4 ("mental map" -> "metal
+       map", "intra" -> "infra", "intraregionale" -> "interregionale",
+       "(geluids)" -> "(geluiden)": unknown ≠ wrong). LLM 4/6, including
+       **"houd je" -> "houdt je"**, which looks like the dt guidance of
+       `48c8fa8` over-applying to inversion (je after the verb drops the
+       t). In the whole Kleijn run the passes made 48 LLM and 17 Hunspell
+       spelling suggestions on professionally edited text; nearly all of
+       them are false alarms by construction.
+     - **Candidate levers, in addition to the level-1 ones (not built):**
+       keep quotations and quoted legal text out of rewrites; a guard for
+       defined or official terms; Hunspell skips foreign words, Latin
+       prefixes and bracketed compound parts; a dt probe on inversion
+       ("houd je", "vind je", "word je"); reconsider `abstract_nouns`.
+     - Caveats: one strict judge (though consistent); I may recognise a few
+       items despite the blinding; this is one corpus of school and
+       information texts.
    - Scorer fix found on the way: the report scored only the current run's
      items, and the scorer skipped a text whose difficult version was
      absent, so an easy-only run reported nothing. It now scores the whole
