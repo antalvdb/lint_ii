@@ -34,9 +34,44 @@ def _get_dictionary():
     return Dictionary.from_files(str(_DICT_PATH))
 
 
+def _bracketed_word_part(token) -> bool:
+    """True for a word part in brackets glued to another word, as in
+    "(geluids)overlast": not a word of its own, so not a typo ("geluids" ->
+    "geluiden" was offered, Kleijn)."""
+    doc, i = token.doc, token.i
+    if i == 0 or i + 1 >= len(doc):
+        return False
+    before, after = doc[i - 1], doc[i + 1]
+    if before.text != "(" or after.text != ")":
+        return False
+    glued_after = after.whitespace_ == "" and i + 2 < len(doc) and doc[i + 2].is_alpha
+    glued_before = i >= 2 and doc[i - 2].whitespace_ == "" and doc[i - 2].is_alpha
+    return glued_after or glued_before
+
+
+def _known_compound(word: str, dictionary) -> bool:
+    """True when an unknown word splits into two words the dictionary knows,
+    optionally with a linking -s-: a productive Dutch compound, which the
+    dictionary merely lacks. Hunspell "corrected" such compounds to a nearby
+    dictionary word on the (professionally edited) Kleijn texts: waterzuinige
+    -> waterzuiger, slanghaspels -> slanghaspel, verbindbare -> verbindbaren,
+    doorgelucht -> doorgelicht. A genuine typo (acomodatie) does not split."""
+    w = word.lower()
+    for i in range(3, len(w) - 2):
+        left, right = w[:i], w[i:]
+        if not dictionary.lookup(right):
+            continue
+        if dictionary.lookup(left):
+            return True
+        if left.endswith("s") and len(left) > 3 and dictionary.lookup(left[:-1]):
+            return True
+    return False
+
+
 def generate_hunspell_suggestions(
     analysis,
     existing_word_indices: set[tuple[int, int]] | None = None,
+    protected: frozenset[str] = frozenset(),
 ) -> list:
     """
     Check spelling of all tokens using Hunspell nl dictionary.
@@ -50,6 +85,8 @@ def generate_hunspell_suggestions(
         analysis: ReadabilityAnalysis object (sentences already parsed by spaCy)
         existing_word_indices: (sentence_idx, word_idx) pairs already covered by
             LLM spelling suggestions — skipped to avoid duplicates
+        protected: lower-cased words of terms the text defines or introduces
+            (SuggestionEngine._defined_terms); never "corrected"
 
     Returns:
         List of Suggestion objects.
@@ -61,6 +98,15 @@ def generate_hunspell_suggestions(
 
     dictionary = _get_dictionary()
     suggestions = []
+
+    # A writer does not repeat the same typo: an unknown word that occurs more
+    # than once is deliberate (a term, a foreign word). Kleijn: "mental map"
+    # -> "metal map", in a text about mental maps.
+    counts: dict[str, int] = {}
+    for sa in analysis.sentence_analyses:
+        for wf in sa.word_features:
+            key = wf.text.lower()
+            counts[key] = counts.get(key, 0) + 1
 
     for sent_idx, sent_analysis in enumerate(analysis.sentence_analyses):
         sent_text = sent_analysis.doc.text
@@ -82,6 +128,18 @@ def generate_hunspell_suggestions(
                 continue
 
             if dictionary.lookup(word):
+                continue
+            if word.lower() in protected:
+                logger.debug("Hunspell: skipping '%s', a term the text defines", word)
+                continue
+            if counts.get(word.lower(), 0) > 1:
+                logger.debug("Hunspell: skipping '%s', repeated in the text", word)
+                continue
+            if _bracketed_word_part(wf.token):
+                logger.debug("Hunspell: skipping '%s', a bracketed word part", word)
+                continue
+            if _known_compound(word, dictionary):
+                logger.debug("Hunspell: skipping '%s', a compound of known words", word)
                 continue
 
             # Guard against spylls' pathological blow-up on long compounds

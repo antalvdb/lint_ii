@@ -328,6 +328,10 @@ class SuggestionEngine:
         # How the analysed text addresses its reader: "u", "je" or None (neither
         # or both). Set per analysis in generate_suggestions; see _address_form.
         self._address: str | None = None
+        # Words of terms the text defines or introduces; protected from word
+        # swaps, rewrites and spelling "corrections". Set per analysis (see
+        # _defined_terms); also set by identify_triggers for direct callers.
+        self._protected_terms: frozenset[str] = frozenset()
 
     def identify_triggers(
         self,
@@ -343,6 +347,8 @@ class SuggestionEngine:
             List of SuggestionTrigger objects describing found issues
         """
         triggers: list[SuggestionTrigger] = []
+        self._protected_terms = self._defined_terms(
+            [sa.doc for sa in analysis.sentence_analyses])
 
         for sent_idx, sent_analysis in enumerate(analysis.sentence_analyses):
             sentence_text = sent_analysis.doc.text
@@ -462,6 +468,12 @@ class SuggestionEngine:
         for word_idx, wf in enumerate(sent_analysis.word_features):
             freq = wf.word_frequency
             if freq is not None and freq < threshold:
+                # A term the text itself defines or introduces is the point of
+                # the text, not a hard word to replace (see _defined_terms).
+                if wf.text.lower() in self._protected_terms:
+                    logger.debug("Skipping word_frequency trigger %r: a term the "
+                                 "text defines", wf.text)
+                    continue
                 # Word-family guard: skip when a morphological relative (lemma,
                 # separable-verb base) is frequent enough — the reader knows the
                 # family, so the rare surface form needs no replacement (and the
@@ -1259,6 +1271,23 @@ class SuggestionEngine:
                     "address (text uses '%s')", word, correction, self._address,
                 )
                 continue
+            if word.lower() in self._protected_terms:
+                logger.info("Spelling suggestion skipped: '%s' is a term the text "
+                            "defines", word)
+                continue
+            if self._adds_t_before_subject_je(
+                    analysis.sentence_analyses[sent_num], word_index, word, correction):
+                logger.info("Spelling suggestion skipped: '%s' -> '%s' before the "
+                            "subject je/jij (inversion drops the t)", word, correction)
+                continue
+            # A correction that creates an adjective agreement error the sentence
+            # did not have ("toegepast meteorologisch onderzoek" ->
+            # "toegepaste ...", Kleijn).
+            if (self._dehet_disagreement(suggested_text)
+                    and not self._dehet_disagreement(sent_text)):
+                logger.info("Spelling suggestion skipped: '%s' -> '%s' creates an "
+                            "agreement error", word, correction)
+                continue
 
             suggestions.append(Suggestion(
                 id=str(uuid.uuid4())[:8],
@@ -1275,6 +1304,35 @@ class SuggestionEngine:
             ))
 
         return suggestions
+
+    @staticmethod
+    def _adds_t_before_subject_je(sent_analysis, word_index: int, word: str,
+                                  correction: str) -> bool:
+        """True for a "correction" that adds -t to a verb directly followed by
+        the SUBJECT je/jij. In inversion the t drops ("houd je", "vind jij"), so
+        "houd je" -> "houdt je" introduces a dt-error (Kleijn T46; plausibly the
+        dt guidance of 48c8fa8 over-applied). A possessive je keeps the t
+        ("Vindt je moeder ..."), so that one is left alone."""
+        if correction.lower() != word.lower() + "t":
+            return False
+        try:
+            tok = sent_analysis.word_features[word_index].token
+        except (IndexError, AttributeError):
+            return False
+        if tok.i + 1 >= len(tok.doc):
+            return False
+        nxt = tok.doc[tok.i + 1]
+        if nxt.lower_ == "jij":
+            return True
+        if nxt.lower_ == "je":
+            # spaCy tags the je of "Vind je moeder ...?" as a subject pronoun,
+            # so a je directly followed by a noun or adjective counts as
+            # possessive too ("je moeder", "je hele leven").
+            after = tok.doc[nxt.i + 1] if nxt.i + 1 < len(tok.doc) else None
+            possessive = ("Poss=Yes" in str(nxt.morph) or "bez" in nxt.tag_
+                          or (after is not None and after.pos_ in ("NOUN", "ADJ")))
+            return not possessive
+        return False
 
     @staticmethod
     def _correction_plausible(word: str, correction: str, error_category: str) -> bool:
@@ -1359,6 +1417,8 @@ class SuggestionEngine:
 
         self._address = self._address_form(
             " ".join(s.doc.text for s in analysis.sentences))
+        self._protected_terms = self._defined_terms(
+            [sa.doc for sa in analysis.sentence_analyses])
 
         # Step 1a: LLM spelling/grammar pass (single call for entire document)
         t0 = time.perf_counter()
@@ -1374,7 +1434,8 @@ class SuggestionEngine:
             for s in spelling_suggestions
             if s.word_index is not None
         }
-        hunspell_suggestions = generate_hunspell_suggestions(analysis, llm_covered)
+        hunspell_suggestions = generate_hunspell_suggestions(
+            analysis, llm_covered, protected=self._protected_terms)
         spelling_suggestions = spelling_suggestions + hunspell_suggestions
         logger.info("TIMING spelling_hunspell=%.2fs (%d suggestions)", time.perf_counter() - t1, len(hunspell_suggestions))
 
@@ -1724,6 +1785,113 @@ class SuggestionEngine:
                 return raw
         return None
 
+    # Sentence shapes in which a text defines or introduces a term. The captured
+    # term is protected throughout the document: replacing it (Kleijn T46: "Die
+    # suiker in het bloed noemen we glucose", then every "glucose" swapped for
+    # "suiker", even "... noemen we suiker") or "correcting" it (intra -> infra
+    # in "(intra = binnen)") destroys what the text teaches.
+    _TERM = r"(?P<t>[^\W\d_][\w'-]*(?:\s+[^\W\d_][\w'-]*){0,2})"
+    _DEFINITION_PATTERNS = tuple(re.compile(p, re.IGNORECASE) for p in (
+        r"\bnoem(?:en|t)?\s+(?:we|je|men|ze|wij|jij)\s+(?:dat\s+|dit\s+|het\s+|de\s+|een\s+)?" + _TERM,
+        r"\bheet\s+(?:dat|dit|het)\s+(?:een\s+|de\s+|het\s+)?" + _TERM,
+        r"\bspr(?:eken|eekt)\s+(?:we|je|men|wij|(?:de|het)\s+\w+)\s+(?:dan\s+|ook\s+)?van\s+['‘\"“]?" + _TERM,
+        r"\bmet\s+de\s+term\s+['‘\"“]?" + _TERM,
+        r"\bzoge(?:naamd|noemd)e?\s+['‘\"“]?" + _TERM,
+        r"\(\s*" + _TERM + r"\s*=",
+        # Sentence-initial "X is een ...": one word only, and only with "een".
+        # A wider shape matched "In andere gevallen is het ...", "De beste
+        # plaats ervoor is de gang" and "Gelukkig is het ..." on the Kleijn texts.
+        r"^\W*(?:een\s+|de\s+|het\s+)?['‘\"“]?(?P<t>[^\W\d_][\w'-]*)['’\"”]?\s+(?:is|betekent)\s+een\b",
+    ))
+    # Function words a lazily captured term can end on; trimmed off.
+    _TERM_STOP = frozenset({"als", "en", "of", "in", "op", "van", "voor", "met", "bij",
+                            "dan", "dat", "die", "een", "de", "het", "is", "zijn", "wordt"})
+
+    @classmethod
+    def _defined_terms(cls, sentences: list) -> frozenset[str]:
+        """Lower-cased words (4+ letters) of every term the text defines or
+        introduces, e.g. {"glucose"} from "... noemen we glucose", {"intra"}
+        from "(intra = binnen)", {"programma", "eisen"} from "het zogenaamde
+        Programma van Eisen". Words rather than whole terms, because a rewrite
+        that keeps "migratie" but drops "intraregionale" has still lost the
+        term."""
+        from lint_ii.linguistic_data.nlp_model import NLP_MODEL
+        words: set[str] = set()
+        for sent in sentences:
+            doc = sent if hasattr(sent, "char_span") else NLP_MODEL(sent)
+            text = doc.text
+            for n, rx in enumerate(cls._DEFINITION_PATTERNS):
+                # The last, sentence-initial pattern takes nouns only
+                # ("Tegenwoordig is een ...", "Het beste is een ...").
+                pos = ("NOUN", "X") if n == len(cls._DEFINITION_PATTERNS) - 1 \
+                    else ("NOUN", "ADJ", "X")
+                for m in rx.finditer(text):
+                    span = doc.char_span(*m.span("t"), alignment_mode="expand")
+                    if span is None:
+                        continue
+                    # Only the naming words of the term. The "X is een ..." shape
+                    # also matches "Daarom is het ..." and "Henk Jansen is een
+                    # ..."; without this filter "daarom" and "voor" were
+                    # protected, and rewrites dropping them were rejected.
+                    words.update(
+                        t.text.lower().strip("'’\"”") for t in span
+                        if t.pos_ in pos and len(t.text) >= 4
+                        and t.text.lower() not in cls._TERM_STOP)
+        return frozenset(words)
+
+    def _drops_defined_term(self, original: str, suggested: str) -> str | None:
+        """Return a defined term (see _defined_terms) that the original sentence
+        contains and the rewrite no longer does, else None."""
+        if not self._protected_terms:
+            return None
+        before = {t.lower() for t in self._word_tokens(original)}
+        after = {t.lower() for t in self._word_tokens(suggested)}
+        for term in sorted(self._protected_terms & before):
+            if term not in after:
+                return term
+        return None
+
+    # Quoted passages: double or typographic quotes always; single quotes only
+    # at word boundaries, so apostrophes inside words (zo'n, auto's, 's zondags)
+    # are not taken for quotation marks.
+    _QUOTE_RES = (
+        re.compile(r'"([^"\n]+)"'),
+        re.compile(r"“([^”\n]+)”"),
+        re.compile(r"‘([^’\n]+)’"),
+        re.compile(r"(?<![\w'])'((?:[^'\n]|'(?=\w))+?)'(?!\w)"),
+    )
+
+    @classmethod
+    def _quoted_spans(cls, text: str) -> list[str]:
+        spans = []
+        for rx in cls._QUOTE_RES:
+            spans += [m.group(1).strip() for m in rx.finditer(text) if m.group(1).strip()]
+        return spans
+
+    @classmethod
+    def _alters_quotation(cls, original: str, suggested: str) -> str | None:
+        """Return a quoted passage of the original that the rewrite does not keep
+        word for word, else None. Quotations and quoted law text are someone
+        else's words: a rewrite may put them in a simpler frame but not reword
+        them (Kleijn: a Cals quote, a law article, 'speuren naar sporen').
+        The quote marks themselves may change; the words may not."""
+        flat = " ".join(suggested.split())
+        for span in cls._quoted_spans(original):
+            if " ".join(span.split()) not in flat:
+                return span
+        return None
+
+    def _preservation_failure(self, original: str, candidate: str) -> str | None:
+        """What a rewrite failed to preserve that is not ours to change: a
+        quotation (verbatim) or a term the text defines. None when both hold."""
+        quote = self._alters_quotation(original, candidate)
+        if quote:
+            return f"quotation not kept verbatim ({quote[:40]!r})"
+        term = self._drops_defined_term(original, candidate)
+        if term:
+            return f"dropped the defined term '{term}'"
+        return None
+
     # A definite/demonstrative/possessive determiner makes an -e adjective
     # correct, so its presence suppresses the de/het check below.
     _DEFINITE_DET_TAG_PREFIXES = ("LID|bep", "VNW|aanw", "VNW|bez")
@@ -2019,6 +2187,10 @@ class SuggestionEngine:
             logger.info("Connective discarded: introduced the other form of address, "
                         "sentences %d-%d", n, n1)
             return None
+        kept = self._preservation_failure(original_pair, suggested)
+        if kept:
+            logger.info("Connective discarded: %s, sentences %d-%d", kept, n, n1)
+            return None
 
         # Precompute exact metrics for composing with each full rewrite of the
         # FIRST sentence, so the UI scores that combination precisely rather than
@@ -2128,6 +2300,10 @@ class SuggestionEngine:
         if self._introduces_other_address(original, intro + " " + " ".join(items)):
             logger.info("Enumeration discarded: introduced the other form of address, "
                         "sentence %d", trigger.sentence_index)
+            return None
+        kept = self._preservation_failure(original, intro + " " + " ".join(items))
+        if kept:
+            logger.info("Enumeration discarded: %s, sentence %d", kept, trigger.sentence_index)
             return None
 
         plain = intro + "\n" + "\n".join(f"- {it}" for it in items)
@@ -2241,7 +2417,7 @@ class SuggestionEngine:
         address = self._introduces_other_address(sentence_text, candidate)
         if address:
             return f"introduced '{address}' in a text that uses '{self._address}'"
-        return None
+        return self._preservation_failure(sentence_text, candidate)
 
     # Sentence count each rewrite variant must have, where the variant's contract
     # fixes one. The prompt asks for it; this enforces it.
@@ -2512,6 +2688,10 @@ class SuggestionEngine:
             logger.info("Dropping word_frequency suggestion: it introduces the other "
                         "form of address (text uses '%s')", self._address)
             return None
+        kept = self._preservation_failure(original, suggested_text)
+        if kept:
+            logger.info("Dropping word_frequency suggestion: %s", kept)
+            return None
 
         return Suggestion(
             id=str(uuid.uuid4())[:8],
@@ -2684,6 +2864,12 @@ class SuggestionEngine:
                     "Trigger suggestion discarded: %s rewrite introduced '%s' in a text "
                     "that uses '%s'", trigger.type.value, address, self._address,
                 )
+                return None
+
+            kept = self._preservation_failure(trigger.sentence_text or "", suggested_text)
+            if kept:
+                logger.info("Trigger suggestion discarded: %s rewrite %s",
+                            trigger.type.value, kept)
                 return None
 
             new_metrics = self._analyze_suggested_text(suggested_text)
