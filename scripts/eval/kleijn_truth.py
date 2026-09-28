@@ -193,11 +193,12 @@ def score(truth: dict, results: dict) -> dict:
            "connectives": {"expected": 0, "found": 0, "relation_match": 0},
            "per_sentence": {}}
     for t, d in truth["texts"].items():
-        sugg = results.get(f"{t}_moei")
-        if sugg is None:
-            continue
         m = d["manipulation"]
-        if m == "word_frequency":
+        # With only the easy version run, there are no recall metrics, but its
+        # suggestions per sentence are still counted below.
+        sugg = results.get(f"{t}_moei")
+        has_moei = sugg is not None
+        if has_moei and m == "word_frequency":
             for c in d["changes"]:
                 for word in c["moei"]:
                     if word in c["mak"]:
@@ -212,7 +213,7 @@ def score(truth: dict, results: dict) -> dict:
                         s.get("sentence_index") == c["sentence"]
                         and word not in {bare(x) for x in (s.get("suggested_text") or "").split()}
                         for s in sugg)
-        elif m == "word_order":
+        elif has_moei and m == "word_order":
             reordered = [c for c in d["changes"] if c["kind"] == "reordered"]
             touched = {c["sentence"] for c in reordered}
             measurable = {c["sentence"] for c in reordered
@@ -225,7 +226,7 @@ def score(truth: dict, results: dict) -> dict:
             others = set(range(d["n_sentences_moei"])) - touched
             out[m]["other"] += len(others)
             out[m]["other_fired"] += len(others & fired)
-        elif m == "connectives":
+        elif has_moei and m == "connectives":
             for c in d["changes"]:
                 if c.get("kind") != "connective_removed" or not c["expected"]:
                     continue

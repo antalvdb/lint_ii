@@ -380,7 +380,10 @@ def main():
 
     ids = [item["id"] for item in corpus]
     if args.kleijn:
-        kleijn_report({i: results[i] for i in ids if i in results},
+        # Score the whole results file, not just this run's items: the easy and
+        # difficult versions are usually run separately, and the over-editing
+        # check compares them.
+        kleijn_report(results,
                       os.path.join(KLEIJN_DIR, "truth.json"))
         validity_report(results, ids, log_path, args.provider_log, args.retries)
         print(f"\nWrote {RESULTS} (private)")

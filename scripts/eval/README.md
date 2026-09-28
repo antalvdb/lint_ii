@@ -1248,8 +1248,24 @@ report different observation counts — check those before comparing rates.
      strong relations only; cf. item 1). Readers barely noticed the
      removals either (cloze −0.8 pts), so this is no evidence of a
      comprehension loss.
-   - Suggestions per sentence on the difficult versions: 0.69–0.82. The
-     easy versions' run (the over-editing check) is next.
+   - **Easy versions (second run, 60/60, VALIDITY CLEAN, 6 real retries).**
+     Suggestions per sentence, easy vs difficult: rarer words **0.63 vs
+     0.82** (23% fewer on the easy versions); word order 0.69 vs 0.73;
+     connectives 0.72 vs 0.69 (slightly MORE on the easy ones, consistent
+     with LiNT scoring the connective-rich versions as a little harder). An
+     "easy" version is only easier than its pair, mostly still level 2–3.
+   - **Editing intensity follows difficulty, the item-8 question:** across
+     all 120 versions, suggestions per sentence by LiNT level are 0.42 (level
+     1, 15 texts) / 0.61 (2, 56) / 0.96 (3, 35) / 1.29 (4, 14); Spearman
+     ρ = +0.87 with the LiNT score. The cap is not the cause (max 41 of 50).
+     Still open: whether the ~0.4 suggestions per sentence on level-1 text
+     are useful or over-editing. That needs the LLM-as-judge pass on those
+     texts' suggestions, which presence counts cannot show.
+   - Scorer fix found on the way: the report scored only the current run's
+     items, and the scorer skipped a text whose difficult version was
+     absent, so an easy-only run reported nothing. It now scores the whole
+     results file, and counts easy versions on their own
+     (`tests/test_kleijn_truth.py`, mutation-checked).
 
    **Pipeline finding on the way:** spaCy's sentence segmenter splits a few
    long sentences in the middle, e.g. "…is ten slotte geregeld | hoe lang

@@ -95,3 +95,13 @@ def test_scorer_counts_hits_against_the_truth():
     assert (wo["other"], wo["other_fired"]) == (1, 1)
     assert out["per_sentence"]["word_frequency/moei"] == [2, 2]
     assert out["per_sentence"]["word_frequency/mak"] == [0, 2]
+
+
+def test_easy_versions_alone_still_count_per_sentence():
+    """The easy and difficult versions are run separately; scoring a file that
+    holds only easy versions must still report their suggestions per sentence
+    (the over-editing check), with no recall counted."""
+    out = score(_truth(), {"T01_mak": [{"type": "max_sdl", "sentence_index": 0}],
+                           "T03_mak": []})
+    assert out["per_sentence"] == {"word_frequency/mak": [1, 2], "word_order/mak": [0, 3]}
+    assert out["word_frequency"]["hard_words"] == 0 and out["word_order"]["manipulated"] == 0
