@@ -419,6 +419,16 @@ def _cache_key(text: str, max_suggestions: int | None, fmt: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _cacheable(result: dict) -> bool:
+    """False for an INCOMPLETE result: one where provider calls failed and the
+    fail-open passes silently dropped the suggestions they would have made.
+    Caching it would serve the loss to every later request for the same text
+    until the next deploy (for the example texts: to every tester who clicks
+    them). Not caching it means the next request simply runs again."""
+    failures = (result.get("suggestions") or {}).get("provider_failures") or 0
+    return failures == 0
+
+
 def _cache_get(key: str) -> dict | None:
     with _result_cache_lock:
         result = _result_cache.get(key)
@@ -504,6 +514,14 @@ def _warm_example_cache() -> None:
             try:
                 t0 = time.perf_counter()
                 result = _run_analysis(text, None, "text")
+                if not _cacheable(result):
+                    # Left uncached: the first tester click re-runs it in full.
+                    logger.warning(
+                        "Cache warm for example %s incomplete (%s provider call(s) "
+                        "failed); not cached", name,
+                        result["suggestions"].get("provider_failures"),
+                    )
+                    return
                 _cache_put(key, result)
                 logger.info(
                     "Warmed example %s into result cache (%.1fs)",
@@ -528,10 +546,15 @@ def _store_job_result(job_id: str, cache_key: str, fut) -> None:
     try:
         result = fut.result()
         n = len(result.get("suggestions", {}).get("suggestions", []))
-        logger.info("Analysis job %s complete: %d suggestions", job_id, n)
+        failures = result.get("suggestions", {}).get("provider_failures") or 0
+        logger.info("Analysis job %s complete: %d suggestions%s", job_id, n,
+                    f" (INCOMPLETE: {failures} provider call(s) failed; not cached)"
+                    if failures else "")
         # Cache even if the requesting client cancelled meanwhile — the work is
         # done, so the next identical request might as well benefit from it.
-        _cache_put(cache_key, result)
+        # But never an incomplete result (see _cacheable).
+        if _cacheable(result):
+            _cache_put(cache_key, result)
         entry = {"status": "done", "result": result, "ts": time.time()}
     except Exception as e:
         logger.error("Analysis job %s failed: %s", job_id, e, exc_info=True)

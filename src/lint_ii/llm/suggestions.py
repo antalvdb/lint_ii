@@ -11,6 +11,7 @@ from typing import Any, TYPE_CHECKING
 import logging
 import os
 import re
+import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
@@ -200,6 +201,11 @@ class SuggestionsResult:
     triggers_found: int
     triggers_processed: int
     model: str
+    # Provider calls that failed (429, 5xx, timeout, refused connection) during
+    # this analysis. Every pass is fail-open, so a failure does not fail the
+    # analysis: it silently costs the suggestions that call would have made.
+    # Non-zero means the result is INCOMPLETE; the API must not cache it.
+    provider_failures: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         """Serialize result to dictionary."""
@@ -208,7 +214,44 @@ class SuggestionsResult:
             "triggers_found": self.triggers_found,
             "triggers_processed": self.triggers_processed,
             "model": self.model,
+            "provider_failures": self.provider_failures,
         }
+
+
+class _FailureCountingProvider:
+    """Wraps a provider for ONE analysis and counts its failed calls.
+
+    The passes catch provider exceptions themselves and carry on without that
+    call's suggestions (fail-open, by design: one 429 must not fail a whole
+    analysis). The cost was that nobody could tell a complete result from an
+    incomplete one, and the API cached incomplete results and served them to
+    every later request for the same text until the next deploy -- including
+    the example texts warmed at startup, and eval retries (which therefore
+    re-read the failed result instead of re-running; found 2026-09-27).
+
+    Counting here, at the one method every pass calls, catches every failure
+    kind (HTTP errors, watchdog timeouts, connection errors) without touching
+    the seven call sites. A fresh wrapper per analysis keeps the count
+    per-analysis although the underlying provider is shared by the service.
+    The lock is needed because one analysis runs its jobs on a thread pool.
+    """
+
+    def __init__(self, inner: LLMProvider):
+        self._inner = inner
+        self._lock = threading.Lock()
+        self.failures = 0
+
+    def complete(self, *args: Any, **kwargs: Any):
+        try:
+            return self._inner.complete(*args, **kwargs)
+        except Exception:
+            with self._lock:
+                self.failures += 1
+            raise
+
+    def __getattr__(self, name: str) -> Any:
+        # model_name, supports_concurrency, ... come from the real provider.
+        return getattr(self._inner, name)
 
 
 # Trigger types that rewrite a whole sentence. When consolidation is enabled,
@@ -1310,6 +1353,7 @@ class SuggestionEngine:
             raise ValueError(
                 "No LLM provider configured. Pass llm_config or set provider in __init__."
             )
+        provider = _FailureCountingProvider(provider)
 
         import time
 
@@ -1454,6 +1498,7 @@ class SuggestionEngine:
             triggers_found=len(triggers),
             triggers_processed=sum(len(j.triggers) for j in jobs),
             model=provider.model_name,
+            provider_failures=provider.failures,
         )
 
     @staticmethod
