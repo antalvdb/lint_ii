@@ -56,7 +56,7 @@ def test_a_retry_sends_a_fresh_text_not_a_cached_one(monkeypatch, tmp_path):
     monkeypatch.setattr(run_eval.time, "sleep", lambda s: None)
 
     sent = []
-    monkeypatch.setattr(run_eval, "_analyze", lambda text, fmt="text": (
+    monkeypatch.setattr(run_eval, "_analyze", lambda text, fmt="text", max_wait=180: (
         sent.append((text, fmt)) or {"suggestions": {"suggestions": []}}))
     errors = iter([(1, {"429": 1}), (0, {})])  # the first attempt hit a 429
     monkeypatch.setattr(run_eval, "_provider_errors_since", lambda path, offset: next(errors))
@@ -85,7 +85,7 @@ def test_the_services_own_count_drives_retries_without_a_log(monkeypatch, tmp_pa
     monkeypatch.setattr(run_eval.time, "sleep", lambda s: None)
 
     failures = iter([2, 0])  # the first attempt lost two provider calls
-    monkeypatch.setattr(run_eval, "_analyze", lambda text, fmt="text": {
+    monkeypatch.setattr(run_eval, "_analyze", lambda text, fmt="text", max_wait=180: {
         "suggestions": {"suggestions": [], "provider_failures": next(failures)}})
     monkeypatch.setattr(sys, "argv", [
         "run_eval.py", "--kleijn", "--owners-ok", "--retries", "2",

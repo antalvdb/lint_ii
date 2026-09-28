@@ -52,9 +52,9 @@ def _post(path, payload):
         return json.load(r)
 
 
-def _analyze(text, fmt="text"):
+def _analyze(text, fmt="text", max_wait=180):
     job = _post("/analyze", {"text": text, "max_suggestions": 50, "format": fmt})["job_id"]
-    for _ in range(90):
+    for _ in range(max(1, max_wait // 2)):
         with urllib.request.urlopen(BASE + "/analyze-result/" + job, timeout=30) as r:
             res = json.load(r)
         st = res.get("status")
@@ -63,7 +63,7 @@ def _analyze(text, fmt="text"):
         if st != "pending":
             return res["result"]
         time.sleep(2)
-    raise TimeoutError("analysis did not finish in time")
+    raise TimeoutError(f"analysis did not finish within {max_wait}s")
 
 
 # --------------------------------------------------------------------------
@@ -277,6 +277,9 @@ def main():
                     help="service log to scan for provider 429/5xx per item "
                          "(box side). If unreadable, validity is NOT checked "
                          "and the summary says so.")
+    ap.add_argument("--max-wait", type=int, default=None,
+                    help="seconds to wait for one analysis (default 180; 600 with "
+                         "--kleijn, whose 300-400-word texts can take longer)")
     ap.add_argument("--retries", type=int, default=2,
                     help="re-run an item up to N times if provider errors were "
                          "logged during it")
@@ -302,6 +305,7 @@ def main():
         fmt = "text"
     if args.limit:
         corpus = corpus[:args.limit]
+    max_wait = args.max_wait or (600 if args.kleijn else 180)
 
     results = {}
     if os.path.exists(RESULTS) and not args.fresh:
@@ -336,7 +340,7 @@ def main():
             offset = _log_size(log_path)
             reported = None  # the service's own count of failed provider calls
             try:
-                data = _analyze(text, fmt)
+                data = _analyze(text, fmt, max_wait)
                 rec["document_lint_score"] = data.get("document_lint_score")
                 rec["document_level"] = data.get("document_difficulty_level")
                 sugs = data.get("suggestions", {}).get("suggestions", [])

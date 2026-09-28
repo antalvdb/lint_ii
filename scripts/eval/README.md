@@ -1210,6 +1210,40 @@ report different observation counts — check those before comparing rates.
      Fixing it needs the engine to report "some calls failed" so the API
      skips caching; that is a backend change for the live service.
 
+   **First Kleijn run (2026-09-28, difficult versions, 60/60, VALIDITY
+   CLEAN; permission: Antal, no owner sign-off needed).** Run from the Mac
+   against the live site (`0724e39` runner, service `988fbff`); 4 items
+   needed a real retry. The wait per text is now 600 s in Kleijn mode (T11
+   needed more than the old 180 s).
+   - **Word order: the tool finds the manipulated sentences.** A sentence
+     rewrite fires on 70% of the 198 reordered sentences (75% of the 135
+     our parser measures as longer), against 37% of untouched sentences:
+     about twice the base rate.
+   - **Rarer words: mostly invisible by design, not missed.** Only 10% of
+     the 867 swapped-in words get a word suggestion (6% restore the easy
+     original; 36% disappear from some suggestion, rewrites included).
+     Tracing each word through the trigger: 53% are not rare enough (Zipf
+     ≥ 3.0; Kleijn's "rare" words have median Zipf 3.72, e.g. militairen,
+     gretig, onenigheid); 4% are skipped by the family guard; 27% have no
+     LiNT frequency at all. Of those 27%, 128 are function words from
+     multi-word swaps (in, de, is), which should not count as hard words,
+     so the scorer's denominator is inflated; 58 adverbs (evenmin,
+     normaliter, wederom) and 38 verbs (instapte, slinken) are not scored
+     by LiNT-II; only 2 are unknown words. **Of the words that DO trigger,
+     71% get a suggestion (90/127).** Why some ordinary verbs get no
+     LiNT-II frequency is worth a look, but it concerns the LiNT scoring
+     itself (item 5 territory: validate against the reference first).
+   - **Connectives: the pass sees the spots but declines.** 63 of the 68
+     target spots are candidates for the pass (4 pairs cross a paragraph,
+     1 fails the length/opener filter), yet it proposed a merge at only 2.
+     In these 20 texts it made 10 connective suggestions in all, 8 of them
+     elsewhere. That is the pass's designed conservatism (default GEEN,
+     strong relations only; cf. item 1). Readers barely noticed the
+     removals either (cloze −0.8 pts), so this is no evidence of a
+     comprehension loss.
+   - Suggestions per sentence on the difficult versions: 0.69–0.82. The
+     easy versions' run (the over-editing check) is next.
+
    **Pipeline finding on the way:** spaCy's sentence segmenter splits a few
    long sentences in the middle, e.g. "…is ten slotte geregeld | hoe lang
    een uitkering mag duren." This happens in 0.4% of the easy and 0.7% of
