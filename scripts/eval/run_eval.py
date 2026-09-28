@@ -240,11 +240,12 @@ def validity_report(results, ids, log_path, provider_log, retries):
     scored = [results[i] for i in ids if results.get(i) and not results[i].get("error")]
     dirty = [i for i in ids if results.get(i) and results[i].get("provider_errors")]
     retried = sum(1 for r in scored if (r.get("attempts") or 1) > 1)
+    unchecked = [r for r in scored if not r.get("validity_source")]
     print()
-    if log_path is None:
-        print("VALIDITY: NOT CHECKED — provider log unreadable "
-              f"({provider_log}). Provider 429/5xx failures are invisible "
-              "to the API and would silently read as false negatives.")
+    if unchecked and log_path is None:
+        print(f"VALIDITY: NOT CHECKED for {len(unchecked)} item(s) — the service "
+              f"reported no provider_failures and the log is unreadable ({provider_log}). "
+              "Provider failures would silently read as false negatives.")
     elif dirty:
         print(f"VALIDITY: CONTAMINATED — {len(dirty)} item(s) still saw provider "
               f"errors after {retries} retries: {', '.join(dirty)}")
@@ -333,11 +334,13 @@ def main():
             # since the retry was added did this).
             text = item["text"] + f"\n\nTestref {nonce}-{attempt}."
             offset = _log_size(log_path)
+            reported = None  # the service's own count of failed provider calls
             try:
                 data = _analyze(text, fmt)
                 rec["document_lint_score"] = data.get("document_lint_score")
                 rec["document_level"] = data.get("document_difficulty_level")
                 sugs = data.get("suggestions", {}).get("suggestions", [])
+                reported = data.get("suggestions", {}).get("provider_failures")
                 # drop suggestions on the cache-busting nonce block
                 sugs = [s for s in sugs if "Testref" not in (s.get("original_text") or "")]
                 rec["produced"] = [_slim(s) for s in sugs]
@@ -345,7 +348,16 @@ def main():
                 rec["error"] = None
             except Exception as e:
                 rec["produced"], rec["types"], rec["error"] = [], [], str(e)
-            n_err, by_status = _provider_errors_since(log_path, offset)
+            if reported is not None:
+                # Exact for THIS analysis (33b57bf), and readable from any
+                # machine: a run from the Mac cannot see the box's log.
+                n_err = int(reported)
+                by_status = {"provider_failures": n_err} if n_err else {}
+                rec["validity_source"] = "response"
+            else:
+                # Older service without the field: scan its log, if readable.
+                n_err, by_status = _provider_errors_since(log_path, offset)
+                rec["validity_source"] = "log" if log_path else None
             rec["provider_errors"] = by_status
             rec["attempts"] = attempt
             if n_err == 0 or attempt > args.retries:

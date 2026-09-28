@@ -71,3 +71,30 @@ def test_a_retry_sends_a_fresh_text_not_a_cached_one(monkeypatch, tmp_path):
     rec = json.loads((tmp_path / "results.json").read_text())["results"]["T01_moei"]
     assert rec["attempts"] == 2 and rec["provider_errors"] == {}
     assert "text" not in rec  # the Kleijn texts never enter the results file
+
+
+def test_the_services_own_count_drives_retries_without_a_log(monkeypatch, tmp_path, capsys):
+    """A run from the Mac cannot read the box's log. The service reports
+    suggestions.provider_failures itself (33b57bf); that alone must trigger the
+    retry and make the item count as checked."""
+    kdir = tmp_path / "kleijn"
+    (kdir / "texts").mkdir(parents=True)
+    (kdir / "texts" / "T01_moei.txt").write_text("### Titel\n\nDe trein was laat.", encoding="utf-8")
+    (kdir / "truth.json").write_text(json.dumps({"texts": {}}), encoding="utf-8")
+    monkeypatch.setattr(run_eval, "KLEIJN_DIR", str(kdir))
+    monkeypatch.setattr(run_eval.time, "sleep", lambda s: None)
+
+    failures = iter([2, 0])  # the first attempt lost two provider calls
+    monkeypatch.setattr(run_eval, "_analyze", lambda text, fmt="text": {
+        "suggestions": {"suggestions": [], "provider_failures": next(failures)}})
+    monkeypatch.setattr(sys, "argv", [
+        "run_eval.py", "--kleijn", "--owners-ok", "--retries", "2",
+        "--results", str(tmp_path / "results.json"),
+        "--provider-log", str(tmp_path / "no-such.log")])
+    run_eval.main()
+
+    rec = json.loads((tmp_path / "results.json").read_text())["results"]["T01_moei"]
+    assert rec["attempts"] == 2 and rec["provider_errors"] == {}
+    assert rec["validity_source"] == "response"
+    out = capsys.readouterr().out
+    assert "retrying" in out and "VALIDITY: CLEAN" in out and "NOT CHECKED" not in out
