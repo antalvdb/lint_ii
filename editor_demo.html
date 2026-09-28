@@ -207,6 +207,7 @@
         #status.success { background: #DCFFE7; color: #2a5c38; }
         #status.error   { background: #ffdfdf; color: #f74d4d; font-weight: bold; }
         #status.busy    { background: #f0f0e8; color: #525347; }
+        #status.warning { background: #fff3d6; color: #7a5600; }
 
         .spinner {
             display: inline-block;
@@ -723,12 +724,22 @@
                 // and act on (highlighted clusters), not the raw suggestion
                 // count, which collapses clustered alternatives into one span.
                 const count = rawCount > 0 ? viz.actionableSuggestionCount : 0
-                setStatus(
-                    count > 0
-                        ? `✓ Analyse klaar — ${count} suggesties gevonden.`
-                        : '✓ Analyse klaar — geen suggesties gevonden.',
-                    'success'
-                )
+                const found = count > 0
+                    ? `${count} suggesties gevonden`
+                    : 'geen suggesties gevonden'
+                // Provider calls that failed (rate limit, timeout) silently cost
+                // their suggestions, so "geen suggesties" could be wrong. The
+                // server does not cache such a result, so a second click
+                // really does re-run the analysis.
+                if ((data.suggestions?.provider_failures || 0) > 0) {
+                    setStatus(
+                        `Analyse klaar — ${found}, maar sommige suggesties konden niet ` +
+                        'worden opgehaald. Klik nog eens op Analyseren om het opnieuw te proberen.',
+                        'warning'
+                    )
+                } else {
+                    setStatus(`✓ Analyse klaar — ${found}.`, 'success')
+                }
             } catch (err) {
                 if (err.name === 'AbortError') return
                 _currentJobId = null
