@@ -209,6 +209,13 @@ to a 429 (08:10:20) and was recorded clean without it. All retries before
 `b6a1d0e` (per-attempt marker) were fake in this way. The headline is
 unaffected (enum-3 still produced its enumeration, so it stays a TP), but
 `results3d` under-reports enum-3 by one word swap.
+**Audit of every gated run since `b183810`** (box log, 2026-09-28; the Mac
+asked): `3c`, `2c`, `1c`, `3d` and both parts of `3e` were scanned for jobs
+served from cache, 429/5xx, timeouts/connection errors (which the old gate did
+not count) and engine `ERROR` lines (every call a fail-open pass gave up on).
+Everything is zero except `3d`: one 429, one cache hit, one failed call, all
+on enum-3. So no other published figure is affected, and no re-run is needed
+(enum-3 stays a TP either way).
 
 **Watch item — BEHOUDEND sometimes returns the sentence unchanged.** The example's
 BEHOUDEND changes one word, and occasionally the model reads "minimal" as "none".
