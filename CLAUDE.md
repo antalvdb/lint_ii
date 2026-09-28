@@ -141,6 +141,12 @@ pushing.** Don't assume the other side is idle.
   legitimate one, and a false alarm on a single-suggestion item costs the whole
   item. Turn it on deliberately, and re-read the calibration table in
   `scripts/eval/README.md` before changing its prompt.
+- `LINT_II_LEVEL1_REWRITES=0` / `LINT_II_ABSTRACT_NOUNS=0` (both OFF by
+  default, from the Kleijn judge passes, README item 8): a level-1 document
+  gets only word swaps and spelling (every rewrite type was net harmful there,
+  whatever the sentence's own level), and a sentence whose only trigger is
+  abstract_nouns gets no rewrite (61-80% harmful at every level). Set to 1 to
+  restore the old behaviour.
 - Other knobs: `LINT_II_LLM_TIMEOUT` (watchdog, 300s), `LINT_II_MAX_PENDING_JOBS`
   (flood guard, 12), `LINT_II_HETZNER_TEMPERATURE` (0.3),
   `LINT_II_MISTRAL_TEMPERATURE` (0.7 — the value every Mistral-era baseline in

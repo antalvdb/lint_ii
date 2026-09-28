@@ -93,3 +93,35 @@ class TestHunspellSkips:
         assert any(s.replacement_word == "accommodatie"
                    for s in hs.generate_hunspell_suggestions(a, set()))
         assert not hs.generate_hunspell_suggestions(a, set(), protected=frozenset({"acomodatie"}))
+
+
+class TestSteering:
+    from lint_ii.llm.suggestions import SuggestionTrigger as _T, SuggestionType as _Y
+
+    def _t(self, typ, idx):
+        return self._T(type=typ, sentence_index=idx, sentence_text="x",
+                       feature_value=0.0, threshold=0.0)
+
+    def test_level1_keeps_only_word_swaps(self, monkeypatch):
+        monkeypatch.delenv("LINT_II_LEVEL1_REWRITES", raising=False)
+        ts = [self._t(self._Y.MAX_SDL, 0), self._t(self._Y.WORD_FREQUENCY, 0),
+              self._t(self._Y.PASSIVE, 1)]
+        assert [t.type for t in E._steer_triggers(ts, 1)] == [self._Y.WORD_FREQUENCY]
+        assert len(E._steer_triggers(ts, 2)) == 3
+        monkeypatch.setenv("LINT_II_LEVEL1_REWRITES", "1")
+        assert len(E._steer_triggers(ts, 1)) == 3
+
+    def test_abstract_nouns_only_alongside_another_rewrite(self, monkeypatch):
+        monkeypatch.delenv("LINT_II_ABSTRACT_NOUNS", raising=False)
+        ts = [self._t(self._Y.ABSTRACT_NOUNS, 0), self._t(self._Y.WORD_FREQUENCY, 0),
+              self._t(self._Y.ABSTRACT_NOUNS, 1), self._t(self._Y.MAX_SDL, 1)]
+        kept = [(t.type, t.sentence_index) for t in E._steer_triggers(ts, 3)]
+        assert (self._Y.ABSTRACT_NOUNS, 0) not in kept
+        assert (self._Y.ABSTRACT_NOUNS, 1) in kept and len(kept) == 3
+        monkeypatch.setenv("LINT_II_ABSTRACT_NOUNS", "1")
+        assert len(E._steer_triggers(ts, 3)) == 4
+
+    def test_level1_prompt_is_not_self_contradictory(self):
+        out = E._append_level_constraint("P", 1)
+        assert "al LiNT-niveau 1" in out and "verlaagt" not in out
+        assert "naar niveau 2" in E._append_level_constraint("P", 3)

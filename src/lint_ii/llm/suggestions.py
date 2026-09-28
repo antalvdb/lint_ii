@@ -94,6 +94,30 @@ DEFAULT_THRESHOLDS: dict[str, float] = {
 }
 
 
+def _env_on(name: str) -> bool:
+    return os.environ.get(name, "0").lower() in ("1", "true", "yes", "on")
+
+
+def _level1_rewrites_enabled() -> bool:
+    """Whether a level-1 document still gets sentence rewrites, connectives and
+    enumerations (LINT_II_LEVEL1_REWRITES, off by default). The Kleijn judge
+    pass found every rewrite type net harmful on level-1 texts (max_sdl 22%
+    useful vs 53% harmful, connectives 0 vs 40%, abstract_nouns 5 vs 70%),
+    whatever the sentence's own level; the text is already easy, and a
+    rewrite mostly loses nuance or a link. Word swaps stayed useful (11 of 18
+    once the defined-term repeats are excluded), so they and spelling remain."""
+    return _env_on("LINT_II_LEVEL1_REWRITES")
+
+
+def _abstract_nouns_enabled() -> bool:
+    """Whether a sentence whose ONLY trigger is abstract_nouns still gets a
+    rewrite (LINT_II_ABSTRACT_NOUNS, off by default). Judged 61-80% harmful at
+    every level on the Kleijn texts: the rewrite swaps a precise abstract noun
+    for a vaguer or wrong paraphrase. Alongside another sentence-level trigger
+    it still joins that sentence's consolidated rewrite."""
+    return _env_on("LINT_II_ABSTRACT_NOUNS")
+
+
 def _enumerations_enabled() -> bool:
     """Whether the enumeration→bullet-list pass is on (LINT_II_ENUMERATIONS)."""
     return os.environ.get("LINT_II_ENUMERATIONS", "0").lower() in ("1", "true", "yes", "on")
@@ -996,6 +1020,22 @@ class SuggestionEngine:
         return result
 
     @staticmethod
+    def _steer_triggers(
+        triggers: list[SuggestionTrigger], document_level: int | None,
+    ) -> list[SuggestionTrigger]:
+        """Drop the trigger kinds the Kleijn judge passes found net harmful
+        (see _level1_rewrites_enabled and _abstract_nouns_enabled)."""
+        if document_level == 1 and not _level1_rewrites_enabled():
+            triggers = [t for t in triggers if t.type == SuggestionType.WORD_FREQUENCY]
+        if not _abstract_nouns_enabled():
+            others = {t.sentence_index for t in triggers
+                      if t.type in SENTENCE_LEVEL_TRIGGER_TYPES
+                      and t.type != SuggestionType.ABSTRACT_NOUNS}
+            triggers = [t for t in triggers
+                        if t.type != SuggestionType.ABSTRACT_NOUNS or t.sentence_index in others]
+        return triggers
+
+    @staticmethod
     def _plan_jobs(
         triggers: list[SuggestionTrigger],
         max_suggestions: int | None,
@@ -1442,7 +1482,8 @@ class SuggestionEngine:
         # Step 2: Find readability triggers and plan the LLM calls (jobs).
         # When consolidation is on, sentence-level triggers for a sentence are
         # merged into one rewrite job; otherwise each trigger is its own job.
-        triggers = self.identify_triggers(analysis)
+        document_level = getattr(analysis.lint, "level", None)
+        triggers = self._steer_triggers(self.identify_triggers(analysis), document_level)
         jobs = self._plan_jobs(triggers, max_suggestions, self._consolidate_sentence_rewrites)
         t2 = time.perf_counter()
         logger.info(
@@ -1456,7 +1497,6 @@ class SuggestionEngine:
         # concurrently; results are still collected in job order so the
         # downstream dedup/enumeration/connective passes see the identical
         # sequence the serial path would (parallelism changes only speed).
-        document_level = getattr(analysis.lint, "level", None)
 
         def _run_job(job) -> list[Suggestion]:
             t_job = time.perf_counter()
@@ -1544,7 +1584,9 @@ class SuggestionEngine:
         # Step 4: cross-sentence coherence pass (gated behind LINT_II_CONNECTIVES,
         # fail-open). Adds connective suggestions that span sentence pairs.
         t_conn = time.perf_counter()
-        connective_suggestions = self.generate_connective_suggestions(
+        connective_suggestions = [] if (
+            document_level == 1 and not _level1_rewrites_enabled()
+        ) else self.generate_connective_suggestions(
             analysis, provider, existing=suggestions,
         )
         if connective_suggestions:
@@ -1601,7 +1643,14 @@ class SuggestionEngine:
         """Append the 'aim one level lower, don't over-simplify' instruction."""
         if document_level is None:
             return system_prompt
-        target_level = max(1, document_level - 1)
+        if document_level <= 1:
+            # "Lower by one level, to level 1" contradicted itself on level-1 text.
+            return system_prompt + (
+                "\n\nDe tekst heeft al LiNT-niveau 1, het makkelijkste niveau (schaal 1–4). "
+                "Stel alleen een wijziging voor als die de tekst echt duidelijker maakt; "
+                "behoud de toon, stijl, betekenis en vakinhoud van de originele tekst."
+            )
+        target_level = document_level - 1
         return system_prompt + (
             f"\n\nDe tekst heeft LiNT-niveau {document_level} (schaal 1–4, waarbij 4 het moeilijkst is). "
             f"Streef naar een herschrijving die de complexiteit met één niveau verlaagt (naar niveau {target_level}). "
