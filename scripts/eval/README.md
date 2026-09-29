@@ -1404,6 +1404,13 @@ report different observation counts — check those before comparing rates.
        swapped ("Migreren binnen een regio noem je …", 2×), and fixed
        terms the detector cannot see (sociaal-economisch beleid,
        startkwalificatie, relatieve ligging, wederrechtelijk).
+     - **Decided 2026-09-29 (Antal):** (c) is built as a guard
+       (`_swap_agreement_failure`, branch `fix/swap-agreement-guard`): on
+       the 158 judged Kleijn swaps it catches 7 of the 10 grammar errors and
+       rejects none of the 81 useful or neutral ones. (a) and (b) are NOT
+       built: they are specific to this model's habits, and a different LLM
+       would not make these particular errors. (d) is not built: only
+       partly possible, and only partly effective.
      - Caveat: the same single judge as before, and not fully blind to
        items seen in the earlier passes; repeated items were judged
        identically (plons -> duik, mental map, blijven zitten).
