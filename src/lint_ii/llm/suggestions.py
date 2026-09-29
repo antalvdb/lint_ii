@@ -134,6 +134,10 @@ class SuggestionTrigger:
     # Additional context based on type
     word: str | None = None          # For word_frequency
     word_index: int | None = None    # Token index within sentence
+    # For word_frequency: the word's fine-grained (Alpino) tag and the two
+    # tokens before it, for the agreement guard (_swap_agreement_failure).
+    word_tag: str | None = None
+    word_left: tuple[str, ...] = ()
     context: str | None = None       # Surrounding text for context
     abstract_nouns: list[str] = field(default_factory=list)  # For abstract_nouns
     passives: list[str] = field(default_factory=list)         # For passive
@@ -556,6 +560,9 @@ class SuggestionEngine:
                         threshold=threshold,
                         word=wf.text,
                         word_index=word_idx,
+                        word_tag=getattr(wf.token, "tag_", None),
+                        word_left=tuple(t.text for t in wf.token.doc[max(0, wf.token.i - 2):wf.token.i])
+                        if getattr(wf, "token", None) is not None else (),
                         context=context,
                     )
                 )
@@ -1790,6 +1797,108 @@ class SuggestionEngine:
             FREQ_DATA.get(rep.lower(), zero_count_freq), original_freq
         )
 
+    _PREPOSITIONS = frozenset({
+        "aan", "achter", "bij", "binnen", "boven", "buiten", "door", "in", "met",
+        "na", "naar", "naast", "om", "onder", "op", "over", "rond", "tegen",
+        "tot", "tussen", "uit", "van", "voor", "zonder",
+    })
+    # Prefixes of verbs whose participle takes no ge- (bedacht, verzonnen,
+    # ontdekt). The second set can also be separable ("omgegaan" but
+    # "omringd", "overleden" but "overgegaan"), so a word starting with one of
+    # them without "ge" is left to the parser.
+    _NO_GE_PREFIXES = ("be", "ver", "ont", "her", "er", "ge", "mis")
+    _AMBIGUOUS_PREFIXES = ("over", "onder", "door", "achter", "vol", "weer", "voor", "om")
+    _ADJ_SUFFIXES = ("lijk", "ig", "isch", "baar", "loos", "zaam")
+
+    @classmethod
+    def _inserted_span(cls, original: str, suggested: str) -> tuple[list[str], list[str]]:
+        """The (removed, inserted) word spans between an original sentence and a
+        one-word-swap rewrite: what remains after stripping the common prefix
+        and suffix, compared case- and punctuation-insensitively."""
+        a = [t.lower() for t in cls._word_tokens(original) if t]
+        b = [t.lower() for t in cls._word_tokens(suggested) if t]
+        i = 0
+        while i < min(len(a), len(b)) and a[i] == b[i]:
+            i += 1
+        j = 0
+        while j < min(len(a), len(b)) - i and a[-1 - j] == b[-1 - j]:
+            j += 1
+        return a[i:len(a) - j], b[i:len(b) - j]
+
+    @classmethod
+    def _swap_agreement_failure(
+        cls, trigger: "SuggestionTrigger", replacement_word: str | None,
+        suggested_text: str | None = None,
+    ) -> str | None:
+        """Why a word swap cannot fit the slot of the word it replaces, else None.
+
+        The swap is a word in the original's grammatical position, so its form
+        must match that position. The Kleijn re-judge found six swaps that did
+        not ("een intens achtervolging", "een goed in balans systeem",
+        "waarnemings- en modellen", "wordt ... omgaat met", a noun list item
+        replaced by the adjective "opzettelijk"). Checked from the original
+        word's tag, so it does not depend on re-parsing the rewrite. Fails
+        open: no tag, no verdict."""
+        tag = trigger.word_tag or ""
+        rep = (replacement_word or "").strip()
+        if suggested_text and trigger.sentence_text:
+            # Judge the words the rewrite actually put in, not VERVANGING: the
+            # model often reports the base form ("vastpakken") while writing
+            # the right one ("vastgepakt"). If the swap also took in a
+            # neighbour ("maritieme sector" -> "scheepvaartsector"), the slot
+            # is no longer the original word's: no verdict.
+            removed, inserted = cls._inserted_span(trigger.sentence_text, suggested_text)
+            if removed != [(trigger.word or "").lower()] or not inserted:
+                return None
+            rep = " ".join(inserted)
+        if not tag or not rep:
+            return None
+        words = rep.lower().split()
+        last = words[-1]
+        left = [t.lower() for t in trigger.word_left]
+        # "waarnemings- en modelsystemen": the first conjunct borrows this
+        # word's head, so any swap strands it.
+        if len(left) == 2 and left[0].endswith("-") and left[1] in ("en", "of"):
+            return f"second part of the elided compound '{trigger.word_left[0]} {left[1]} ...'"
+        if "prenom" in tag:
+            if len(words) > 1 and cls._PREPOSITIONS & set(words[:-1] + [last]):
+                return f"a prepositional phrase ('{rep}') cannot stand before a noun"
+            if "met-e" in tag and not (last.endswith("e") or last.endswith("en")):
+                return f"'{rep}' lacks the -e that '{trigger.word}' has before its noun"
+            if "zonder" in tag and len(words) == 1 and last.endswith("e") \
+                    and not (trigger.word or "").lower().endswith("e"):
+                try:
+                    from lint_ii.llm.hunspell_spelling import _get_dictionary
+                    base = last[:-1]
+                    if len(base) > 2 and base[-1] == base[-2]:
+                        base = base[:-1]   # dikke -> dik
+                    if _get_dictionary().lookup(base):
+                        return f"'{rep}' adds an -e that '{trigger.word}' does not have"
+                except Exception:
+                    return None
+            return None
+        if tag.startswith("WW|vd"):
+            core = last
+            if core[-1:] not in ("t", "d", "n"):
+                return f"'{rep}' is not a participle, as '{trigger.word}' is"
+            if "ge" in core or core.startswith(cls._NO_GE_PREFIXES):
+                return None
+            if core.startswith(cls._AMBIGUOUS_PREFIXES) and suggested_text:
+                try:
+                    from lint_ii.linguistic_data.nlp_model import NLP_MODEL
+                    tok = next((t for t in NLP_MODEL(suggested_text)
+                                if t.text.lower() == core), None)
+                except Exception:
+                    return None
+                if tok is None or tok.tag_.startswith(("WW|vd", "ADJ")):
+                    return None
+            return f"'{rep}' is not a participle, as '{trigger.word}' is"
+        if tag.startswith("WW|inf") and not last.endswith("n"):
+            return f"'{rep}' is not an infinitive, as '{trigger.word}' is"
+        if tag.startswith("N|") and len(words) == 1 and last.endswith(cls._ADJ_SUFFIXES):
+            return f"'{rep}' reads as an adjective in place of the noun '{trigger.word}'"
+        return None
+
     # Split a rewrite into word tokens, stripping surrounding punctuation.
     _TOKEN_TRIM_RE = re.compile(r"^[^0-9A-Za-zÀ-ſ]+|[^0-9A-Za-zÀ-ſ]+$")
 
@@ -2755,6 +2864,12 @@ class SuggestionEngine:
             )
             return None
 
+        agreement = self._swap_agreement_failure(trigger, replacement_word, suggested_text)
+        if agreement:
+            logger.info("Dropping bundled word_frequency suggestion %r -> %r: %s",
+                        trigger.word, replacement_word, agreement)
+            return None
+
         if self._breaks_clause_conjunction(original, suggested_text):
             return None
         if self._alters_url(original, suggested_text):
@@ -2880,6 +2995,12 @@ class SuggestionEngine:
                     replacement_word, trigger.word, trigger.feature_value,
                 )
                 return None
+            if trigger.type == SuggestionType.WORD_FREQUENCY:
+                agreement = self._swap_agreement_failure(trigger, replacement_word, suggested_text)
+                if agreement:
+                    logger.info("Dropping word_frequency suggestion %r -> %r: %s",
+                                trigger.word, replacement_word, agreement)
+                    return None
 
             if not suggested_text:
                 logger.warning(
