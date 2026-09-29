@@ -1364,12 +1364,15 @@ report different observation counts — check those before comparing rates.
        block "Word je fiets …" -> "Wordt" in one probe, but on the Mac the
        guard lets that case through, so it probably came from a different
        parse in context.
-     - **Effect on sets 1–5 (DECISION PENDING, Antal):** each set has 7–8
-       `should_suggest` positives whose only phenomenon is abstract nouns.
-       They now get nothing BY DESIGN, so recall drops with no regression.
-       Level-1 documents hold only 3–8 of the 65 positives per set, so that
-       gate barely moves recall. Until those labels are decided, new
-       cross-set runs are not comparable to the table above.
+     - **Effect on sets 1–5 (DECIDED 2026-09-29, Antal: keep the labels).**
+       Each set has 7–8 `should_suggest` positives whose only phenomenon is
+       abstract nouns; since `8ae3352` they get nothing BY DESIGN and score
+       as misses. The labels stay as they are, and recall drops accordingly:
+       the first cross-set run at or after `eac1488` is the NEW BASELINE,
+       and the table must say so next to it. Do not compare its recall with
+       earlier rows without subtracting those items. Level-1 documents hold
+       only 3–8 of the 65 positives per set, so the level-1 gate barely
+       moves recall.
    - **Re-run at `eac1488` (2026-09-29, all 120 versions, VALIDITY CLEAN,
      `private/kleijn/results_eac1488.json`).** Totals per document level:
      level 1 207 -> 20 suggestions (word swaps and spelling only), level 2
