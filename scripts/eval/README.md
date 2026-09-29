@@ -1330,7 +1330,8 @@ report different observation counts — check those before comparing rates.
        t). In the whole Kleijn run the passes made 48 LLM and 17 Hunspell
        spelling suggestions on professionally edited text; nearly all of
        them are false alarms by construction.
-     - **Candidate levers, in addition to the level-1 ones (not built):**
+     - **Candidate levers, in addition to the level-1 ones (all built since,
+       see below):**
        keep quotations and quoted legal text out of rewrites; a guard for
        defined or official terms; Hunspell skips foreign words, Latin
        prefixes and bracketed compound parts; a dt probe on inversion
@@ -1338,6 +1339,37 @@ report different observation counts — check those before comparing rates.
      - Caveats: one strict judge (though consistent); I may recognise a few
        items despite the blinding; this is one corpus of school and
        information texts.
+   - **All levers built (2026-09-28, `959f188`, `8ae3352`, `eac1488`; live
+     at `eac1488`).** Deterministic guards: defined terms (including
+     "zogenaamde/zogenoemde X"), verbatim quotations, dt-inversion and de/het
+     in the spelling pass, and Hunspell skips (protected terms, repeated
+     words, bracketed parts, compounds of known words; 15 -> 2 on the Kleijn
+     texts). Steering, from a cross-tab of the 403 judged items: harm on easy
+     text follows the DOCUMENT level, not the sentence's own (level-3/4
+     sentences in level-1 documents: 69–89% harmful). So a level-1 document
+     gets only word swaps and spelling (`LINT_II_LEVEL1_REWRITES`), and a
+     sentence whose only trigger is abstract_nouns gets no rewrite
+     (`LINT_II_ABSTRACT_NOUNS`); both are off by default. Identical swaps
+     are linked (`group_ids`) with "Overal accepteren".
+     - Box probes: no -t after inverted je/jij ✓, "Hij vind" -> "vindt" 6/6 ✓,
+       level-1 texts make only the spelling call ✓, "restitutie" ×3 grouped ✓.
+       A MODEL limit, predating the branch: after three correct inverted
+       forms in one text, Qwen answers GEEN_FOUTEN and misses "Hij vind"
+       (4/4); it also misses "Mijn buurman antwoord" (-d stem, 3/3).
+     - **Known behaviour:** "Ongedaan maken" on a grouped swap undoes one
+       occurrence, not the group (Antal: fine as is).
+     - **Guard trade-offs (fail silent, never wrong):** Hunspell no longer
+       flags a misspelling that is repeated consistently in a document.
+       The dt guard treats je + noun/adjective as possessive; the box saw it
+       block "Word je fiets …" -> "Wordt" in one probe, but on the Mac the
+       guard lets that case through, so it probably came from a different
+       parse in context.
+     - **Effect on sets 1–5 (DECISION PENDING, Antal):** each set has 7–8
+       `should_suggest` positives whose only phenomenon is abstract nouns.
+       They now get nothing BY DESIGN, so recall drops with no regression.
+       Level-1 documents hold only 3–8 of the 65 positives per set, so that
+       gate barely moves recall. Until those labels are decided, new
+       cross-set runs are not comparable to the table above.
    - Scorer fix found on the way: the report scored only the current run's
      items, and the scorer skipped a text whose difficult version was
      absent, so an easy-only run reported nothing. It now scores the whole
