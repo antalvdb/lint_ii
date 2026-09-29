@@ -1370,6 +1370,40 @@ report different observation counts — check those before comparing rates.
        Level-1 documents hold only 3–8 of the 65 positives per set, so that
        gate barely moves recall. Until those labels are decided, new
        cross-set runs are not comparable to the table above.
+   - **Re-run at `eac1488` (2026-09-29, all 120 versions, VALIDITY CLEAN,
+     `private/kleijn/results_eac1488.json`).** Totals per document level:
+     level 1 207 -> 20 suggestions (word swaps and spelling only), level 2
+     970 -> 795, level 3 754 -> 646, level 4 367 -> 304; abstract_nouns
+     326 -> 0 across all levels, spelling 65 -> 41. **Re-judged on the SAME
+     sentences** as the two judge passes: a suggestion that came back
+     unchanged keeps its verdict, and the 157 new suggestions on the 112
+     sentences whose suggestion changed were judged blind (shuffled, no old
+     verdict or text shown; `rejudge_judgments_*.json`):
+     | | useful | neutral | harmful | gone |
+     |---|---|---|---|---|
+     | level 1, before (207) | 42 | 44 | 121 | – |
+     | level 1, after | 13 | 5 | **5** | 184 |
+     | level 3/4, before (196) | 77 (39%) | 23 (12%) | 96 (49%) | – |
+     | level 3/4, after (215 offered) | 84 (39%) | 38 (18%) | 93 (**43%**) | 26 |
+     - Level 1: harm almost gone (121 -> 5; 30 of the 121 were the glucose
+       repeats) at the cost of 29 useful edits; that trade was the intent.
+     - Level 3/4: the harm rate drops only 49% -> 43%. By type (offered
+       only): word swaps 52% -> 34% harmful, max_sdl 51% -> 26%, spelling
+       80% -> 40%, but **sentence_rewrite stays at 51%**. The rewrite path
+       is now the main source of harm.
+     - Recurring harm the guards do not yet see, all deterministic-checkable:
+       (a) a condition or possibility turned into a fact: "Wanneer/als/Is
+       het …" becomes a statement, "kunnen" or "heel goed mogelijk"
+       dropped (7 cases); (b) a sentence-initial link dropped: Maar, Ook,
+       al, daarom (5); (c) agreement broken by a swap: "een intens
+       achtervolging", "een goed in balans systeem", "waarnemings- en
+       modellen" (6); (d) the defining side of a definition sentence
+       swapped ("Migreren binnen een regio noem je …", 2×), and fixed
+       terms the detector cannot see (sociaal-economisch beleid,
+       startkwalificatie, relatieve ligging, wederrechtelijk).
+     - Caveat: the same single judge as before, and not fully blind to
+       items seen in the earlier passes; repeated items were judged
+       identically (plons -> duik, mental map, blijven zitten).
    - Scorer fix found on the way: the report scored only the current run's
      items, and the scorer skipped a text whose difficult version was
      absent, so an easy-only run reported nothing. It now scores the whole
