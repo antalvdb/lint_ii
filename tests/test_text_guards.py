@@ -374,3 +374,31 @@ class TestAbbreviationTokenTrigger:
 
         assert FREQ_DATA.get("pas", 0) >= 3.0 > FREQ_DATA.get("pas.", 0)
         assert FREQ_DATA.get("vol", 0) >= 3.0 > FREQ_DATA.get("vol.", 0)
+
+
+class TestReconcileRelation:
+    O = "Het regende hard. We gingen toch naar buiten."
+
+    @pytest.mark.parametrize("suggested, label, expected", [
+        # The two box cases: the inserted connective decides the label.
+        ("Het regende hard, maar we gingen naar buiten.", "reden", "tegenstelling"),
+        ("Het regende hard, dus we bleven binnen.", "reden", "gevolg"),
+        ("We bleven binnen, want het regende hard.", "reden", "reden"),
+        # Only a weak connective under a strong label: discard.
+        ("Het regende hard, en bovendien gingen we naar buiten.", "reden", None),
+        # No connective added: keep the model's label.
+        ("Het regende hard; we gingen toch naar buiten.", "tegenstelling", "tegenstelling"),
+        # Ambiguous connectives decide nothing: the model's label stands.
+        ("Het regende hard, terwijl we naar buiten gingen.", "tegenstelling", "tegenstelling"),
+        ("We bleven binnen; het regende namelijk hard.", "reden", "reden"),
+        # A connective already in the original does not count as added.
+        ("Het regende hard, we gingen toch naar buiten.", "gevolg", "gevolg"),
+    ])
+    def test_label_follows_the_inserted_connective(self, suggested, label, expected):
+        assert SuggestionEngine._reconcile_relation(self.O, suggested, label) == expected
+
+    def test_mixed_connectives_keep_a_matching_label(self):
+        o = "Het regende. We bleven binnen."
+        s = "Omdat het regende, bleven we daarom binnen."
+        assert SuggestionEngine._reconcile_relation(o, s, "gevolg") == "gevolg"
+        assert SuggestionEngine._reconcile_relation(o, s, "tegenstelling") is None

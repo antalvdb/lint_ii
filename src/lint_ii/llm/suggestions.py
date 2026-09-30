@@ -2377,6 +2377,46 @@ class SuggestionEngine:
     # weak "toelichting"/"opsomming" catch-alls are dropped (see the guard).
     _CONNECTIVE_STRONG_RELATIONS = frozenset({"reden", "gevolg", "tegenstelling"})
 
+    # The relation each unambiguous connective expresses. Ambiguous ones are
+    # ignored ("terwijl": time or contrast; "namelijk": reason or "namely",
+    # as in "een nieuw kantoor, namelijk aan de Dorpsstraat"). The rest of the
+    # lexicon (bovendien, daarna, ook ...) expresses none of the strong ones.
+    _AMBIGUOUS_CONNECTIVES = frozenset({"terwijl", "namelijk"})
+    _CONNECTIVE_RELATION = {
+        **dict.fromkeys(("want", "omdat", "doordat", "aangezien", "immers"), "reden"),
+        **dict.fromkeys(("zodat", "waardoor", "dus", "daarom", "hierdoor",
+                         "daardoor", "derhalve", "bijgevolg"), "gevolg"),
+        **dict.fromkeys(("maar", "echter", "toch", "hoewel", "desondanks",
+                         "niettemin", "integendeel"), "tegenstelling"),
+    }
+
+    @classmethod
+    def _reconcile_relation(cls, original: str, suggested: str, relation: str) -> str | None:
+        """The relation label that matches the connective the merge actually
+        inserted, or None when the text contradicts a strong relation.
+
+        The label is the model's RELATIE and reaches the user in the popup;
+        it does not always match the text (set 1 conn-5: a "maar" merge
+        labelled reden; set 5 conn-8: a "dus" merge labelled reden). The
+        inserted connective is what the reader sees, so it decides:
+        - one unambiguous strong relation inserted -> that label;
+        - only other lexicon connectives inserted (bovendien, daarna) -> None;
+        - nothing recognisable inserted, or a mix -> the model's label, when
+          the mix includes it."""
+        from collections import Counter
+        before, after = (Counter(t.lower() for t in cls._word_tokens(x) if t)
+                         for x in (original, suggested))
+        added = [w for w in after if w in cls._CONNECTIVE_LEXICON
+                 and w not in cls._AMBIGUOUS_CONNECTIVES and after[w] > before[w]]
+        if not added:
+            return relation
+        rels = {cls._CONNECTIVE_RELATION[w] for w in added if w in cls._CONNECTIVE_RELATION}
+        if not rels:
+            return None
+        if len(rels) == 1:
+            return rels.pop()
+        return relation if relation in rels else None
+
     def _build_connective_suggestion(
         self,
         analysis: "ReadabilityAnalysis",
@@ -2430,6 +2470,15 @@ class SuggestionEngine:
         if kept:
             logger.info("Connective discarded: %s, sentences %d-%d", kept, n, n1)
             return None
+        reconciled = self._reconcile_relation(original_pair, suggested, relation)
+        if reconciled is None:
+            logger.info("Connective discarded: the inserted connective expresses no "
+                        "%s relation, sentences %d-%d", relation, n, n1)
+            return None
+        if reconciled != relation:
+            logger.info("Connective relation relabelled %s -> %s to match the inserted "
+                        "connective, sentences %d-%d", relation, reconciled, n, n1)
+            relation = reconciled
 
         # Precompute exact metrics for composing with each full rewrite of the
         # FIRST sentence, so the UI scores that combination precisely rather than
@@ -2454,7 +2503,7 @@ class SuggestionEngine:
             explanation=block.get("UITLEG", ""),
             model=model,
             merges_sentences=[n, n1],
-            relation=(block.get("RELATIE") or None),
+            relation=relation,
             new_sentence_metrics=self._analyze_suggested_text(suggested),
             composed_metrics=composed,
         )
