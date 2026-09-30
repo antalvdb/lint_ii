@@ -333,6 +333,17 @@ Precision rose on every set (guard-aware 0.95–1.00). Reading the tool
 through these labels now needs the gates in mind; relabelling the level-1
 connective items is Antal's call, as the abstract-only labels were.
 
+**DECIDED (Antal, 2026-09-30): the level-1 gate stays, connectives
+included.** Shown eight of these items with the connective they used to get
+("…afgesloten, want er wordt…", "…scheepvaart, dus automobilisten…"),
+Antal prefers the two short sentences without a connective, both here and
+in the Kleijn cases. So on level-1 documents the missing connective is the
+intended outcome, not a miss. Options considered and declined: exempting
+connectives from the gate, or applying it only above a minimum text length.
+Side note from the review: two of the old suggestions carried the wrong
+internal relation label (set-1 conn-5 "maar" labelled reden, set-5 conn-8
+"dus" labelled reden); the connective itself was right.
+
 Recall is identical in both columns: the convention only changes how negatives
 are counted. **Guard violations are 0 on all five sets** — every `must_not` the
 corpora assert has held on the current engine.
