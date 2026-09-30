@@ -47,9 +47,9 @@
             document.addEventListener('DOMContentLoaded', () => { document.title = '[debug] ' + document.title })
         }
     </script>
-    <script src="./src/visualizer/vendor/vega.min.js"></script>
-    <script src="./src/visualizer/vendor/vega-lite.min.js"></script>
-    <script src="./src/visualizer/vendor/vega-embed.min.js"></script>
+    <script src="/src/visualizer/vendor/vega.min.js"></script>
+    <script src="/src/visualizer/vendor/vega-lite.min.js"></script>
+    <script src="/src/visualizer/vendor/vega-embed.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -472,7 +472,7 @@
         </footer>
     </div>
 
-    <script type="module" src="./src/visualizer/lint_ii_visualizer.js?v=75"></script>
+    <script type="module" src="/src/visualizer/lint_ii_visualizer.js?v=75"></script>
     <script type="module">
         const EXAMPLE_TEXTS = {
             1: `Jan gaat elke zaterdag naar de markt. Hij koopt er groenten en fruit. De markt is groot en druk. Er staan veel kraampjes met eten en drinken. Jan houdt van de kaasmarkt. De man achter de kraam geeft hem een stukje om te proeven. De kaas smaakt lekker. Jan koopt een groot stuk. Daarna drinkt hij een kop koffie bij het café op het plein. Hij fietst blij naar huis met zijn tas vol eten.`,
@@ -484,9 +484,15 @@
             4: `De aanbestedende dienst is gehouden de opdracht te gunnen aan de inschrijver die de economisch meest voordelige inschrijving heeft gedaan, beoordeeld op basis van de in de aanbestedingsdocumenten vermelde criteria. Ingevolge artikel 2.114 van de Aanbestedingswet 2012 dienen de gunningscriteria verband te houden met het voorwerp van de opdracht en mogen zij de aanbestedende dienst geen onbeperkte keuzevrijheid verlenen. Bij de vaststelling van de gunningscriteria dient de aanbestedende dienst ervoor zorg te dragen dat een daadwerkelijke mededinging mogelijk blijft en dat de criteria op objectieve en niet-discriminerende wijze worden toegepast.`,
         }
 
+        // A frozen analysis (/frozen/<16 digits>): a stored result, rendered
+        // without re-running the analysis. The page's assets use absolute
+        // paths so they resolve from this deeper URL too.
+        const FROZEN_ID = (location.pathname.match(/^\/frozen\/(\d{16})\/?$/) || [])[1] || null
+
         // Show the actually configured model (the provider is switchable
         // server-side between the on-machine MLX model and the Mistral API).
-        fetch('/health').then(r => r.json()).then(h => {
+        // A frozen analysis names the model that made it instead.
+        if (!FROZEN_ID) fetch('/health').then(r => r.json()).then(h => {
             if (h.model) document.getElementById('model-name').textContent = h.model
         }).catch(() => {})
 
@@ -754,6 +760,33 @@
                 setLoading(false)
             }
         })
+
+        if (FROZEN_ID) {
+            // Nothing to type or analyse: keep only the status line.
+            for (const sel of ['.input-header', '#text-input', '#input-panel .hint',
+                               '#example-buttons', '#analyze-btn', '#progress-container']) {
+                // Inline style, not the hidden attribute: the page CSS sets
+                // display on several of these, which overrides [hidden].
+                const el = document.querySelector(sel)
+                if (el) el.style.display = 'none'
+            }
+            setStatus('<span class="spinner"></span>Analyse wordt geladen…', 'busy')
+            fetch(`/frozen/${FROZEN_ID}/data`).then(async r => {
+                if (!r.ok) throw new Error(r.status === 404 ? 'Deze analyse bestaat niet.' : r.statusText)
+                const snap = await r.json()
+                const data = snap.result
+                if (snap.model) document.getElementById('model-name').textContent = snap.model
+                const rawCount = data.suggestions?.suggestions?.length ?? 0
+                viz.setAttribute('mode', rawCount > 0 ? 'editor' : 'analysis')
+                viz.data = data
+                viz.hidden = false
+                const count = rawCount > 0 ? viz.actionableSuggestionCount : 0
+                setStatus(count > 0 ? `${count} suggesties.` : 'Geen suggesties.', 'success')
+            }).catch(err => {
+                setStatus(`Fout: ${err.message}`, 'error')
+                console.error(err)
+            })
+        }
 
         window.addEventListener('pagehide', () => {
             if (_currentJobId) navigator.sendBeacon(`/analyze-cancel/${_currentJobId}`)

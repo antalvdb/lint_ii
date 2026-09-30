@@ -75,6 +75,17 @@ pushing.** Don't assume the other side is idle.
   then `sudo certbot renew --dry-run`. Real errors are in
   `/var/log/letsencrypt/` (root-only).
 
+- Frozen analyses (study items for human judges, see
+  `experiments/judges-2026/`): `scripts/freeze_analysis.py FILES` runs each
+  text through the local `/analyze` and stores the result in
+  `~/.local/share/lint-ii/frozen/<16-digit id>.json` (`LINT_II_FROZEN_DIR`),
+  served read-only at `/frozen/<id>`. The directory is outside the repo on
+  purpose, so deploys never touch it: **never delete it while a study runs**,
+  and back it up with the study data. There is no HTTP route that creates a
+  snapshot. The frontend is live code, not frozen: a UI change during a
+  study changes what judges see, so hold frontend deploys (or note them)
+  while one is running.
+
 ## Hard-won rules — do not undo
 
 - `/analyze` is job+poll (`POST` returns `job_id`, client polls

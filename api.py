@@ -845,6 +845,42 @@ async def _index_page():
     return _public_page("index.html")
 
 
+# ── Frozen analyses ───────────────────────────────────────────────────────
+# A frozen analysis is a stored /analyze result that the demo renders without
+# re-running anything: the same text, suggestions and scores for every
+# visitor, e.g. as an item in a study with human judges. Snapshots are made
+# on the box with scripts/freeze_analysis.py; there is deliberately no HTTP
+# route that creates one. The id is a random 16-digit number, which is the
+# only protection: anyone with the URL can view the analysis.
+_FROZEN_DIR = os.environ.get("LINT_II_FROZEN_DIR") or os.path.expanduser(
+    "~/.local/share/lint-ii/frozen")
+_FROZEN_ID_LEN = 16
+
+
+def _frozen_path(frozen_id: str) -> str | None:
+    """The snapshot file for a well-formed id that exists, else None. The id
+    is digits only, so it can never name a path outside _FROZEN_DIR."""
+    if len(frozen_id) != _FROZEN_ID_LEN or not frozen_id.isdigit():
+        return None
+    path = os.path.join(_FROZEN_DIR, f"{frozen_id}.json")
+    return path if os.path.isfile(path) else None
+
+
+@app.get("/frozen/{frozen_id}", include_in_schema=False)
+async def _frozen_page(frozen_id: str):
+    if _frozen_path(frozen_id) is None:
+        raise HTTPException(status_code=404, detail="Onbekende analyse")
+    return _public_page("editor_demo.html")
+
+
+@app.get("/frozen/{frozen_id}/data", include_in_schema=False)
+async def _frozen_data(frozen_id: str):
+    path = _frozen_path(frozen_id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Onbekende analyse")
+    return FileResponse(path, media_type="application/json")
+
+
 # Versioned JS/CSS assets and vendored Vega. StaticFiles refuses to serve paths
 # that escape this directory, so ../ traversal to the project root is blocked.
 app.mount(
