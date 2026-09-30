@@ -28,3 +28,9 @@ same suggestions and scores; nothing is re-run. On the box:
 
 This prints one URL per text and appends it to `index.tsv` in the snapshot
 directory. Freezing again gives new URLs; old ones keep working.
+Freezing again does not re-run the analysis, though: the service's result
+cache hands back the same suggestions under the new URL. For a genuinely new
+sample, pass `--max-suggestions N` with an N not used before for that text and
+at least its `triggers_found` (see the script's docstring). Text A was chosen
+this way as the best of 7 samples; B-E are first runs. The chosen URLs are
+recorded in `selected.tsv` in the snapshot directory, not in this public repo.

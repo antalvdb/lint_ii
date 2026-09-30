@@ -16,6 +16,13 @@ Every snapshot gets a new random 16-digit id: a frozen analysis never changes,
 so freezing a text again gives a new URL. The script prints one line per text
 (file, URL, LiNT score, level, number of suggestions) and appends the same to
 index.tsv in the snapshot directory, so no URL is lost.
+
+Freezing the same text again does NOT re-run it by default: the service caches
+analyses by text + commit + model, so the new snapshot repeats the old one. To
+get a fresh alternative, pass --max-suggestions with a value not used before for
+that text. The cache key includes it, and as long as it is at least the
+text's trigger count ("triggers_found" in the snapshot) the engine behaves
+exactly as with the default, so only the LLM's sampling differs.
 """
 
 import argparse
@@ -40,8 +47,11 @@ def _request(url: str, payload: dict | None = None, timeout: float = 30) -> dict
         return json.loads(resp.read())
 
 
-def analyze(base: str, text: str, max_wait: float) -> dict:
-    job = _request(f"{base}/analyze", {"text": text, "format": "text"})
+def analyze(base: str, text: str, max_wait: float, max_suggestions: int | None = None) -> dict:
+    payload = {"text": text, "format": "text"}
+    if max_suggestions is not None:
+        payload["max_suggestions"] = max_suggestions
+    job = _request(f"{base}/analyze", payload)
     deadline = time.monotonic() + max_wait
     while time.monotonic() < deadline:
         poll = _request(f"{base}/analyze-result/{job['job_id']}")
@@ -69,6 +79,8 @@ def main() -> int:
                     or os.path.expanduser("~/.local/share/lint-ii/frozen"),
                     help="snapshot directory; must be the one the service reads")
     ap.add_argument("--max-wait", type=float, default=600)
+    ap.add_argument("--max-suggestions", type=int, default=None,
+                    help="send an explicit cap; a new value bypasses the result cache (see above)")
     ap.add_argument("--allow-incomplete", action="store_true",
                     help="freeze even when some provider calls failed")
     args = ap.parse_args()
@@ -84,7 +96,7 @@ def main() -> int:
     for path in args.files:
         text = re.sub(r"(?m)^## ", "", open(path, encoding="utf-8").read()).strip()
         try:
-            result = analyze(args.base, text, args.max_wait)
+            result = analyze(args.base, text, args.max_wait, args.max_suggestions)
         except (urllib.error.URLError, RuntimeError, TimeoutError) as e:
             print(f"{path}\tFAILED: {e}", file=sys.stderr)
             failures += 1
