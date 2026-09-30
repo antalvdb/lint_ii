@@ -138,6 +138,14 @@ class SuggestionTrigger:
     # tokens before it, for the agreement guard (_swap_agreement_failure).
     word_tag: str | None = None
     word_left: tuple[str, ...] = ()
+    # True when a participle is used verbally (it, or the verb it is
+    # coordinated with, has a perfect or passive auxiliary). False for an
+    # adjectival participle after a copula ("Hij was gepikeerd").
+    word_verbal: bool = False
+    # True when a noun is clearly used as one: it has a determiner or is a
+    # list item, and is not a predicate (no copula dependent). Guards the
+    # noun rule against mis-tagged rare words ("die voorhanden is").
+    word_nominal: bool = False
     context: str | None = None       # Surrounding text for context
     abstract_nouns: list[str] = field(default_factory=list)  # For abstract_nouns
     passives: list[str] = field(default_factory=list)         # For passive
@@ -563,6 +571,8 @@ class SuggestionEngine:
                         word_tag=getattr(wf.token, "tag_", None),
                         word_left=tuple(t.text for t in wf.token.doc[max(0, wf.token.i - 2):wf.token.i])
                         if getattr(wf, "token", None) is not None else (),
+                        word_verbal=self._verbal_participle(getattr(wf, "token", None)),
+                        word_nominal=self._clearly_nominal(getattr(wf, "token", None)),
                         context=context,
                     )
                 )
@@ -1809,6 +1819,35 @@ class SuggestionEngine:
     _NO_GE_PREFIXES = ("be", "ver", "ont", "her", "er", "ge", "mis")
     _AMBIGUOUS_PREFIXES = ("over", "onder", "door", "achter", "vol", "weer", "voor", "om")
     _ADJ_SUFFIXES = ("lijk", "ig", "isch", "baar", "loos", "zaam")
+    _BARE_FORM_DETERMINERS = frozenset({"een", "geen", "elk", "ieder", "zo'n", "menig", "welk"})
+
+    @staticmethod
+    def _verbal_participle(token) -> bool:
+        """Whether a participle token is used as a verb: it has an aux or
+        aux:pass dependent ("is vertrokken", "werd verkocht"), directly or
+        through the verb it is coordinated with ("wordt gedacht over en
+        omgegaan met"). The tagger gives WW|vd to adjectival uses too ("Hij
+        was gepikeerd", with a cop dependent), and there any adjective fits."""
+        if token is None or not str(getattr(token, "tag_", "")).startswith("WW|vd"):
+            return False
+        seen = 0
+        while token is not None and seen < 5:
+            deps = {c.dep_ for c in token.children}
+            if "cop" in deps:
+                return False
+            if deps & {"aux", "aux:pass"}:
+                return True
+            if token.dep_ != "conj" or token.head is token:
+                return False
+            token, seen = token.head, seen + 1
+        return False
+
+    @staticmethod
+    def _clearly_nominal(token) -> bool:
+        if token is None:
+            return False
+        deps = {c.dep_ for c in token.children}
+        return "cop" not in deps and ("det" in deps or token.dep_ == "conj")
 
     @classmethod
     def _inserted_span(cls, original: str, suggested: str) -> tuple[list[str], list[str]]:
@@ -1865,8 +1904,17 @@ class SuggestionEngine:
                 return f"a prepositional phrase ('{rep}') cannot stand before a noun"
             if "met-e" in tag and not (last.endswith("e") or last.endswith("en")):
                 return f"'{rep}' lacks the -e that '{trigger.word}' has before its noun"
+            # Only when the original COULD have taken an -e: an -en form never
+            # does ("dat verworven geld" but "dat verdiende geld"), so there
+            # its bare form says nothing about the slot.
+            orig_low = (trigger.word or "").lower()
+            # And only after a determiner that demands the bare form (een/geen
+            # + a het-noun): after "het", "dat" or "de" the -e is required
+            # ("Het bruto product" -> "Het totale product" is right).
+            before = left[-1] if left else ""
             if "zonder" in tag and len(words) == 1 and last.endswith("e") \
-                    and not (trigger.word or "").lower().endswith("e"):
+                    and not orig_low.endswith(("e", "en")) \
+                    and before in cls._BARE_FORM_DETERMINERS:
                 try:
                     from lint_ii.llm.hunspell_spelling import _get_dictionary
                     base = last[:-1]
@@ -1878,6 +1926,10 @@ class SuggestionEngine:
                     return None
             return None
         if tag.startswith("WW|vd"):
+            if not trigger.word_verbal:
+                # An adjectival participle ("was gepikeerd" -> "boos"):
+                # any predicative adjective fits the slot.
+                return None
             core = last
             if core[-1:] not in ("t", "d", "n"):
                 return f"'{rep}' is not a participle, as '{trigger.word}' is"
@@ -1893,9 +1945,10 @@ class SuggestionEngine:
                 if tok is None or tok.tag_.startswith(("WW|vd", "ADJ")):
                     return None
             return f"'{rep}' is not a participle, as '{trigger.word}' is"
-        if tag.startswith("WW|inf") and not last.endswith("n"):
-            return f"'{rep}' is not an infinitive, as '{trigger.word}' is"
-        if tag.startswith("N|") and len(words) == 1 and last.endswith(cls._ADJ_SUFFIXES):
+        # No infinitive rule: on the Kleijn texts it fired only on rare words
+        # the tagger took for infinitives (rabiës, onverwijld).
+        if tag.startswith("N|") and trigger.word_nominal and len(words) == 1 \
+                and last.endswith(cls._ADJ_SUFFIXES):
             return f"'{rep}' reads as an adjective in place of the noun '{trigger.word}'"
         return None
 
