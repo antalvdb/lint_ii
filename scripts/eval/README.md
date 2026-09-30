@@ -297,6 +297,42 @@ scoring-convention section — and is the number that reflects the engine.
 | 4 | — | — | 0.90 / 0.92 | 0.90 / 0.94 (2026-08-11, `c60953d`) | **0.94** / 0.94 |
 | 5 | — | — | 0.94 / 0.95 | 0.95 / 0.94 (2026-08-06, `bb8783d`) | **0.98** / 0.94 |
 
+**NEW BASELINE, 2026-09-30 (`ab10abb`: judge-pass gates, agreement guard,
+no caching of incomplete results).** All five sets, `VALIDITY: CLEAN`, 0
+retries, 0 guard violations, 1.17M tokens. Legacy precision / recall, then
+guard-aware precision; files `results1d`, `2d`, `3f`, `4d`, `5g`:
+
+| Set | legacy P / R | guard-aware P | previous (legacy / GA P) |
+|-----|--------------|---------------|--------------------------|
+| 1 | 0.98 / 0.91 | **1.00** | 0.97 / 0.97, 1.00 |
+| 2 | 0.95 / 0.88 | **0.98** | 0.89 / 1.00, 0.94 |
+| 3 | 0.93 / 0.85 | **1.00** | 0.91 / 0.98, 0.97 |
+| 4 | 0.95 / 0.85 | **0.95** | 0.90 / 0.94, 0.94 |
+| 5 | 0.98 / 0.86 | **1.00** | 0.95 / 0.94, 0.98 |
+
+**Recall is not comparable with the rows above:** the gates remove by design
+what these labels still count as positives. Every miss, classified (43
+across the five sets):
+- **Level-1 gate, intended (20):** connective items (and set-3 multi-5)
+  whose two short sentences score level 1 on their own; level-1 documents
+  now get no connectives or rewrites. Kleijn judged those net harmful.
+- **Abstract-nouns gate, intended (8):** 3 abstract-only positives, plus 5
+  items that were previously hits only through an incidental abstract_nouns
+  rewrite, not their own phenomenon.
+- **Already missed before (7).**
+- **Sampling (7):** 4 swaps where Qwen returned the word unchanged (the
+  no-op drop rate is flat: ~16 per set before and now), 1 weaker swap
+  rejected by the band check, 2 connectives (set-1 conn-6, set-3 conn-5).
+- **Regression (1): the agreement guard rejected a good swap.** Set 5
+  wordfreq-6, "gepikeerd" → "boos": 'boos' is not a participle. Here
+  "gepikeerd" is used as an ADJECTIVE; the parser tags it WW|vd whatever
+  its use, so the participle rule should not apply to a predicative
+  participle after a copula. Not covered by the Kleijn check.
+
+Precision rose on every set (guard-aware 0.95–1.00). Reading the tool
+through these labels now needs the gates in mind; relabelling the level-1
+connective items is Antal's call, as the abstract-only labels were.
+
 Recall is identical in both columns: the convention only changes how negatives
 are counted. **Guard violations are 0 on all five sets** — every `must_not` the
 corpora assert has held on the current engine.
