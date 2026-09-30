@@ -34,3 +34,29 @@ sample, pass `--max-suggestions N` with an N not used before for that text and
 at least its `triggers_found` (see the script's docstring). Text A was chosen
 this way as the best of 7 samples; B-E are first runs. The chosen URLs are
 recorded in `selected.tsv` in the snapshot directory, not in this public repo.
+
+## Interaction logging and LimeSurvey embedding
+
+Everything a participant does on a frozen page is logged: popup opened and
+closed, accept / ignore / undo (also "overal accepteren"), edits (start,
+applied text, cancelled), copying the result, switching to the statistics
+view, every suggestion status change with the document score, and the full
+editor state (all statuses + the edited text) whenever the page is hidden or
+closed. Events are batched in the browser and appended to
+`logs/<id>.jsonl` in the snapshot directory, one JSON object per line, each
+with the participant code, a random per-tab session id, the browser's time
+(`t`), the server's receive time and the user agent. IP addresses are not
+stored. The page tells participants that interactions are recorded.
+
+The participant code comes from the page URL, `?p=<code>`, and is stored
+verbatim on every line. Embed each item in LimeSurvey as an iframe in the
+question text and let LimeSurvey fill the code in:
+
+    <iframe src="https://lint-ii.valkuil.net/frozen/<id>?p={TOKEN}"
+            width="100%" height="900" allow="clipboard-write"></iframe>
+
+`{TOKEN}` needs a survey with a participant list; in an anonymous survey use
+`{SAVEDID}` (the response id) instead. Check in a test response that the code
+arrives. `allow="clipboard-write"` lets the page's copy button use the
+clipboard inside the iframe. A page opened without `?p=` still logs, with
+`participant: null`.

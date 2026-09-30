@@ -472,7 +472,7 @@
         </footer>
     </div>
 
-    <script type="module" src="/src/visualizer/lint_ii_visualizer.js?v=75"></script>
+    <script type="module" src="/src/visualizer/lint_ii_visualizer.js?v=76"></script>
     <script type="module">
         const EXAMPLE_TEXTS = {
             1: `Jan gaat elke zaterdag naar de markt. Hij koopt er groenten en fruit. De markt is groot en druk. Er staan veel kraampjes met eten en drinken. Jan houdt van de kaasmarkt. De man achter de kraam geeft hem een stukje om te proeven. De kaas smaakt lekker. Jan koopt een groot stuk. Daarna drinkt hij een kop koffie bij het café op het plein. Hij fietst blij naar huis met zijn tas vol eten.`,
@@ -761,7 +761,74 @@
             }
         })
 
+        // Interaction log of a frozen analysis: a study item whose participants
+        // have consented to having their interactions recorded. Everything
+        // the page reports as a 'lint-interaction' event (popup opened,
+        // accept/ignore/undo, edits, copy, view switch, status changes) is
+        // batched and posted to /frozen/<id>/log, plus the full editor state
+        // whenever the page is hidden. The participant code comes from the
+        // URL (?p=...); the session id is random, per tab.
+        function startInteractionLog(frozenId) {
+            const participant = new URLSearchParams(location.search).get('p')
+            let session = null
+            try { session = sessionStorage.getItem('lint-ii-session') } catch {}
+            if (!session) {
+                session = crypto.randomUUID ? crypto.randomUUID()
+                    : Date.now().toString(36) + Math.random().toString(36).slice(2)
+                try { sessionStorage.setItem('lint-ii-session', session) } catch {}
+            }
+            const url = `/frozen/${frozenId}/log`
+            let queue = []
+            let seq = 0
+            const payload = events => JSON.stringify({ participant, session, events })
+
+            function flush(beacon = false) {
+                if (!queue.length) return
+                const events = queue
+                queue = []
+                // sendBeacon survives the page closing; fetch reports failures.
+                if (beacon && navigator.sendBeacon && navigator.sendBeacon(url, payload(events))) return
+                fetch(url, { method: 'POST', body: payload(events), keepalive: true })
+                    .then(r => { if (r.status >= 500 || r.status === 429) throw new Error(r.status) })
+                    // Network trouble or a server hiccup: keep the events for
+                    // the next flush rather than lose them.
+                    .catch(() => { queue = events.concat(queue) })
+            }
+
+            function record(action, detail = {}) {
+                queue.push({ seq: seq++, t: new Date().toISOString(), action, ...detail })
+                if (queue.length >= 50) flush()
+            }
+
+            function snapshot(action) {
+                try { record(action, viz.interactionSnapshot?.() || {}) } catch (err) { console.error(err) }
+            }
+
+            document.addEventListener('lint-interaction', e => {
+                const { action, ...detail } = e.detail || {}
+                if (action) record(action, detail)
+            })
+            document.addEventListener('visibilitychange', () => {
+                record('visibility', { state: document.visibilityState })
+                if (document.visibilityState === 'hidden') {
+                    snapshot('snapshot')
+                    flush(true)
+                }
+            })
+            window.addEventListener('pagehide', () => {
+                snapshot('page_close')
+                flush(true)
+            })
+            setInterval(flush, 5000)
+            record('page_open', {
+                viewport: `${window.innerWidth}x${window.innerHeight}`,
+                touch: navigator.maxTouchPoints > 0,
+            })
+            return { record, flush }
+        }
+
         if (FROZEN_ID) {
+            const interactionLog = startInteractionLog(FROZEN_ID)
             // Nothing to type or analyse: keep only the status line.
             for (const sel of ['.input-header', '#text-input', '#input-panel .hint',
                                '#example-buttons', '#analyze-btn', '#progress-container']) {
@@ -781,8 +848,11 @@
                 viz.data = data
                 viz.hidden = false
                 const count = rawCount > 0 ? viz.actionableSuggestionCount : 0
-                setStatus(count > 0 ? `${count} suggesties.` : 'Geen suggesties.', 'success')
+                setStatus((count > 0 ? `${count} suggesties.` : 'Geen suggesties.')
+                    + ' Uw interacties met deze pagina worden vastgelegd voor het onderzoek.', 'success')
+                interactionLog.record('loaded', { suggestions: rawCount, actionable: count })
             }).catch(err => {
+                interactionLog.record('load_error', { error: String(err.message) })
                 setStatus(`Fout: ${err.message}`, 'error')
                 console.error(err)
             })

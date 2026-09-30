@@ -3,7 +3,7 @@ import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
 import { EditorController } from './core/editor.js?v=37'
-import { SuggestionPopupController } from './core/suggestion-popup.js?v=22'
+import { SuggestionPopupController } from './core/suggestion-popup.js?v=23'
 import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './core/word-diff.js?v=2'
 
 // Suggestion types whose suggested_text is a complete, self-punctuated rewrite
@@ -182,6 +182,7 @@ export class LintIIVisualizer extends HTMLElement {
     setupEventListeners() {
         // View toggle buttons
         this.shadowRoot.querySelector('.view-toggle').addEventListener('click', (e) => {
+            this._logInteraction('view', { view: e.target.dataset.targetView })
             this.switchView(e.target.dataset.targetView)
         })
 
@@ -453,12 +454,35 @@ export class LintIIVisualizer extends HTMLElement {
         }
     }
 
+    /**
+     * Announce a user interaction as a 'lint-interaction' event (the popup
+     * controller emits the same kind). The component only reports; a page
+     * that records interactions listens on document and does the logging.
+     */
+    _logInteraction(action, detail = {}) {
+        this.dispatchEvent(new CustomEvent('lint-interaction', {
+            bubbles: true, composed: true, detail: { action, ...detail },
+        }))
+    }
+
+    /** The editor's full state, for a log snapshot: every suggestion's status,
+     *  the edited text and the document score as the user now sees it. */
+    interactionSnapshot() {
+        const editor = this._editorController
+        if (!editor) return null
+        const states = {}
+        for (const s of this._data?.suggestions?.suggestions || []) states[s.id] = editor.getState(s.id)
+        const score = editor.computeUpdatedScore()
+        return { states, edited_text: editor.getEditedText(), doc_score: score.score, doc_level: score.level }
+    }
+
     setupEditorEventListeners() {
         // Copy result button
         const copyBtn = this.shadowRoot.querySelector('.copy-result-btn')
         if (copyBtn) {
             copyBtn.addEventListener('click', async () => {
                 const editedText = this._editorController.getEditedText()
+                this._logInteraction('copy_result', { text: editedText })
                 try {
                     // Requires HTTPS or localhost
                     await navigator.clipboard.writeText(editedText)
@@ -481,6 +505,9 @@ export class LintIIVisualizer extends HTMLElement {
             })
         }
 
+        // Baseline for the state diff in the interaction log.
+        this._loggedStates = this.interactionSnapshot()?.states || {}
+
         // Baseline for score-delta flashes; reflects the current accepted
         // state so a re-render doesn't produce a spurious flash.
         const base = this._editorController.computeUpdatedScore()
@@ -492,6 +519,21 @@ export class LintIIVisualizer extends HTMLElement {
             // The score request and the popup refresh run whatever happens in
             // the UI updates: an exception there (seen on iPhone, WebKit) used
             // to skip both, leaving an edit's popup on "score wordt berekend".
+            // Log every status that changed, found by diffing all states:
+            // an accept auto-ignores its alternatives without an event of
+            // their own, and an arriving score re-announces a suggestion
+            // whose status did not change at all.
+            try {
+                const snap = this.interactionSnapshot()
+                for (const [id, status] of Object.entries(snap.states)) {
+                    if (this._loggedStates?.[id] === status) continue
+                    this._logInteraction('state', { suggestion_id: id, status,
+                        cause: e.detail.suggestionId, doc_score: snap.doc_score, doc_level: snap.doc_level })
+                }
+                this._loggedStates = snap.states
+            } catch (err) {
+                console.error('interaction log failed:', err)
+            }
             try {
                 this._onEditorChange(e)
             } catch (err) {

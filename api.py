@@ -26,6 +26,7 @@ Usage (Linux/Ollama):
 import sys
 import os
 import asyncio
+import datetime
 import hashlib
 import json
 import logging
@@ -42,7 +43,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -879,6 +880,75 @@ async def _frozen_data(frozen_id: str):
     if path is None:
         raise HTTPException(status_code=404, detail="Onbekende analyse")
     return FileResponse(path, media_type="application/json")
+
+
+# Interaction log of a frozen analysis: what study participants do on the
+# page (popup opened, suggestion accepted/ignored/undone/edited, text copied,
+# page hidden with the final state). Participants have consented to this. The
+# page batches events and posts them here; each event becomes one JSON line in
+# <frozen dir>/logs/<id>.jsonl, stamped with the server's receive time and
+# the participant code from the page URL (?p=..., filled in by the survey that
+# embeds the page) plus a random per-tab session id. IP addresses are not
+# stored.
+_FROZEN_LOG_MAX_BODY = 256 * 1024
+_FROZEN_LOG_MAX_EVENTS = 500
+_FROZEN_LOG_MAX_EVENT = 32 * 1024
+_frozen_log_lock = threading.Lock()
+
+
+def _log_token(value, limit: int = 128) -> str | None:
+    """A participant code or session id as sent. The participant code comes
+    from the survey that embeds the page (e.g. LimeSurvey's {TOKEN} in the
+    iframe URL) and is what links a log to the survey answers, so it is never
+    dropped for its characters: only control characters go (they could break
+    a TSV export) and it is clipped to a sane length."""
+    if not isinstance(value, str):
+        return None
+    value = "".join(c for c in value if c.isprintable()).strip()[:limit]
+    return value or None
+
+
+@app.post("/frozen/{frozen_id}/log", include_in_schema=False, status_code=204)
+async def _frozen_log(frozen_id: str, request: Request):
+    if _frozen_path(frozen_id) is None:
+        raise HTTPException(status_code=404, detail="Onbekende analyse")
+    body = await request.body()
+    if len(body) > _FROZEN_LOG_MAX_BODY:
+        raise HTTPException(status_code=413, detail="Te groot")
+    # Parsed by hand: navigator.sendBeacon posts text/plain, not JSON.
+    try:
+        payload = json.loads(body)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Geen JSON")
+    events = payload.get("events") if isinstance(payload, dict) else None
+    if not isinstance(events, list) or len(events) > _FROZEN_LOG_MAX_EVENTS:
+        raise HTTPException(status_code=400, detail="Geen geldige events")
+    received = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="milliseconds")
+    envelope = {
+        "received": received,
+        "frozen_id": frozen_id,
+        "participant": _log_token(payload.get("participant")),
+        "session": _log_token(payload.get("session")),
+        "user_agent": (request.headers.get("user-agent") or "")[:300],
+    }
+    lines = []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        line = json.dumps({**event, **envelope}, ensure_ascii=False)
+        if len(line) > _FROZEN_LOG_MAX_EVENT:
+            line = json.dumps({**envelope, "action": event.get("action"),
+                               "seq": event.get("seq"), "truncated": True}, ensure_ascii=False)
+        lines.append(line + "\n")
+    if lines:
+        log_dir = os.path.join(_FROZEN_DIR, "logs")
+        with _frozen_log_lock:
+            os.makedirs(log_dir, exist_ok=True)
+            with open(os.path.join(log_dir, f"{frozen_id}.jsonl"), "a", encoding="utf-8") as f:
+                f.writelines(lines)
+                f.flush()
+                os.fsync(f.fileno())
+    return Response(status_code=204)
 
 
 # Versioned JS/CSS assets and vendored Vega. StaticFiles refuses to serve paths

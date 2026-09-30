@@ -81,8 +81,35 @@ export class SuggestionPopupController {
         // popup is pinned meanwhile: hover-out, other words and outside clicks
         // must not throw away what they typed.
         this._editing = null
+        // What the open popup shows, so hover jitter over one span logs one
+        // popup_open rather than dozens (see _log).
+        this._openKey = null
 
         this._setupEventListeners()
+    }
+
+    /**
+     * Announce a user interaction as a composed, bubbling 'lint-interaction'
+     * event. The component only reports; a page that must record interactions
+     * (a frozen study analysis) listens on document and does the logging.
+     */
+    _log(action, detail = {}) {
+        this._popup.dispatchEvent(new CustomEvent('lint-interaction', {
+            bubbles: true, composed: true, detail: { action, ...detail },
+        }))
+    }
+
+    _logOpen(kind, suggestionIds) {
+        const key = `${kind}:${suggestionIds.join(',')}`
+        if (key === this._openKey) return
+        this._openKey = key
+        this._log('popup_open', { kind, suggestion_ids: suggestionIds })
+    }
+
+    _logClose() {
+        if (!this._openKey) return
+        this._openKey = null
+        this._log('popup_close')
     }
 
     _setupEventListeners() {
@@ -99,6 +126,7 @@ export class SuggestionPopupController {
             // detaching the clicked button; the page's outside-click handler
             // would then see a target outside the popup and close it, so the
             // click must not reach it.
+            const variant = button.dataset.variantKey || null
             if (button.classList.contains('edit-btn')) {
                 e.stopPropagation()
                 this._startEditing(suggestionId, button.dataset.variantKey)
@@ -110,23 +138,29 @@ export class SuggestionPopupController {
                 return
             }
             if (button.classList.contains('edit-cancel-btn')) {
+                this._log('edit_cancel', { suggestion_id: suggestionId })
                 this._stopEditing()
                 this._hideNow()
                 return
             }
 
             if (button.classList.contains('group-accept-btn')) {
+                this._log('click_accept_all', { suggestion_id: suggestionId,
+                    group_ids: this._editor.groupPending(suggestionId) })
                 this._editor.acceptGroup(suggestionId)
                 this._hideNow()
                 return
             }
             if (button.classList.contains('group-ignore-btn')) {
+                this._log('click_ignore_all', { suggestion_id: suggestionId,
+                    group_ids: this._editor.groupPending(suggestionId) })
                 this._editor.ignoreGroup(suggestionId)
                 this._hideNow()
                 return
             }
 
             if (button.classList.contains('accept-btn')) {
+                this._log('click_accept', { suggestion_id: suggestionId, variant })
                 // A variant rewrite: pick the chosen alternative, then accept.
                 if (button.dataset.variantKey) {
                     this._editor.chooseVariant(suggestionId, button.dataset.variantKey)
@@ -134,9 +168,11 @@ export class SuggestionPopupController {
                 this._editor.accept(suggestionId)
                 this._hideNow()
             } else if (button.classList.contains('ignore-btn')) {
+                this._log('click_ignore', { suggestion_id: suggestionId })
                 this._editor.ignore(suggestionId)
                 this._hideNow()
             } else if (button.classList.contains('reset-btn')) {
+                this._log('click_undo', { suggestion_id: suggestionId })
                 this._editor.reset(suggestionId)
                 this._hideNow()
             }
@@ -147,6 +183,7 @@ export class SuggestionPopupController {
             if (!this._editing || !e.target.classList?.contains('edit-text')) return
             if (e.key === 'Escape') {
                 e.preventDefault()
+                this._log('edit_cancel', { suggestion_id: this._editing.suggestionId, via: 'escape' })
                 this._stopEditing()
                 this._hideNow()
             } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -181,6 +218,7 @@ export class SuggestionPopupController {
 
         this._popup.innerHTML = this._renderClusterContent(suggestions)
         this._popup.classList.add('visible')
+        this._logOpen('cluster', suggestions.map(s => s.id))
 
         // Position below the target element
         const rect = targetElement.getBoundingClientRect()
@@ -213,6 +251,7 @@ export class SuggestionPopupController {
 
         this._currentClusterId = null
         this._popup.innerHTML = this._renderConnectiveSuggestion(suggestion)
+        this._logOpen('connective', [suggestionId])
         this._popup.classList.add('visible')
 
         const rect = targetElement.getBoundingClientRect()
@@ -292,6 +331,7 @@ export class SuggestionPopupController {
         this._currentClusterId = null
         this._popup.innerHTML = this._renderEnumerationSuggestion(suggestion)
         this._popup.classList.add('visible')
+        this._logOpen('enumeration', [suggestionId])
 
         const rect = targetElement.getBoundingClientRect()
         this._popup.style.top = `${rect.bottom + 8}px`
@@ -375,6 +415,7 @@ export class SuggestionPopupController {
             if (!this._popup.dataset.hovered) {
                 this._popup.classList.remove('visible')
                 this._currentClusterId = null
+                this._logClose()
             }
         }, 300)
     }
@@ -395,6 +436,7 @@ export class SuggestionPopupController {
         delete this._popup.dataset.hovered
         this._popup.classList.remove('visible')
         this._currentClusterId = null
+        this._logClose()
     }
 
     /**
@@ -407,6 +449,7 @@ export class SuggestionPopupController {
         const v = variantKey ? (s.variants || []).find(x => x.key === variantKey) : null
         const startText = v ? v.suggested_text : s.suggested_text
         this._cancelHide()
+        this._log('edit_start', { suggestion_id: suggestionId, variant: variantKey || null, text: startText })
         this._editing = { suggestionId }
         this._popup.innerHTML = this._renderEditPanel(s, startText)
         const ta = this._popup.querySelector('.edit-text')
@@ -420,6 +463,7 @@ export class SuggestionPopupController {
         const ta = this._popup.querySelector('.edit-text')
         if (!ta) return
         if (!this._editor.setEditedText(suggestionId, ta.value)) {
+            this._log('edit_rejected', { suggestion_id: suggestionId, text: ta.value })
             const msg = this._popup.querySelector('.edit-message')
             if (msg) {
                 msg.textContent = ta.value.trim()
@@ -429,6 +473,7 @@ export class SuggestionPopupController {
             }
             return
         }
+        this._log('edit_apply', { suggestion_id: suggestionId, text: ta.value })
         this._stopEditing()
         this._editor.accept(suggestionId)
         this._showResult(suggestionId)

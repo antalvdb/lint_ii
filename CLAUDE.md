@@ -85,6 +85,13 @@ pushing.** Don't assume the other side is idle.
   snapshot. The frontend is live code, not frozen: a UI change during a
   study changes what judges see, so hold frontend deploys (or note them)
   while one is running.
+  Interactions on a frozen page are LOGGED (participants consent via the
+  survey): the page posts popup opens, accept/ignore/undo, edits, copy and a
+  full-state snapshot on page hide to `POST /frozen/<id>/log`, which appends
+  JSON lines to `<frozen dir>/logs/<id>.jsonl`. The participant code is the
+  page's `?p=` query parameter (the embedding LimeSurvey fills it, e.g.
+  `?p={TOKEN}`) and is stored verbatim on every line; it links the log to
+  the survey answers. These logs are study DATA: back them up, never delete.
 
 ## Hard-won rules — do not undo
 
