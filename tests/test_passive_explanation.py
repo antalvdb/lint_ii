@@ -59,3 +59,17 @@ def test_a_rewrite_that_really_adds_a_passive_keeps_its_explanation():
 
 def test_equal_passive_counts_leave_the_explanation_alone():
     assert fix(PASSIVE, PASSIVE.replace("vier", "zes"), "Passief gemaakt.") == "Passief gemaakt."
+
+
+def test_the_second_reported_case_is_corrected():
+    original = (
+        "De herleidbaarheid naar het oorspronkelijk IPv4-adres wordt beperkt door "
+        "de laatste twee groepjes getallen van elk IP-adres te verwijderen."
+    )
+    rewrite = (
+        "We beperken de herleidbaarheid naar het oorspronkelijk IPv4-adres. "
+        "Hiervoor verwijderen we de laatste twee groepjes getallen van elk IP-adres."
+    )
+    assert fix(
+        original, rewrite, "Passief gemaakt en zin opgesplitst voor betere leesbaarheid.",
+    ) == "Actief gemaakt en zin opgesplitst voor betere leesbaarheid."
