@@ -1649,6 +1649,50 @@ class SuggestionEngine:
             provider_failures=provider.failures,
         )
 
+    # An explanation that names passive as the RESULT of the rewrite: "Passief
+    # gemaakt", "passieve zin gemaakt", "omgezet naar passief". Qwen writes these
+    # for rewrites that removed a passive (Jenia, 2026-10: "werd ... ervaren" ->
+    # "was", explained as "Passief gemaakt"), the inverse of what happened.
+    _PASSIVE_AS_RESULT = (
+        (re.compile(r"\bpassie(?:f|ve\s+(?:vorm|zin(?:nen)?|constructies?))\s+gemaakt\b",
+                    re.IGNORECASE), "actief gemaakt"),
+        (re.compile(r"\bnaar\s+(?:de\s+)?passie(?:f|ve\s+vorm)\b", re.IGNORECASE),
+         "naar actief"),
+    )
+
+    @staticmethod
+    def _passive_count(text: str) -> int | None:
+        try:
+            from lint_ii.core.readability_analysis import ReadabilityAnalysis
+            analysis = ReadabilityAnalysis.from_text(text)
+            return sum(len(s.passives) for s in analysis.sentences)
+        except Exception as e:
+            logger.warning("Failed to count passives: %s", e)
+            return None
+
+    @classmethod
+    def _fix_passive_explanation(cls, original: str, rewritten: str, explanation: str) -> str:
+        """Correct an explanation that says the rewrite made the sentence passive
+        when the rewrite in fact has fewer passives than the original. The claim
+        is only rewritten, never trusted: when the rewrite really added a passive,
+        or the counts cannot be compared, the explanation stays as it is."""
+        if not explanation or not any(p.search(explanation) for p, _ in cls._PASSIVE_AS_RESULT):
+            return explanation
+        before = cls._passive_count(original)
+        after = cls._passive_count(rewritten)
+        if before is None or after is None or after >= before:
+            return explanation
+        fixed = explanation
+        for pattern, replacement in cls._PASSIVE_AS_RESULT:
+            fixed = pattern.sub(
+                lambda m: replacement[0].upper() + replacement[1:] if m.group(0)[0].isupper()
+                else replacement,
+                fixed,
+            )
+        logger.info("Explanation corrected: %r -> %r (passives %d -> %d)",
+                    explanation, fixed, before, after)
+        return fixed
+
     @staticmethod
     def _analyze_suggested_text(text: str) -> dict[str, Any] | None:
         """Analyze the suggested text to precompute sentence metrics for score recomputation."""
@@ -2835,7 +2879,8 @@ class SuggestionEngine:
                 sentence_index=job.sentence_index,
                 original_text=sentence_text,
                 suggested_text=primary["suggested_text"],
-                explanation=explanation,
+                explanation=self._fix_passive_explanation(
+                    sentence_text or "", primary["suggested_text"], explanation),
                 model=response.model,
                 component_types=list(dict.fromkeys(t.type.value for t in job.triggers)),
                 new_sentence_metrics=primary["new_sentence_metrics"],
@@ -3173,6 +3218,8 @@ class SuggestionEngine:
                 return None
 
             new_metrics = self._analyze_suggested_text(suggested_text)
+            explanation = self._fix_passive_explanation(
+                trigger.sentence_text or "", suggested_text, explanation)
 
             return Suggestion(
                 id=str(uuid.uuid4())[:8],
