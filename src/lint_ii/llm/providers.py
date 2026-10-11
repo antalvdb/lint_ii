@@ -263,9 +263,39 @@ class OpenAIProvider(LLMProvider):
 
 
 class AnthropicProvider(LLMProvider):
-    """Anthropic API provider (Claude Haiku default)."""
+    """Anthropic API (Claude), selected with LINT_PROVIDER=anthropic; the key
+    comes from ANTHROPIC_API_KEY (set in the systemd EnvironmentFile, never in
+    the repo). Like Mistral and Hetzner it sends tester text to an external
+    service. Model via LINT_II_LLM_MODEL (or LINT_MODEL), default Claude Haiku
+    5.5: about 40x cheaper than Opus 5.5 ($0.10/$0.50 per M tokens against
+    $4/$20), and the job, short sentence rewrites, needs no more capability
+    than the Qwen and Mistral models it is compared with. claude-sonnet-5-5 is
+    the step up if Haiku falls short.
 
-    DEFAULT_MODEL = "claude-3-5-haiku-latest"
+    Three differences from the other cloud providers matter for comparisons:
+
+    - Thinking is always on for the current models and cannot be disabled, so
+      its depth is set with an effort level instead (LINT_II_ANTHROPIC_EFFORT,
+      default low: these are short, latency-bound rewrites). Thinking tokens
+      count against max_tokens, which is why every call gets
+      THINKING_HEADROOM extra tokens on top of what the caller asked for:
+      without it the 512-token default is spent thinking and the answer comes
+      back empty, the same failure Qwen had with thinking on. Output is billed
+      as used, so the headroom costs nothing unless it is needed.
+    - There is no temperature: the current models reject sampling parameters.
+      Results are therefore not temperature-matched with Qwen (0.3) or Mistral
+      (0.7) runs; say so when comparing.
+    - A request the model declines ends with stop_reason "refusal". That is
+      raised, and counted as a provider failure like any other error. On the
+      models that support it (Opus, Sonnet; not Haiku) the request is first
+      re-run on another model inside the same call ("fallbacks": "default"),
+      and LLMResponse.model reports the model that actually answered.
+      LINT_II_ANTHROPIC_FALLBACKS=0/1 overrides the per-model default.
+    """
+
+    DEFAULT_MODEL = "claude-haiku-5-5"
+    THINKING_HEADROOM = 8000
+    FALLBACK_BETA = "server-side-fallback-2026-07-01"
     supports_concurrency = True
 
     def __init__(
@@ -273,20 +303,16 @@ class AnthropicProvider(LLMProvider):
         api_key: str | None = None,
         model: str | None = None,
     ):
-        """
-        Initialize Anthropic provider.
-
-        Args:
-            api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env var)
-            model: Model to use (defaults to claude-3-5-haiku-latest)
-        """
         self._api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
         if not self._api_key:
             raise ValueError(
                 "Anthropic API key required. Pass api_key or set ANTHROPIC_API_KEY env var."
             )
-
-        self._model = model or self.DEFAULT_MODEL
+        self._model = model or os.environ.get("LINT_II_LLM_MODEL", self.DEFAULT_MODEL)
+        self._effort = os.environ.get("LINT_II_ANTHROPIC_EFFORT", "low")
+        # Server-side fallback exists for Opus and Sonnet, not for Haiku.
+        default_fallbacks = "0" if self._model.startswith("claude-haiku") else "1"
+        self._fallbacks = os.environ.get("LINT_II_ANTHROPIC_FALLBACKS", default_fallbacks) != "0"
         self._client = None
 
     @property
@@ -302,34 +328,58 @@ class AnthropicProvider(LLMProvider):
                 raise ImportError(
                     "Anthropic package not installed. Install with: pip install lint_ii[llm]"
                 )
-            self._client = Anthropic(api_key=self._api_key)
+            # Same per-request ceiling as Hetzner; the SDK retries 429/5xx
+            # with backoff, a little more patiently than its default of 2.
+            self._client = Anthropic(api_key=self._api_key, timeout=120.0, max_retries=4)
         return self._client
 
     def _complete(
         self, prompt: str, system_prompt: str | None = None, max_tokens: int | None = None
     ) -> LLMResponse:
-        """Generate completion using Anthropic API."""
+        """Generate completion using the Anthropic Messages API."""
         client = self._get_client()
 
         kwargs: dict[str, Any] = {
             "model": self._model,
-            "max_tokens": max_tokens or self.DEFAULT_MAX_TOKENS,
+            "max_tokens": (max_tokens or self.DEFAULT_MAX_TOKENS) + self.THINKING_HEADROOM,
             "messages": [{"role": "user", "content": prompt}],
+            "output_config": {"effort": self._effort},
+            # The system prompts repeat across every call of an analysis, so
+            # cache the prefix. A prefix below the model's minimum is simply
+            # not cached, at no cost.
+            "cache_control": {"type": "ephemeral"},
         }
         if system_prompt:
             kwargs["system"] = system_prompt
 
-        response = client.messages.create(**kwargs)
+        if self._fallbacks:
+            response = client.beta.messages.create(
+                betas=[self.FALLBACK_BETA], fallbacks="default", **kwargs
+            )
+        else:
+            response = client.messages.create(**kwargs)
 
+        if response.stop_reason == "refusal":
+            category = getattr(response.stop_details, "category", None)
+            raise RuntimeError(f"{response.model} declined the request (refusal, category={category})")
+        if response.stop_reason == "max_tokens":
+            logger.warning(
+                "Anthropic response hit max_tokens (%s) on %s; the answer may be truncated",
+                kwargs["max_tokens"], response.model,
+            )
+
+        u = response.usage
+        prompt_tokens = (u.input_tokens + (u.cache_read_input_tokens or 0)
+                         + (u.cache_creation_input_tokens or 0))
         usage = {
-            "prompt_tokens": response.usage.input_tokens,
-            "completion_tokens": response.usage.output_tokens,
-            "total_tokens": response.usage.input_tokens + response.usage.output_tokens,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": u.output_tokens,  # includes thinking tokens
+            "total_tokens": prompt_tokens + u.output_tokens,
         }
 
-        content = ""
-        if response.content and len(response.content) > 0:
-            content = response.content[0].text
+        # Thinking blocks come first (with empty text by default); the answer
+        # is the text blocks.
+        content = "".join(b.text for b in response.content if b.type == "text")
 
         return LLMResponse(
             content=content,
@@ -764,7 +814,7 @@ def create_provider(
     Factory function to create an LLM provider.
 
     Args:
-        provider: Provider name ('openai', 'anthropic', or 'ollama')
+        provider: Provider name ('openai', 'anthropic', 'ollama', 'mlx', 'mistral' or 'hetzner')
         api_key: API key for the provider (not needed for ollama)
         model: Model to use (provider-specific defaults if not specified)
         **kwargs: Additional provider-specific arguments

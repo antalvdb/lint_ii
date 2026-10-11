@@ -174,6 +174,16 @@ pushing.** Don't assume the other side is idle.
   to see raw Qwen output during prompt iteration, but don't leave it on: tester
   texts would pile up in the logs).
 - `LINT_CONSOLIDATE_REWRITES` — consolidated per-sentence rewrites, default ON.
+- Anthropic (`LINT_PROVIDER=anthropic`, key `ANTHROPIC_API_KEY` in the env
+  file; $100 credit as of 2026-10, so budget-bound): default model
+  `claude-haiku-5-5` (~$0.10/$0.50 per M tokens, ~$0.005 per analysis;
+  Opus 5.5 is ~40x that). `LINT_II_LLM_MODEL` switches model,
+  `LINT_II_ANTHROPIC_EFFORT` sets thinking depth (default `low`). Current
+  Claude models ALWAYS think and REJECT temperature, so Anthropic runs are
+  not temperature-matched with Qwen (0.3) or Mistral (0.7) baselines; say so
+  in any comparison. Don't run a full-pipeline test instance on an expensive
+  model casually: startup warm-up alone analyses the four example texts
+  (18 Opus calls ≈ $0.21 before it was stopped, 2026-10-11).
 
 ## Product context (why this exists)
 

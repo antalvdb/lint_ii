@@ -15,6 +15,10 @@ Provider is selected via the LINT_PROVIDER env var (default: mlx).
                           model via LINT_MODEL (default: Qwen/Qwen3.6-35B-A3B-FP8);
                           key via HETZNER_API_KEY. Same external-service caveat as
                           Mistral; leave LINT_MODEL unset to use the served model.
+  LINT_PROVIDER=anthropic Anthropic API (Claude), model via LINT_MODEL or
+                          LINT_II_LLM_MODEL (default: claude-haiku-5-5); key via
+                          ANTHROPIC_API_KEY; effort via LINT_II_ANTHROPIC_EFFORT
+                          (default low). Same external-service caveat.
 
 Usage (Mac):
     /Users/antalb/opt/miniconda3/envs/py311/bin/uvicorn api:app --host 0.0.0.0 --port 8443 ...
