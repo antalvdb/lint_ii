@@ -491,6 +491,12 @@ class MistralProvider(LLMProvider):
         # lexical swaps: comparing Mistral@0.7 with Qwen@0.3 would confound
         # temperature with model. Mirrors LINT_II_HETZNER_TEMPERATURE.
         self._temperature = float(os.environ.get("LINT_II_MISTRAL_TEMPERATURE", "0.7"))
+        # Reasoning models (mistral-large-4) think by default: the answer comes
+        # back as a list of thinking + text blocks and the thinking eats the
+        # max_tokens budget. "none" turns it off, matching Qwen's
+        # enable_thinking:false. Only sent when set, because non-reasoning
+        # models (mistral-large-2512) reject the parameter with a 400.
+        self._reasoning_effort = os.environ.get("LINT_II_MISTRAL_REASONING_EFFORT") or None
         self._client = None
 
     @property
@@ -523,15 +529,15 @@ class MistralProvider(LLMProvider):
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
-        response = client.post(
-            "/chat/completions",
-            json={
-                "model": self._model,
-                "messages": messages,
-                "temperature": self._temperature,
-                "max_tokens": max_tokens or self.DEFAULT_MAX_TOKENS,
-            },
-        )
+        payload = {
+            "model": self._model,
+            "messages": messages,
+            "temperature": self._temperature,
+            "max_tokens": max_tokens or self.DEFAULT_MAX_TOKENS,
+        }
+        if self._reasoning_effort:
+            payload["reasoning_effort"] = self._reasoning_effort
+        response = client.post("/chat/completions", json=payload)
         response.raise_for_status()
         data = response.json()
 
@@ -543,8 +549,15 @@ class MistralProvider(LLMProvider):
                 "total_tokens": data["usage"].get("total_tokens", 0),
             }
 
+        content = data["choices"][0]["message"]["content"] or ""
+        if isinstance(content, list):
+            # Reasoning output: keep the text blocks, drop the thinking.
+            content = "".join(
+                block.get("text", "") for block in content if block.get("type") == "text"
+            )
+
         return LLMResponse(
-            content=data["choices"][0]["message"]["content"] or "",
+            content=content,
             model=data.get("model", self._model),
             usage=usage,
         )
