@@ -37,6 +37,12 @@ pushing.** Don't assume the other side is idle.
   (every result file from then predates `c7fdb54`, which first serialized
   `Suggestion.model`). Check the alias with `GET /v1/models` (`aliases` field).
   Credits are UU's budget: ask before large runs.
+  `mistral-large-4` is a reasoning model: set
+  `LINT_II_MISTRAL_REASONING_EFFORT=none` for it (thinking otherwise eats
+  max_tokens); `mistral-large-2512` rejects that parameter, so leave it unset
+  there. Eval 2026-10-12 (`scripts/eval/README.md`): both match Qwen's recall
+  but invent d/t spelling errors (`vindt u → vind u`); prefer 2512 and add a
+  spelling guard before any live use.
 - Result cache: disk-persisted (`~/.cache/lint-ii/result_cache.json`), survives
   restarts BY DESIGN; the key includes the running git commit + model name, so
   deploys invalidate naturally and startup re-warms the example texts.

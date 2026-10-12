@@ -854,6 +854,85 @@ the provider default `low`. Anthropic is a viable fallback if Hetzner
 becomes unusable; the next step up would be Sonnet 5.5 (~20x the cost), not
 deeper Haiku thinking.
 
+### Worked example: Mistral Large 2512 and Large 4 vs Qwen3.6 (2026-10-12)
+
+Mistral came back on 2026-10-12 after the UU credit block. Same setup as the
+Haiku run above: full five sets, test instance on its own port and `HOME`,
+both models at `LINT_II_MISTRAL_TEMPERATURE=0.3` to match Qwen. Files:
+`results{N}m25.json` (`mistral-large-2512`, what `mistral-large-latest`
+pointed to that day) and `results{N}m4.json` (`mistral-large-4`). All ten
+sets `VALIDITY: CLEAN`, 0 guard violations, no 429s.
+
+**`mistral-large-4` is a reasoning model.** By default its message content is
+a list of thinking + text blocks (the pipeline crashed on it: `expected string
+or bytes-like object, got 'list'`) and the thinking used up the whole
+`max_tokens`. `LINT_II_MISTRAL_REASONING_EFFORT=none` turns reasoning off
+(10 completion tokens instead of ~390 on a one-sentence rewrite) and the
+provider now keeps only the text blocks if a list does come back. Large 2512
+rejects the parameter (400 "reasoning_effort is not enabled for this model"),
+so it is only sent when set. Large 4 was run with it set to `none`.
+
+Pooled over the five sets (Qwen and Haiku-low from the section above):
+
+| | Qwen3.6 | Haiku low | Large 2512 | Large 4 |
+|---|---|---|---|---|
+| legacy precision | 0.959 | 0.941 | 0.925 | 0.937 |
+| recall | 0.868 | 0.837 | **0.871** | 0.868 |
+| guard-aware precision | 0.986 | 0.975 | 0.973 | 0.969 |
+| suggestions | 420 | 364 | 412 | 403 |
+| connective suggestions | 28 | 15 | 28 | 24 |
+| word_frequency suggestions | 182 | 135 | 169 | 165 |
+| tokens (prompt / completion) | — | 1.85M / 0.67M | 1.17M / 0.08M | 0.97M / 0.07M |
+
+Both Mistral models match Qwen's recall and (unlike Haiku) its connective
+output; neither thinks, so completion tokens are a tenth of Haiku's and a
+set takes ~7 min. Precision is where they lose.
+
+**Spelling corrections that introduce errors** (the main finding; Qwen makes
+none of these on the same items):
+- Large 2512: `vindt u → vind u` on three different items (a systematic d/t
+  error) and `bakt elke dag vers → verse`.
+- Large 4: `brengt u → breng u` (same d/t error), `pakketten ... werden →
+  werd` (breaks agreement), `reder → rederij` (meaning change) and a
+  truncation to "Elk half uur."
+
+`_correction_plausible` lets them through because every output is itself a
+valid word. A deterministic guard is the right fix if Mistral is ever used
+live (CLAUDE.md: hard constraints need post-filters, not prompt lines), e.g.
+reject a spelling correction that drops the final -t of a verb directly
+followed by "u", or more generally one that only changes the inflection of an
+already-valid word.
+
+**Other false positives (Large 2512):** a word swap inside URL and e-mail
+sentences (`dossier → zaak`, "de programma-pagina" inserted) and on clean
+controls (`ticket → kaartje`, `verzekeringspas → verzekeringskaart`): 12
+false-positive items Qwen does not have.
+
+**Known Qwen-bad swaps** (backlog item 2):
+
+| word | Qwen | Large 2512 | Large 4 |
+|---|---|---|---|
+| monumentale (4/passive-2) | grote ✗ | — | imposante ✗ |
+| gewaande | vermeende ✗ | vermeende ✗ | — |
+| notoire | bekende ✗ | beruchte ✓ | beruchte ✓ |
+| insinuaties | suggesties ✗ | — | beschuldigingen ✗ |
+| verharding | vastberadenheid ✗ | "een hardere" ✓ | — |
+| afname (2/abstract-3) | minderheid ✗ | — | — |
+| inzage | inzicht ✗ | — | — |
+| aanvraagsysteem | aanvraagformulier ✗ | systeem om aanvragen in te dienen ✓ | aanvraagformulier ✗ |
+| revalidatie | herstel ✗ | — | herstel ✗ |
+
+Large 2512 is the cleanest of the three on these swaps (one error out of
+nine, `notoire → beruchte` is right where Qwen is wrong); Large 4 keeps four
+of Qwen's errors and adds `monumentale → imposante`.
+
+**Recommendation as of 2026-10-12: stay on Qwen.** If a Mistral model is
+needed (Hetzner outage, or for the UU licence), use **`mistral-large-2512`**,
+pinned, and add the d/t spelling guard first. Large 4 has no advantage over
+it and needs `LINT_II_MISTRAL_REASONING_EFFORT=none`. Cost was not computed:
+UU's contract price is not visible from the box; the token counts above are
+the input for it.
+
 ### Hetzner rate limits tightened (2026-09)
 
 429 responses as a share of calls: **0.1% (Jul), 0.2% (Aug), 6.6% (Sep)** — a
