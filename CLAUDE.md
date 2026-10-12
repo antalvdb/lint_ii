@@ -184,6 +184,9 @@ pushing.** Don't assume the other side is idle.
   in any comparison. Don't run a full-pipeline test instance on an expensive
   model casually: startup warm-up alone analyses the four example texts
   (18 Opus calls ≈ $0.21 before it was stopped, 2026-10-11).
+  Measured against Qwen on all five eval sets (2026-10-12, `scripts/eval/README.md`
+  "Claude Haiku 5.5 vs Qwen3.6"): slightly lower recall, fewer connectives,
+  better swap semantics; `medium` effort bought nothing. Live stays on Qwen.
 
 ## Product context (why this exists)
 

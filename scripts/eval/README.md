@@ -794,6 +794,66 @@ over-read.
 regression on another, nothing on connective, at 3.7x latency — and with 429s
 at 6.6% (see below) slower calls make throughput worse, not better.
 
+### Worked example: Claude Haiku 5.5 vs Qwen3.6 (2026-10-12)
+
+Full five-set eval (`run_eval.py --fresh`, all sets `VALIDITY: CLEAN`) on a
+separate test instance (`LINT_PROVIDER=anthropic`, port 8765, own `HOME` so
+the result cache and log stay apart from the live service). Baseline is the
+latest Qwen file per set (`results1d/2d/3f/4d/5g`); Haiku files are
+`results{N}h.json` (effort `low`, the provider default) and
+`results{N}hm.json` (effort `medium`). Pooled over the five sets:
+
+| | Qwen3.6 | Haiku low | Haiku medium |
+|---|---|---|---|
+| legacy precision | 0.959 | 0.941 | 0.941 |
+| recall | 0.868 | 0.837 | 0.840 |
+| guard-aware precision | 0.986 | 0.975 | 0.968 |
+| suggestions | 420 | 364 | 366 |
+| connective suggestions | 28 | 15 | 19 |
+| word_frequency suggestions | 182 | 135 | 135 |
+| cost (5 sets) | — | $0.52 (1,078 calls) | $0.64 (1,132 calls) |
+
+Per set Haiku trails Qwen by 0–8 points of recall and 0–4 of precision; no
+set is clearly better.
+
+**Connectives are the main gap.** Haiku-low missed 10 positives that Qwen got
+with a plainly good connective ("...dan begroot, **want** de prijzen...",
+"...lovende recensies, **maar** de omzet..."); it answers GEEN where Qwen
+inserts. Medium effort recovered only 3 of the 10 (set2 conn-7, set4 conn-1,
+set5 conn-2) and added one new false connective (set1 good-3, "..., dus u
+ontvangt de kaartjes"). So it is not a thinking-depth problem: the connective
+prompt was tuned on Qwen's worked examples, and Haiku reads it more
+conservatively. A Haiku switch would need its own `connective_probe.py`
+round.
+
+**Word swaps: fewer, but more careful.** Haiku returns the word unchanged
+more often (no-op swaps dropped: 117 vs Qwen's 81) and avoids most of Qwen's
+known semantic-swap errors (backlog item 2): `monumentale→grote`,
+`gewaande→vermeende`, `notoire→bekende`, `insinuaties→suggesties`,
+`verharding→vastberadenheid`, plus `afname→minderheid`, `inzage→inzicht`,
+`aanvraagsysteem→aanvraagformulier`, `revalidatie→herstel`. Its own errors
+are fewer (~6–8 across the sets): non-simplifications
+(`aannames→veronderstellingen`, `forensen→pendelaars`,
+`aanscherpen→verscherpen`), one meaning error
+(`fietsparkeerverwijssysteem→systeem dat fietsen de weg wijst`) and awkward
+compound splits ("pas van de verzekering", "plek waar fietsen worden
+gestald"). It also skips good Qwen simplifications (spelling fixes such as
+acomodatie/aggresief, `ambivalent→verdeeld`, "een vermindering van → minder").
+Judged by Claude over every swap that differs between the runs; sentence
+rewrites were not judged.
+
+Caveats: Claude models always think and reject temperature, so this is not
+temperature-matched (Qwen ran at 0.3); the Haiku runs are on `b5a101c`, the
+Qwen baselines on `ab10abb` (since then only the relation-label and
+passive-explanation fixes, which change labels and explanation text rather than what fires).
+
+**Recommendation as of 2026-10-12: stay on Qwen.** Haiku is a sideways move
+(better swap semantics, weaker connectives and recall) at ~$0.005 per
+analysis, and `medium` effort buys nothing measurable for +23% cost, so keep
+the provider default `low`. Anthropic is a viable fallback if Hetzner
+becomes unusable; the next step up would be Sonnet 5.5 (~20x the cost), not
+deeper Haiku thinking.
+
 ### Hetzner rate limits tightened (2026-09)
 
 429 responses as a share of calls: **0.1% (Jul), 0.2% (Aug), 6.6% (Sep)** — a
