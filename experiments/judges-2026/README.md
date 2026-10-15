@@ -37,8 +37,10 @@ recorded in `selected.tsv` in the snapshot directory, not in this public repo.
 
 The snapshots freeze the data, not the page: the editor that shows them is
 live frontend code. **Last frontend change before the study: 2026-10-15**
-(`e151e42`, a sentence with several accepted word swaps is now scored as a
-whole; `lint_ii_visualizer.js?v=77`, `editor.js?v=38`). Hold frontend
+(`d881b33`, adjacent accepted word swaps keep their reading order, on screen
+and in the copied text; `lint_ii_visualizer.js?v=78`, `editor.js?v=39`,
+`word-diff.js?v=3`). It follows `e151e42` the same day (a sentence with
+several accepted word swaps is scored as a whole). Hold frontend
 deploys while the study runs, or record any here with its date, since a
 change alters what judges see.
 
