@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 import logging
 import os
+import random
 import re
 import threading
 import time
@@ -563,6 +564,49 @@ class MistralProvider(LLMProvider):
         )
 
 
+# Provider answers worth retrying: rate limits and transient server errors.
+_RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
+_RETRY_MAX_WAIT = 60.0
+
+
+def _retry_wait(response: Any, attempt: int) -> float:
+    """Seconds to wait before retry number `attempt` (0-based).
+
+    Honours a numeric Retry-After header; otherwise backs off 5, 10, 20, 40s
+    with jitter so the job threads of one analysis do not retry in lockstep."""
+    header = response.headers.get("retry-after") if response is not None else None
+    try:
+        if header is not None:
+            return min(max(float(header), 0.0), _RETRY_MAX_WAIT)
+    except ValueError:
+        pass  # HTTP-date form: fall back to the schedule
+    return min(5.0 * 2 ** attempt, _RETRY_MAX_WAIT) * random.uniform(0.75, 1.25)
+
+
+def _post_with_retries(
+    client: Any, path: str, body: dict[str, Any], retries: int, provider: str
+) -> Any:
+    """POST, retrying 429/5xx answers up to `retries` times.
+
+    Each retry logs one PROVIDER_RETRY warning. The eval runner counts the
+    httpx line of every 429/5xx answer, so it subtracts these to count only
+    the calls that finally failed (scripts/eval/run_eval.py). The last answer
+    is raised as usual, so a call that never succeeds still counts as a
+    provider failure. Connection errors are not retried here."""
+    for attempt in range(retries + 1):
+        response = client.post(path, json=body)
+        if response.status_code not in _RETRY_STATUSES or attempt == retries:
+            response.raise_for_status()
+            return response
+        wait = _retry_wait(response, attempt)
+        logger.warning(
+            "PROVIDER_RETRY provider=%s status=%d attempt=%d/%d wait=%.1fs",
+            provider, response.status_code, attempt + 1, retries, wait,
+        )
+        time.sleep(wait)
+    raise AssertionError("unreachable")
+
+
 _THINK_BLOCK_RE = re.compile(r"(?s)\s*<think>.*?</think>\s*")
 
 
@@ -615,6 +659,10 @@ class HetznerProvider(LLMProvider):
         # temperature makes it more conservative; 0.3 is the default, overridable
         # via LINT_II_HETZNER_TEMPERATURE without a code change.
         self._temperature = float(os.environ.get("LINT_II_HETZNER_TEMPERATURE", "0.3"))
+        # Since Oct 2026 the endpoint caps requests at ~20/min, below what one
+        # long text needs: without retries a 429 silently costs suggestions.
+        # 4 retries back off 5+10+20+40s (~75s), well inside the watchdog.
+        self._retries = max(0, int(os.environ.get("LINT_II_HETZNER_RETRIES", "4")))
         self._client = None
 
     @property
@@ -657,8 +705,9 @@ class HetznerProvider(LLMProvider):
             # vLLM passes chat_template_kwargs into the Qwen chat template.
             body["chat_template_kwargs"] = {"enable_thinking": False}
 
-        response = client.post("/chat/completions", json=body)
-        response.raise_for_status()
+        response = _post_with_retries(
+            client, "/chat/completions", body, self._retries, "hetzner"
+        )
         data = response.json()
 
         usage = None

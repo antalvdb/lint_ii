@@ -46,16 +46,24 @@ pushing.** Don't assume the other side is idle.
 - Result cache: disk-persisted (`~/.cache/lint-ii/result_cache.json`), survives
   restarts BY DESIGN; the key includes the running git commit + model name, so
   deploys invalidate naturally and startup re-warms the example texts.
-- Hetzner rate limits are output-bound (60k tokens/60s): sequential eval runs
-  are safe, parallel-3 can brush the cap. Some non-prose inputs 422 (expected).
-  **Tightened in Sep 2026** as the experiment moves to a paid product: 429s went
-  from 0.1% of calls (Jul) to 6.6% (Sep), so parallel-3 now hits the cap
-  routinely. Use `--workers 2` for probe runs, and note that probes EXCLUDE
-  failed calls from their denominators, so 429 losses make two runs' observation
-  counts differ — compare those before comparing rates. Hetzner also now serves
-  `Qwen3.8-27B`; measured, it is better on semantic swaps but worse on
-  `koeling→koelkast` and ~3.7x slower, so we stayed on Qwen3.6 (see
-  `scripts/eval/README.md`).
+- Hetzner rate limits: **since Oct 2026 the cap is ~20 REQUESTS/min**, not
+  the old output-token cap (60k tokens/60s). Measured 2026-10-15: a sequential
+  eval run (~25 req/min, only ~1.7k output tokens/min) got 429s on 18% of
+  calls (51/286) and 39 of 112 analyses came back incomplete. History from the
+  live log: 0.2% (Aug), 1.2% (Sep, peaking on busy days), 18% (Oct, under eval
+  load). One long text can exceed 20 calls/min on its own, so
+  `HetznerProvider` now RETRIES 429/5xx (`LINT_II_HETZNER_RETRIES`, default 4;
+  backoff 5/10/20/40s with jitter, honours Retry-After), logging one
+  `PROVIDER_RETRY` warning per retry; `run_eval.py`'s validity gate subtracts
+  those, so a recovered call is not counted as a failure. Expect slower
+  analyses under load rather than missing suggestions, and SLOW eval runs:
+  don't run evals against the live service while testers or study
+  participants are active (they share the cap). Some non-prose inputs 422
+  (expected, not retried). Probes EXCLUDE failed calls from their
+  denominators, so 429 losses make two runs' observation counts differ —
+  compare those before comparing rates. Hetzner also serves `Qwen3.8-27B`;
+  measured, it is better on semantic swaps but worse on `koeling→koelkast` and
+  ~3.7x slower, so we stayed on Qwen3.6 (see `scripts/eval/README.md`).
 - Token accounting: every provider call logs one `LLM_USAGE` line at INFO
   (counts + model only, no text, so it is safe to leave on). Hetzner has no
   usage endpoint (`/api/v1/usage` is 404), so this log is the only record.

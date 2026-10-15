@@ -28,6 +28,24 @@ def test_gate_counts_http_errors_and_unanswered_calls(tmp_path):
     assert n == 3
 
 
+def test_gate_ignores_answers_the_provider_retried(tmp_path):
+    # Two 429s retried, the third attempt succeeds; then a 503 retried and a
+    # final 503: only that last one is a failed call.
+    err = 'INFO:httpx:HTTP Request: POST https://x/v1/chat/completions "HTTP/1.1 {}"\n'
+    retry = "WARNING:lint_ii.llm.providers:PROVIDER_RETRY provider=hetzner status={} attempt=1/4 wait=5.0s\n"
+    log = tmp_path / "app.log"
+    log.write_text(
+        err.format("429 Too Many Requests") + retry.format(429)
+        + err.format("429 Too Many Requests") + retry.format(429)
+        + err.format("200 OK")
+        + err.format("503 Service Unavailable") + retry.format(503)
+        + err.format("503 Service Unavailable")
+    )
+    n, by = run_eval._provider_errors_since(str(log), 0)
+    assert by == {"503": 1}
+    assert n == 1
+
+
 def test_kleijn_items_filter_versions_and_keep_text_order(tmp_path):
     for name in ("T02_moei.txt", "T01_mak.txt", "T01_moei.txt", "notes.txt"):
         (tmp_path / name).write_text(f"### Titel\n\nTekst van {name}.", encoding="utf-8")

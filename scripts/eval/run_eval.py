@@ -96,6 +96,11 @@ _PROVIDER_ERR_RE = re.compile(
 # exception. Without this the gate read an unreachable provider as CLEAN: a
 # Kleijn smoke test on 2026-09-27 had every LLM call refused and still passed.
 _TRANSPORT_ERR_RE = re.compile(r"^httpx\.(\w+(?:Error|Timeout))\b", re.M)
+# Since Oct 2026 the Hetzner provider retries 429/5xx answers and logs one
+# PROVIDER_RETRY line per retry. Every retried answer still has its httpx line
+# above, so each retry line cancels one error of that status: what remains is
+# the calls that finally failed.
+_RETRY_RE = re.compile(r"PROVIDER_RETRY provider=\S+ status=(\d+)")
 
 
 def _log_size(path):
@@ -121,6 +126,10 @@ def _provider_errors_since(path, offset):
     for rx in (_PROVIDER_ERR_RE, _TRANSPORT_ERR_RE):
         for m in rx.finditer(chunk):
             counts[m.group(1)] = counts.get(m.group(1), 0) + 1
+    for m in _RETRY_RE.finditer(chunk):
+        if counts.get(m.group(1)):
+            counts[m.group(1)] -= 1
+    counts = {k: v for k, v in counts.items() if v}
     return sum(counts.values()), counts
 
 
