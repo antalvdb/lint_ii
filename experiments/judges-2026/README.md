@@ -35,6 +35,13 @@ at least its `triggers_found` (see the script's docstring). Text A was chosen
 this way as the best of 7 samples; B-E are first runs. The chosen URLs are
 recorded in `selected.tsv` in the snapshot directory, not in this public repo.
 
+The snapshots freeze the data, not the page: the editor that shows them is
+live frontend code. **Last frontend change before the study: 2026-10-15**
+(`e151e42`, a sentence with several accepted word swaps is now scored as a
+whole; `lint_ii_visualizer.js?v=77`, `editor.js?v=38`). Hold frontend
+deploys while the study runs, or record any here with its date, since a
+change alters what judges see.
+
 ## Interaction logging and LimeSurvey embedding
 
 Everything a participant does on a frozen page is logged: popup opened and
