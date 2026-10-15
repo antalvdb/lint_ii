@@ -93,6 +93,7 @@ test('popup: the score line sits above the options after Toepassen', async () =>
         innerHTML: '', dataset: {}, style: {}, scrollTop: 120, addEventListener() {},
         classList: { s: new Set(['visible']), add(c) { this.s.add(c) }, remove(c) { this.s.delete(c) }, contains(c) { return this.s.has(c) } },
         querySelector: () => ({ value: EDIT, focus() {}, setSelectionRange() {}, hidden: true }),
+        dispatchEvent: () => true,
     }
     const popup = new SuggestionPopupController(popupEl, ed)
     popup._editing = { suggestionId: 'r0' }
@@ -142,6 +143,7 @@ test('popup: an open popup turns "wordt berekend" into the failure', async () =>
         innerHTML: '', dataset: {}, style: {}, scrollTop: 0, addEventListener() {},
         classList: { s: new Set(['visible']), add(c) { this.s.add(c) }, remove(c) { this.s.delete(c) }, contains(c) { return this.s.has(c) } },
         querySelector: () => ({ value: EDIT, focus() {}, setSelectionRange() {}, hidden: true }),
+        dispatchEvent: () => true,
     }
     const popup = new SuggestionPopupController(popupEl, ed)
     ed.addEventListener('editor-change', e => popup.refreshFor(e.detail.suggestionId))  // as the page does
