@@ -1,4 +1,4 @@
-import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './word-diff.js?v=2'
+import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken, rightToLeft } from './word-diff.js?v=3'
 
 // Suggestion types that reformulate a whole sentence. Any two of these on the
 // same sentence — or one of these plus any other edit — cannot be safely merged
@@ -1571,7 +1571,7 @@ export class EditorController {
             for (const region of regions) region.suggestion = suggestion
             allRegions.push(...regions)
         }
-        allRegions.sort((a, b) => b.insertBeforeIdx - a.insertBeforeIdx)
+        allRegions.sort(rightToLeft)
 
         const removed = new Array(tokens.length).fill(false)
         const inserts = Array.from({ length: tokens.length + 1 }, () => [])
@@ -1608,10 +1608,12 @@ export class EditorController {
             }
 
             // Mirror the display's anchor walk: an earlier-applied region may
-            // have removed this region's anchor token.
+            // have removed this region's anchor token. Regions arrive right to
+            // left, so this text goes IN FRONT of anything already placed at
+            // the anchor (pushing it behind reversed adjacent swaps).
             let anchor = region.insertBeforeIdx
             while (anchor < tokens.length && removed[anchor]) anchor++
-            inserts[anchor].push(...texts)
+            inserts[anchor].unshift(...texts)
 
             for (const i of region.origIndices) {
                 removed[i] = true

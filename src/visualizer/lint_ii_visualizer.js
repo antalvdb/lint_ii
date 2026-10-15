@@ -2,9 +2,9 @@ import { css } from './core/stylesheet.js?v=39'
 import { PopupController } from './core/popup.js'
 import { WheelHandlerMixin } from './core/wheel-handler.js'
 import { StatsData, StatsSpecs } from './core/stats.js?v=2'
-import { EditorController } from './core/editor.js?v=38'
+import { EditorController } from './core/editor.js?v=39'
 import { SuggestionPopupController } from './core/suggestion-popup.js?v=23'
-import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken } from './core/word-diff.js?v=2'
+import { computeWordDiff, stripToken, suggestionTokens, capitalizeToken, rightToLeft } from './core/word-diff.js?v=3'
 
 // Suggestion types whose suggested_text is a complete, self-punctuated rewrite
 // of the whole sentence. For these the diff is a visualization only, so the
@@ -763,24 +763,22 @@ export class LintIIVisualizer extends HTMLElement {
             allRegions.push(...regions)
         }
 
-        // Sort right-to-left by insertion point
-        allRegions.sort((a, b) => b.insertBeforeIdx - a.insertBeforeIdx)
+        // Right to left, in the same order as editor._composeAcceptedText.
+        allRegions.sort(rightToLeft)
+        // anchor index -> first span placed there, so a later (further left)
+        // region lands in front of it, as the export composes it.
+        const firstPlacedAt = new Map()
 
         for (const region of allRegions) {
             // Regions from different accepted suggestions can interleave: an
             // earlier-applied region may have removed this region's anchor
-            // word (insertBefore on a detached node throws). Walk forward to
-            // the first still-attached word.
-            let insertBefore = null
-            for (let idx = region.insertBeforeIdx; idx < wordEls.length; idx++) {
-                if (wordEls[idx].isConnected) {
-                    insertBefore = wordEls[idx]
-                    break
-                }
-            }
-            if (!insertBefore) {
-                insertBefore = sentenceEl.querySelector('.sent-end-group')
-            }
+            // word (insertBefore on a detached node throws). Walk forward past
+            // removed words, then go in front of anything already placed there.
+            let anchor = region.insertBeforeIdx
+            while (anchor < wordEls.length && !wordEls[anchor].isConnected) anchor++
+            const insertBefore = firstPlacedAt.get(anchor)
+                ?? wordEls[anchor]
+                ?? sentenceEl.querySelector('.sent-end-group')
 
             // Preserve punctuation and capitalization from deleted original words.
             const texts = [...region.newTexts]
@@ -824,6 +822,7 @@ export class LintIIVisualizer extends HTMLElement {
 
             // Get cluster for this suggestion to tag new spans
             const cluster = this._editorController.getClusterForSuggestion(region.suggestion.id)
+            let placedHere = null
 
             for (const text of texts) {
                 const span = document.createElement('span')
@@ -833,7 +832,9 @@ export class LintIIVisualizer extends HTMLElement {
                 span.dataset.suggestionStatus = 'accepted'
                 if (cluster) span.dataset.clusterId = cluster.id
                 sentenceEl.insertBefore(span, insertBefore)
+                if (!placedHere) placedHere = span
             }
+            if (placedHere) firstPlacedAt.set(anchor, placedHere)
 
             for (const idx of region.origIndices) {
                 wordEls[idx].remove()

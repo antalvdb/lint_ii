@@ -92,6 +92,19 @@ export function computeWordDiff(origBare, sugBare, sugTokens, origTokens = null)
 }
 
 /**
+ * Order in which both paths apply change regions: right to left, so a region
+ * is always placed in front of everything applied before it at the same spot.
+ * A replacement of word k and a pure insertion before word k+1 share
+ * insertBeforeIdx k+1; the insertion lies further right, so it goes first.
+ * (Without this, adjacent swaps came out reversed: "De door u gebruik
+ * bedoelde" for beoogde→bedoelde + toepassing→gebruik, study text E.)
+ */
+export function rightToLeft(a, b) {
+    return (b.insertBeforeIdx - a.insertBeforeIdx)
+        || (a.origIndices.length - b.origIndices.length)
+}
+
+/**
  * Tokenize a suggested_text the same way in both paths: strip wrapping
  * quotes, split on whitespace, and capitalize the first token so sentence
  * capitalization never produces a spurious diff region.
