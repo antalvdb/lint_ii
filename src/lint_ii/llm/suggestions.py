@@ -1372,6 +1372,12 @@ class SuggestionEngine:
                 logger.info("Spelling suggestion skipped: '%s' -> '%s' creates an "
                             "agreement error", word, correction)
                 continue
+            # "maatschappelijke terreinen" -> "maatschappelijke terrein" after "de".
+            clash = self._introduces_article_mismatch(sent_text, suggested_text)
+            if clash:
+                logger.info("Spelling suggestion skipped: '%s' -> '%s' gives '%s'",
+                            word, correction, clash)
+                continue
 
             suggestions.append(Suggestion(
                 id=str(uuid.uuid4())[:8],
@@ -2219,6 +2225,79 @@ class SuggestionEngine:
                 return f"{tok.text} {noun.text}"
         return None
 
+    @staticmethod
+    def _article_gender_mismatches(text: str, de_only: bool = False) -> list[str]:
+        """Determiner+noun pairs whose de/het gender disagrees ("De gebruik",
+        "dit regeling"), lowercased.
+
+        Only the determiners that mark gender are checked: de/het and the
+        demonstratives die/dat, deze/dit, on a singular common noun. Their
+        tags carry the gender ("rest" = de-word, "evon" = het-word) and the
+        noun's tag carries its own (zijd/onz), which spaCy takes from the
+        lexicon, not from the article in front of it ("De gebruik" still tags
+        gebruik as onz). Fails open on a parse error.
+
+        de_only keeps just "de" on a het-word. "het", "dit" and "dat" are
+        also pronouns, and in a free rewrite the parser takes the pronoun for
+        an article often enough ("Ze biedt het volgende maand aan", "dat het
+        rente oplevert": 9 of 10 such hits on 4,400 eval rewrites were
+        false); "de" never is."""
+        try:
+            from lint_ii.linguistic_data.nlp_model import NLP_MODEL
+            doc = NLP_MODEL(text)
+        except Exception as e:
+            logger.warning("article gender check parse failed: %s", e)
+            return []
+        found = []
+        for noun in doc:
+            if noun.pos_ != "NOUN":
+                continue
+            ntag = set(noun.tag_.split("|"))
+            if "ev" not in ntag:
+                continue
+            noun_gender = "onz" if "onz" in ntag else "zijd" if "zijd" in ntag else None
+            if noun_gender is None:
+                continue
+            dets = [c for c in noun.children if c.dep_ == "det"
+                    and c.tag_.startswith(("LID|bep|stan", "VNW|aanw|det|stan"))]
+            # Two articles on one noun, or a noun, number or determiner in
+            # between, mean the parser hung the article on the wrong noun:
+            # "het door de verdachte toegepaste geweld", "de afgelopen twee
+            # jaar".
+            if len(dets) != 1:
+                continue
+            for det in dets:
+                if det.i > noun.i or any(
+                        t.pos_ in ("NOUN", "PROPN", "NUM", "DET")
+                        for t in doc[det.i + 1:noun.i]):
+                    continue
+                dtag = set(det.tag_.split("|"))
+                det_gender = "onz" if "evon" in dtag else "zijd" if "rest" in dtag else None
+                if de_only and det.lower_ != "de":
+                    continue
+                if det_gender and det_gender != noun_gender:
+                    found.append(f"{det.text} {noun.text}".lower())
+        return found
+
+    @classmethod
+    def _introduces_article_mismatch(
+        cls, original: str, suggested: str, de_only: bool = False,
+    ) -> str | None:
+        """A determiner+noun gender clash the rewrite has and the original did
+        not, else None. A swap of a de-word for a het-word that keeps the
+        article ("De beoogde toepassing" -> "De beoogde gebruik", judges
+        study item E) is the usual source. A clash already in the original is
+        the writer's, so it does not count against the rewrite. A word swap
+        or spelling fix leaves the rest of the sentence as it was, so a
+        misparsed pronoun cancels out there and the full check is safe; free
+        rewrites pass de_only (see _article_gender_mismatches)."""
+        from collections import Counter
+        new = Counter(cls._article_gender_mismatches(suggested, de_only))
+        if not new:
+            return None
+        new -= Counter(cls._article_gender_mismatches(original, de_only))
+        return next(iter(new), None)
+
     # ── Connective (coherence) pass ──────────────────────────────────────
     # Discourse connectives, lowercased. Used to (a) skip a boundary whose
     # second sentence already opens with one, and (b) allow these words to be
@@ -2506,6 +2585,8 @@ class SuggestionEngine:
             return None
         if self._dehet_disagreement(suggested):
             return None
+        if self._introduces_article_mismatch(original_pair, suggested, de_only=True):
+            return None
         if self._introduces_other_address(original_pair, suggested):
             logger.info("Connective discarded: introduced the other form of address, "
                         "sentences %d-%d", n, n1)
@@ -2746,6 +2827,9 @@ class SuggestionEngine:
         disagreement = self._dehet_disagreement(candidate)
         if disagreement:
             return f"de/het disagreement '{disagreement}'"
+        clash = self._introduces_article_mismatch(sentence_text, candidate, de_only=True)
+        if clash:
+            return f"article does not fit the noun '{clash}'"
         address = self._introduces_other_address(sentence_text, candidate)
         if address:
             return f"introduced '{address}' in a text that uses '{self._address}'"
@@ -3023,6 +3107,11 @@ class SuggestionEngine:
             return None
         if self._introduces_misspelling(original, suggested_text):
             return None
+        clash = self._introduces_article_mismatch(original, suggested_text)
+        if clash:
+            logger.info("Dropping bundled word_frequency suggestion %r -> %r: article "
+                        "does not fit the noun '%s'", trigger.word, replacement_word, clash)
+            return None
         if self._introduces_other_address(original, suggested_text):
             logger.info("Dropping word_frequency suggestion: it introduces the other "
                         "form of address (text uses '%s')", self._address)
@@ -3200,6 +3289,16 @@ class SuggestionEngine:
                 logger.info(
                     "Trigger suggestion discarded: %s rewrite has de/het disagreement '%s'",
                     trigger.type.value, disagreement,
+                )
+                return None
+
+            clash = self._introduces_article_mismatch(
+                trigger.sentence_text or "", suggested_text,
+                de_only=trigger.type != SuggestionType.WORD_FREQUENCY)
+            if clash:
+                logger.info(
+                    "Trigger suggestion discarded: %s rewrite has an article that does "
+                    "not fit the noun '%s'", trigger.type.value, clash,
                 )
                 return None
 
