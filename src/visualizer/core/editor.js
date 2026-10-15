@@ -548,7 +548,14 @@ export class EditorController {
             return { before, after, scoring: false, failed: true,
                      reason: this._metricsFailed.get(failed.suggested_text) || null }
         }
-        return { before, after, scoring: edits.length > 0, failed: false, reason: null }
+        const composed = this._multiEditText(sentenceIndex)
+        if (composed && this._metricsFailed.has(composed)) {
+            return { before, after, scoring: false, failed: true,
+                     reason: this._metricsFailed.get(composed) || null }
+        }
+        const composedPending = !!composed && !this._metricsByText.has(composed)
+        return { before, after, scoring: edits.length > 0 || composedPending,
+                 failed: false, reason: null }
     }
 
     _sentenceScore(metrics, sentenceIndex) {
@@ -652,6 +659,15 @@ export class EditorController {
             // document score instead of dropping out and warping it.
             if (accepted.some(s => s.type === 'enumeration')) {
                 return this._originalSentenceMetrics[sentenceIndex]
+            }
+            // Several accepted word-level edits co-apply, but each suggestion's
+            // metrics describe the sentence with only that one edit. Score the
+            // composed sentence once /sentence-metrics has returned it; until
+            // then (or if that failed) fall back to one edit's metrics.
+            const composed = this._multiEditText(sentenceIndex)
+            if (composed) {
+                const fetched = this._metricsByText.get(composed)
+                if (fetched) return fetched
             }
             // Otherwise use the first accepted suggestion that has metrics.
             const withMetrics = accepted.find(s => s.new_sentence_metrics)
@@ -808,6 +824,9 @@ export class EditorController {
                 want(this._composedMergeText(conn))
             }
         }
+        for (let i = 0; i < (this._data.sentences || []).length; i++) {
+            want(this._multiEditText(i))
+        }
         return [...out]
     }
 
@@ -848,7 +867,31 @@ export class EditorController {
             if (this._suggestionStates.get(conn.id) === 'accepted'
                 && this._composedMergeText(conn) === text) ids.add(conn.id)
         }
+        for (let i = 0; i < (this._data.sentences || []).length; i++) {
+            if (this._multiEditText(i) !== text) continue
+            for (const s of this.getSuggestionsForSentence(i)) {
+                if (this._suggestionStates.get(s.id) === 'accepted') ids.add(s.id)
+            }
+        }
         for (const id of ids) this._dispatchChange(id, this.getState(id))
+    }
+
+    /**
+     * The composed text of a sentence with two or more accepted edits that
+     * co-apply (word-level edits: a sentence-scoped rewrite excludes the rest),
+     * else null. Merges, absorbed sentences and bulleted lists score by their
+     * own rules in _getEffectiveMetrics. This is the same text the export
+     * produces, so the score describes what the user takes away.
+     */
+    _multiEditText(sentenceIndex) {
+        if (this._absorbedSentences().has(sentenceIndex)) return null
+        const sentence = this._data.sentences?.[sentenceIndex]
+        if (!sentence) return null
+        const accepted = this.getSuggestionsForSentence(sentenceIndex)
+            .filter(s => this._suggestionStates.get(s.id) === 'accepted')
+        if (accepted.length < 2) return null
+        if (accepted.some(s => s.type === 'connective' || s.type === 'enumeration')) return null
+        return this._composeAcceptedText(sentence, accepted)
     }
 
     /** True when a suggestion shows an edited text whose scoring failed, so
