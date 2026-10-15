@@ -57,8 +57,11 @@ pushing.** Don't assume the other side is idle.
   `PROVIDER_RETRY` warning per retry; `run_eval.py`'s validity gate subtracts
   those, so a recovered call is not counted as a failure. Expect slower
   analyses under load rather than missing suggestions, and SLOW eval runs:
-  don't run evals against the live service while testers or study
-  participants are active (they share the cap). Some non-prose inputs 422
+  don't run evals against the live service while testers are active (they
+  share the cap). Participants on frozen study pages do NOT share it: those
+  pages make no LLM calls (accept/ignore/variant choice re-scores in the
+  browser from the snapshot's precomputed metrics; an edit is scored by
+  `/sentence-metrics`, spaCy only). Some non-prose inputs 422
   (expected, not retried). Probes EXCLUDE failed calls from their
   denominators, so 429 losses make two runs' observation counts differ —
   compare those before comparing rates. Hetzner also serves `Qwen3.8-27B`;
