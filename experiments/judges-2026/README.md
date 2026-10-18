@@ -32,8 +32,18 @@ Freezing again does not re-run the analysis, though: the service's result
 cache hands back the same suggestions under the new URL. For a genuinely new
 sample, pass `--max-suggestions N` with an N not used before for that text and
 at least its `triggers_found` (see the script's docstring). Text A was chosen
-this way as the best of 7 samples; B-E are first runs. The chosen URLs are
+this way as the best of 7 samples; B-D are first runs. The chosen URLs are
 recorded in `selected.tsv` in the snapshot directory, not in this public repo.
+
+Text E was re-frozen on 2026-10-18 and so runs on newer engine code than A-D
+(frozen 2026-09-30 at `ffd96fa`). Its first run swapped toepassing -> gebruik,
+giving the ungrammatical "De door u beoogde gebruik", and Qwen made that swap
+in all five resamples too. `ff82d38` added a guard that drops a word swap whose
+noun does not take the article in front of it (a het-word after "de"), and E
+is the best of five samples frozen with it. The other engine changes between
+the two commits are `5090cc3` (explanations no longer call a rewrite that
+removes a passive "passief"; it does not catch every wording) and provider and
+logging plumbing that does not change the suggestions.
 
 The snapshots freeze the data, not the page: the editor that shows them is
 live frontend code. **Last frontend change before the study: 2026-10-15**
