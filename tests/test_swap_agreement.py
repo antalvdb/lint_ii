@@ -51,6 +51,11 @@ def _check(sentence, word, replacement, written=None):
     ("Het CBR kan een aanvullende educatieve maatregel opleggen.", "educatieve", "leerzaam", None),
     ("De levering van gas- en elektriciteitsvoorziening stopt.",
      "elektriciteitsvoorziening", "levering van elektriciteit", None),
+    # A het-word in a de-word's slot, and the reverse (study item E, 2026-10-18).
+    ("De door u beoogde toepassing van gerecycled polypropyleen wordt toegepast.",
+     "toepassing", "gebruik", None),
+    ("U ontvangt het besluit binnen zes weken.", "besluit", "beslissing", None),
+    ("Wij hebben dit verzoek besproken.", "verzoek", "vraag", None),
 ])
 def test_breaks_the_slot(sentence, word, replacement, written):
     assert _check(sentence, word, replacement, written)
@@ -81,6 +86,10 @@ def test_breaks_the_slot(sentence, word, replacement, written):
     # Adjectival participles (box probe 2026-09-30): copula, and zich voelen.
     ("Hij was nogal gepikeerd over die opmerking.", "gepikeerd", "boos", None),
     ("Ze voelde zich gepikeerd.", "gepikeerd", "beledigd", "boos"),
+    # Same gender, an article changed along with the noun, and a plural.
+    ("De rechtbank in het arrondissement waarin u woont.", "arrondissement", "rechtsgebied", None),
+    ("Het wijkt af van bestaande procedés.", "procedés", "methoden", None),
+    ("Het door u beoogde gebruik van polypropyleen is bekend.", "beoogde", "bedoelde", None),
 ])
 def test_fits_the_slot(sentence, word, replacement, written):
     assert _check(sentence, word, replacement, written) is None
@@ -91,6 +100,15 @@ def test_swap_that_absorbs_a_neighbour_gets_no_verdict():
     t = _trigger(s, "maritieme")
     assert E._swap_agreement_failure(
         t, "scheepvaart", "Waarschuwingen voor de burger en de scheepvaartsector.") is None
+
+
+def test_swap_that_changes_the_article_too_passes():
+    s = "De rechtbank in het arrondissement waarin u woont."
+    t = _trigger(s, "arrondissement")
+    assert E._article_gender_clash(
+        "De rechtbank in de omgeving waarin u woont.", "omgeving", t.word_index) is None
+    assert E._article_gender_clash(
+        "De rechtbank in het omgeving waarin u woont.", "omgeving", t.word_index)
 
 
 def test_no_tag_fails_open():

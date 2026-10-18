@@ -1991,9 +1991,46 @@ class SuggestionEngine:
             return f"'{rep}' is not a participle, as '{trigger.word}' is"
         # No infinitive rule: on the Kleijn texts it fired only on rare words
         # the tagger took for infinitives (rabiës, onverwijld).
+        if tag.startswith("N|soort|ev") and suggested_text and len(words) == 1:
+            clash = cls._article_gender_clash(suggested_text, last, trigger.word_index)
+            if clash:
+                return clash
         if tag.startswith("N|") and trigger.word_nominal and len(words) == 1 \
                 and last.endswith(cls._ADJ_SUFFIXES):
             return f"'{rep}' reads as an adjective in place of the noun '{trigger.word}'"
+        return None
+
+    # Gender-marked determiners: de-words (Com) and het-words (Neut).
+    _DET_GENDER = {"de": "Com", "deze": "Com", "die": "Com",
+                   "het": "Neut", "dit": "Neut", "dat": "Neut"}
+
+    @classmethod
+    def _article_gender_clash(cls, suggested_text: str, word: str,
+                              word_index: int | None) -> str | None:
+        """Why the swapped-in noun clashes with its article, else None.
+
+        A swap keeps the original's article, so a het-word put in a de-word's
+        slot reads "De door u beoogde gebruik" (toepassing -> gebruik, study
+        item E, 2026-10-18: Qwen made that swap in all six samples). The
+        tagger reads a singular noun's gender from the word itself, also
+        after the wrong article, so the rewrite is parsed as written. A swap
+        that changed the article too ("in de omgeving") passes. Fails open:
+        no parse, no plural, no single gender, no verdict."""
+        try:
+            from lint_ii.linguistic_data.nlp_model import NLP_MODEL
+            toks = [t for t in NLP_MODEL(suggested_text) if t.text.lower() == word]
+        except Exception:
+            return None
+        if not toks:
+            return None
+        tok = min(toks, key=lambda t: abs(t.i - (word_index or 0)))
+        gender = tok.morph.get("Gender")
+        if tok.pos_ != "NOUN" or tok.morph.get("Number") != ["Sing"] or len(gender) != 1:
+            return None
+        for det in (c for c in tok.children if c.dep_ == "det"):
+            wanted = cls._DET_GENDER.get(det.text.lower())
+            if wanted and wanted != gender[0]:
+                return f"'{det.text} ... {tok.text}': '{tok.text}' does not take '{det.text.lower()}'"
         return None
 
     # Split a rewrite into word tokens, stripping surrounding punctuation.
