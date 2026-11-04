@@ -30,6 +30,12 @@ pushing.** Don't assume the other side is idle.
   Since 2026-10-14 Hetzner REPORTS the model as `Qwen/Qwen3.6-35B-A3B`
   (no `-FP8`; see `LLM_USAGE` lines) though we still request the FP8 name.
   A set-1 re-run on 2026-11-04 found no quality change (`scripts/eval/README.md`).
+  **Hetzner is ending the experiment** (mail 2026-11-04): the old base URL
+  `/api/v1` stops working on 2026-11-10 (the code now defaults to `/v1`,
+  override with `LINT_II_HETZNER_BASE_URL`); the experiment ends on
+  2026-12-08; the official product that replaces it will NOT offer Qwen.
+  So the live demo needs another provider by 2026-12-08. Frozen study pages
+  make no LLM calls and are unaffected.
 - Mistral (the UU-licensed alternative, `LINT_PROVIDER=mistral`) was blocked
   2026-09-25 to 2026-10-12 (402 `billing_customer_monthly_spending_limit_reached`,
   a UU-wide credit issue, not our keys). **Working again as of 2026-10-12.**

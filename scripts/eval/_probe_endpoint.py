@@ -8,7 +8,7 @@ worth asking in any provider migration.
 
 Override with env vars, Hetzner remaining the default:
 
-    LINT_II_PROBE_BASE_URL   default https://inference.hetzner.com/api/v1
+    LINT_II_PROBE_BASE_URL   default https://inference.hetzner.com/v1
     LINT_II_PROBE_API_KEY    default the value of $HETZNER_API_KEY
     LINT_II_PROBE_AUTH       "bearer" (default) or "header:X-Api-Key"
     LINT_II_LLM_MODEL        default Qwen/Qwen3.6-35B-A3B-FP8
@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import os
 
-DEFAULT_BASE_URL = "https://inference.hetzner.com/api/v1"
+DEFAULT_BASE_URL = "https://inference.hetzner.com/v1"
 DEFAULT_MODEL = "Qwen/Qwen3.6-35B-A3B-FP8"
 
 

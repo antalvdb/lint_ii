@@ -643,7 +643,9 @@ class HetznerProvider(LLMProvider):
     Set LINT_II_HETZNER_THINKING=1 to re-enable it (e.g. to compare quality)."""
 
     DEFAULT_MODEL = "Qwen/Qwen3.6-35B-A3B-FP8"
-    BASE_URL = "https://inference.hetzner.com/api/v1"
+    # Hetzner moved the API from /api/v1 to /v1; the old path stops working on
+    # 2026-11-10. LINT_II_HETZNER_BASE_URL overrides it without a code change.
+    DEFAULT_BASE_URL = "https://inference.hetzner.com/v1"
     supports_concurrency = True
 
     def __init__(self, api_key: str | None = None, model: str | None = None):
@@ -653,6 +655,7 @@ class HetznerProvider(LLMProvider):
                 "Hetzner API key required. Pass api_key or set HETZNER_API_KEY env var."
             )
         self._model = model or os.environ.get("LINT_II_LLM_MODEL", self.DEFAULT_MODEL)
+        self._base_url = os.environ.get("LINT_II_HETZNER_BASE_URL", self.DEFAULT_BASE_URL)
         self._thinking = os.environ.get("LINT_II_HETZNER_THINKING", "0") != "0"
         # Qwen3 at 0.7 (Mistral's tuned value) produces noisier lexical swaps —
         # occasional meaning/idiom errors on word_frequency replacements. A lower
@@ -678,7 +681,7 @@ class HetznerProvider(LLMProvider):
                     "httpx package not installed. Install with: pip install lint_ii[llm]"
                 )
             self._client = httpx.Client(
-                base_url=self.BASE_URL,
+                base_url=self._base_url,
                 headers={"Authorization": f"Bearer {self._api_key}"},
                 timeout=120.0,
             )

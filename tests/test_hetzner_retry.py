@@ -84,3 +84,12 @@ def test_retries_can_be_turned_off(monkeypatch, waits):
     with pytest.raises(httpx.HTTPStatusError):
         _provider(monkeypatch, client, LINT_II_HETZNER_RETRIES="0")._complete("prompt")
     assert client.calls == 1
+
+
+def test_base_url_defaults_to_the_new_path_and_can_be_overridden(monkeypatch):
+    # Hetzner retired /api/v1 on 2026-11-10.
+    monkeypatch.setenv("HETZNER_API_KEY", "test-key")
+    monkeypatch.delenv("LINT_II_HETZNER_BASE_URL", raising=False)
+    assert HetznerProvider()._base_url == "https://inference.hetzner.com/v1"
+    monkeypatch.setenv("LINT_II_HETZNER_BASE_URL", "https://example.test/v1")
+    assert HetznerProvider()._base_url == "https://example.test/v1"
