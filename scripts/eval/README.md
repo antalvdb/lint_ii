@@ -943,6 +943,33 @@ cap" is now "parallel-3 hits it routinely". Probe runs lose calls to 429s, and
 because failed calls are EXCLUDED from a probe's denominator, two runs can
 report different observation counts — check those before comparing rates.
 
+### Check: Qwen3.6 served without "-FP8" (2026-11-04)
+
+Since 2026-10-14 Hetzner reports the serving model as `Qwen/Qwen3.6-35B-A3B`
+instead of `...-FP8`, while we still request the FP8 name (so `/health` and
+`Suggestion.model` show it). Possibly a changed deployment or quantisation;
+Hetzner did not announce it. Set 1 re-run on the live service at `ff82d38`
+(`results1q.json`, `VALIDITY: CLEAN`, all 211 calls reported without FP8)
+against the FP8 baseline `results1d.json`:
+
+| | 1d (FP8, 2026-09-30) | 1q (2026-11-04) |
+|---|---|---|
+| suggestions | 92 | 91 |
+| recall | 0.908 | 0.892 |
+| precision | 0.983 | 0.983 |
+| connective / word_frequency | 6 / 41 | 6 / 41 |
+| guard violations | 0 | 0 |
+
+The recall gap is one item (compound-4: no split of
+"klanttevredenheidsonderzoek"). Swaps differ on 14 items, against 12 between
+two FP8 runs of the same set (1c vs 1d), and the bad swaps seen again
+(`handhaving→controle`, `omissie→ontbreken`, `structureel→blijvend`) were
+already in 1c. New bad ones: `invoering→ingang` ("de ingang van de nieuwe
+wet") and "een eenvoudiger maken van"; new better ones: `nabijgelegen→dichtbij`,
+`periodiek→regelmatig`, inflected `precaire→kwetsbare`. **Conclusion: no
+measurable change; within run-to-run noise.** One set only, so a small shift
+cannot be excluded.
+
 ## Current residuals / backlog (priority order)
 
 1. **Connective GEEN on inferential consequences** (corpus4 conn-10, corpus5

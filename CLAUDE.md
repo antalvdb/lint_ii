@@ -27,6 +27,9 @@ pushing.** Don't assume the other side is idle.
 - Current live provider: `LINT_PROVIDER=hetzner` → Qwen (Qwen3.6-35B-A3B-FP8),
   temperature 0.3, thinking OFF (`chat_template_kwargs enable_thinking:false` —
   thinking ON burns max_tokens and yields 0 suggestions; see providers.py).
+  Since 2026-10-14 Hetzner REPORTS the model as `Qwen/Qwen3.6-35B-A3B`
+  (no `-FP8`; see `LLM_USAGE` lines) though we still request the FP8 name.
+  A set-1 re-run on 2026-11-04 found no quality change (`scripts/eval/README.md`).
 - Mistral (the UU-licensed alternative, `LINT_PROVIDER=mistral`) was blocked
   2026-09-25 to 2026-10-12 (402 `billing_customer_monthly_spending_limit_reached`,
   a UU-wide credit issue, not our keys). **Working again as of 2026-10-12.**
