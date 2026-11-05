@@ -75,6 +75,38 @@ class TestDtInversion:
         assert E._adds_t_before_subject_je(sa, idx, word, word + "t") is blocked
 
 
+class TestFiniteAgreement:
+    """A spelling "correction" must not break a finite verb that already agrees
+    with its subject (Mistral eval 2026-10-12), but real dt-fixes pass."""
+
+    @pytest.mark.parametrize("text, word, correction, blocked", [
+        # The Mistral errors.
+        ("Meer informatie over de regeling vindt u op de website.", "vindt", "vind", True),
+        ("Openingstijden en tarieven vindt u op de website.", "vindt", "vind", True),
+        ("Kleine spullen brengt u zelf.", "brengt", "breng", True),
+        ("Het is vastgesteld dat er zware pakketten door één persoon werden getild.",
+         "werden", "werd", True),
+        # Mirror images: the original is wrong, so the fix must pass.
+        ("Meer informatie vind u op de website.", "vind", "vindt", False),
+        ("Hij vind het goed.", "vind", "vindt", False),
+        ("Ik vindt u aardig.", "vindt", "vind", False),
+        ("U word morgen door een medewerker gebeld.", "word", "wordt", False),
+        ("Wat word er bedoeld?", "word", "wordt", False),
+        ("De pakketten werd door één persoon getild.", "werd", "werden", False),
+        ("De medewerkers vond het goed.", "vond", "vonden", False),
+        # Correct forms the guard also protects.
+        ("Ik vind het goed.", "vind", "vindt", True),
+        ("Vind jij het goed dat we morgen beginnen?", "vind", "vindt", True),
+        ("Jij vindt het goed.", "vindt", "vind", True),
+        # Not an ending change: no verdict.
+        ("Hij vond het goed.", "vond", "vindt", False),
+    ])
+    def test_agreement(self, text, word, correction, blocked):
+        sa = _first_sentence(text)
+        idx = next(i for i, wf in enumerate(sa.word_features) if wf.text == word)
+        assert bool(E._breaks_finite_agreement(sa, idx, word, correction)) is blocked
+
+
 class TestHunspellSkips:
     def test_compound_of_known_words(self):
         d = hs._get_dictionary()

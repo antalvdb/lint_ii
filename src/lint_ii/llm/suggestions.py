@@ -1364,6 +1364,12 @@ class SuggestionEngine:
                 logger.info("Spelling suggestion skipped: '%s' -> '%s' before the "
                             "subject je/jij (inversion drops the t)", word, correction)
                 continue
+            broken = self._breaks_finite_agreement(
+                analysis.sentence_analyses[sent_num], word_index, word, correction)
+            if broken:
+                logger.info("Spelling suggestion skipped: '%s' -> '%s': %s",
+                            word, correction, broken)
+                continue
             # A correction that creates an adjective agreement error the sentence
             # did not have ("toegepast meteorologisch onderzoek" ->
             # "toegepaste ...", Kleijn).
@@ -1423,6 +1429,78 @@ class SuggestionEngine:
                           or (after is not None and after.pos_ in ("NOUN", "ADJ")))
             return not possessive
         return False
+
+    # Subject pronouns and the finite form they take. Present tense: "t" is
+    # stem+t (vindt), "stem" the bare stem (vind); None means the pronoun does
+    # not decide it (plural "en", or zij/ze, which can be either number).
+    # jij/je take the stem only in inversion, handled in _finite_form_expected.
+    _PRESENT_FORM = {"ik": "stem", "u": "t", "jij": "t", "je": "t", "hij": "t",
+                     "het": "t", "men": "t", "wat": "t", "wie": "t", "dit": "t",
+                     "dat": "t", "die": "t"}
+    _PAST_NUMBER = {"ik": "sg", "u": "sg", "jij": "sg", "je": "sg", "hij": "sg",
+                    "het": "sg", "men": "sg", "wat": "sg", "wie": "sg",
+                    "wij": "pl", "we": "pl", "jullie": "pl"}
+
+    @classmethod
+    def _finite_form_expected(cls, verb) -> str | None:
+        """The form a finite verb's subject asks for: "t"/"stem" in the present,
+        "sg"/"pl" in the past, else None. The subject hangs off the verb, or off
+        the main verb when this one is an auxiliary ("pakketten werden getild").
+        A pronoun subject wins over a noun one: "Openingstijden en tarieven vindt
+        u op ..." parses both as subjects, and only "u" is. No subject, or two
+        candidates of the same kind, gives no verdict."""
+        tag = verb.tag_ or ""
+        if not tag.startswith("WW|pv"):
+            return None
+        heads = [verb]
+        if verb.dep_.startswith(("aux", "cop")) and verb.head is not verb:
+            heads.append(verb.head)
+        subjects = [c for h in heads for c in h.children if c.dep_.startswith("nsubj")]
+        pronouns = [s for s in subjects if s.pos_ == "PRON"]
+        candidates = pronouns or subjects
+        if len(candidates) != 1:
+            return None
+        subj = candidates[0]
+        low = subj.lower_
+        if "tgw" in tag:
+            if subj.pos_ == "PRON":
+                form = cls._PRESENT_FORM.get(low)
+                if low in ("jij", "je") and subj.i > verb.i:
+                    form = "stem"   # inversion: "vind jij"
+                return form
+            return "t" if subj.morph.get("Number") == ["Sing"] else None
+        if "verl" in tag:
+            if subj.pos_ == "PRON":
+                return cls._PAST_NUMBER.get(low)
+            number = subj.morph.get("Number")
+            return {"Sing": "sg", "Plur": "pl"}.get(number[0]) if len(number) == 1 else None
+        return None
+
+    @classmethod
+    def _breaks_finite_agreement(cls, sent_analysis, word_index: int, word: str,
+                                 correction: str) -> str | None:
+        """Why a "correction" of a finite verb breaks agreement the original
+        had, else None. Mistral (2026-10-12 eval) turned correct forms into
+        dt-errors: "vindt u" -> "vind u" (three times), "brengt u" -> "breng u",
+        "pakketten werden getild" -> "werd getild". Only a pure ending change is
+        judged (stem vs stem+t in the present, singular vs +en plural in the
+        past), and only when the original already has the form its subject
+        asks for; a real fix ("Hij vind" -> "vindt") passes."""
+        w, c = word.lower(), correction.lower()
+        if c == w + "t" or w == c + "t":
+            kinds = {w: "t" if w == c + "t" else "stem", c: "t" if c == w + "t" else "stem"}
+        elif c == w + "en" or w == c + "en":
+            kinds = {w: "pl" if w == c + "en" else "sg", c: "pl" if c == w + "en" else "sg"}
+        else:
+            return None
+        try:
+            verb = sent_analysis.word_features[word_index].token
+        except (IndexError, AttributeError):
+            return None
+        expected = cls._finite_form_expected(verb)
+        if expected and kinds[w] == expected and kinds[c] != expected:
+            return f"'{word}' already agrees with its subject"
+        return None
 
     @staticmethod
     def _correction_plausible(word: str, correction: str, error_category: str) -> bool:
