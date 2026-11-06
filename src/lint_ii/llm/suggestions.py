@@ -516,6 +516,20 @@ class SuggestionEngine:
                     logger.debug("Skipping word_frequency trigger %r: a term the "
                                  "text defines", wf.text)
                     continue
+                # URL / e-mail guard. Such a token is never in SUBTLEX, so it
+                # always scores as rare and fires a trigger, and there is
+                # nothing to simplify. Qwen answers with the word unchanged;
+                # Mistral Large 2512 (eval 2026-11-06) "replaced" it with
+                # "de website" (sentence text: "op de website https://...") or
+                # reworded ANOTHER word in the sentence ("dossier@..." ->
+                # "uw zaak", which changed "uw dossier"). The rewrite-level
+                # URL guard (_alters_url) passes both because the address
+                # itself survives. Like the abbreviation guard below, this
+                # suppresses only the trigger; the LiNT metric is unchanged.
+                if self._URL_RE.fullmatch(wf.text.rstrip(self._URL_TRAIL_PUNCT)):
+                    logger.debug("Skipping word_frequency trigger %r: URL or "
+                                 "e-mail address", wf.text)
+                    continue
                 # Word-family guard: skip when a morphological relative (lemma,
                 # separable-verb base) is frequent enough — the reader knows the
                 # family, so the rare surface form needs no replacement (and the

@@ -376,6 +376,39 @@ class TestAbbreviationTokenTrigger:
         assert FREQ_DATA.get("vol", 0) >= 3.0 > FREQ_DATA.get("vol.", 0)
 
 
+class TestUrlTokenTrigger:
+    """URLs and e-mail addresses never fire a word_frequency trigger.
+
+    They are not in SUBTLEX, so they always scored as rare. Mistral Large 2512
+    (eval 2026-11-06, the url-* items) answered with "de website" or reworded
+    another word in the sentence; the rewrite-level URL guard let both through
+    because the address itself survived. The texts are the eval sentences.
+    """
+
+    _triggers = staticmethod(TestAbbreviationTokenTrigger._triggers)
+
+    @pytest.mark.parametrize(
+        "text,token",
+        [
+            ("Aanmelden kan via www.gemeente-voorbeeld.nl/aanmelden tot uiterlijk "
+             "volgende week vrijdag.", "www.gemeente-voorbeeld.nl/aanmelden"),
+            ("Meer informatie vindt u op https://www.voorbeeld-gemeente.nl/afval of "
+             "anders belt u het algemene nummer.", "https://www.voorbeeld-gemeente.nl/afval"),
+            ("Vragen over uw dossier kunt u mailen naar dossier@voorbeeld.nl onder "
+             "vermelding van uw kenmerk.", "dossier@voorbeeld.nl"),
+        ],
+    )
+    def test_address_does_not_trigger(self, engine, text, token):
+        found = self._triggers(engine, text)
+        assert not any("voorbeeld" in w for w in found), (token, found)
+
+    def test_rare_word_next_to_a_url_still_triggers(self, engine):
+        assert "reprimande" in self._triggers(
+            engine, "De reprimande van de rechter staat op https://www.voorbeeld.nl/uitspraak "
+                    "en is openbaar voor iedereen."
+        )
+
+
 class TestReconcileRelation:
     O = "Het regende hard. We gingen toch naar buiten."
 
