@@ -933,6 +933,55 @@ it and needs `LINT_II_MISTRAL_REASONING_EFFORT=none`. Cost was not computed:
 UU's contract price is not visible from the box; the token counts above are
 the input for it.
 
+### Re-run: Mistral Large 2512 with the d/t guard (2026-11-06)
+
+Hetzner ends its inference experiment on 2026-12-08 and the product replacing
+it will not offer Qwen, so Mistral (UU's licence) is the likely live
+provider. Re-run of the five sets with `mistral-large-2512` on `24a446a`,
+which drops spelling "corrections" that break a verb's agreement
+(`_breaks_finite_agreement`). Same setup as above: test instance on its own
+port and `HOME`, `LINT_II_MISTRAL_TEMPERATURE=0.3`. Files
+`results{N}m25g.json`. All five sets `VALIDITY: CLEAN`, 0 guard violations,
+1,078 calls, 1.17M prompt / 0.08M completion tokens.
+
+| | Qwen3.6 | Large 2512 (10-12) | Large 2512 + guard |
+|---|---|---|---|
+| recall | 0.868 | 0.871 | 0.868 |
+| legacy precision | 0.959 | 0.925 | 0.934 |
+| false-positive items | 12 | 23 | 20 |
+| suggestions | 420 | 412 | 414 |
+| connective suggestions | 28 | 28 | 29 |
+| spelling suggestions | 8 | 11 | 7 |
+
+**The d/t guard works.** It dropped `vindt → vind` three times (the
+systematic error above) and every remaining spelling fix is right, including
+the genuine agreement fixes in set 5 (`wordt → word`, `loop → loopt`,
+`vind → vindt`). `bakt ... vers → verse` did not recur.
+
+**URL and e-mail tokens were being swapped** (4 false-positive items). Such
+a token is never in SUBTLEX, so it always fired a word_frequency trigger.
+Qwen answers with the word unchanged; Large 2512 answered "de website" (the
+sentence became "op de website https://...") or reworded another word in the
+sentence (`dossier@voorbeeld.nl` → "uw zaak", turning "uw dossier" into "uw
+zaak"). The rewrite-level URL guard passed both because the address itself
+survived. Fixed at the trigger: URL and e-mail tokens no longer fire one
+(`_check_word_frequency`, tests in `test_text_guards.py`). That removes all four
+swaps (set 1 url-2, set 2 url-3, set 3 url-1, set 5 url-1), but set 3 and
+set 5 url-1 also carry a max_sdl rewrite, so by presence only 2 false
+positives go (20 → 18). Not re-run; the tests use the eval sentences.
+
+**Remaining false positives** that Qwen does not have: swaps on clean
+controls (`hartstarter → defibrillator`, harder rather than simpler;
+`gemaal → pompstation`, `vervoerbewijs → kaartje`,
+`verzekeringspas → verzekeringsbewijs`, `maatregel → regel`) and two odd
+connectives ("De storing is verholpen, dus excuses voor het ongemak.").
+Read from the result files, not a full judge pass.
+
+**Recommendation as of 2026-11-06:** with the d/t and URL guards,
+`mistral-large-2512` is fit to replace Qwen on the live demo before
+2026-12-08: same recall, precision about 2-3 points lower, mostly from word
+swaps on sentences that need none. Pin the dated model.
+
 ### Hetzner rate limits tightened (2026-09)
 
 429 responses as a share of calls: **0.1% (Jul), 0.2% (Aug), 6.6% (Sep)** — a

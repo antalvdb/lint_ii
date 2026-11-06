@@ -50,8 +50,12 @@ pushing.** Don't assume the other side is idle.
   `LINT_II_MISTRAL_REASONING_EFFORT=none` for it (thinking otherwise eats
   max_tokens); `mistral-large-2512` rejects that parameter, so leave it unset
   there. Eval 2026-10-12 (`scripts/eval/README.md`): both match Qwen's recall
-  but invent d/t spelling errors (`vindt u → vind u`); prefer 2512 and add a
-  spelling guard before any live use.
+  but invent d/t spelling errors (`vindt u → vind u`); prefer 2512.
+  The d/t guard is now in (`24a446a`, `_breaks_finite_agreement`), and URL /
+  e-mail tokens no longer fire word swaps (Large 2512 turned them into
+  "de website"). Re-run 2026-11-06: 2512 + guards matches Qwen's recall at
+  ~2-3 points lower precision, and is the recommended live provider once
+  Hetzner ends (switching is Antal's call).
 - Result cache: disk-persisted (`~/.cache/lint-ii/result_cache.json`), survives
   restarts BY DESIGN; the key includes the running git commit + model name, so
   deploys invalidate naturally and startup re-warms the example texts.
