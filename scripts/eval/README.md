@@ -281,6 +281,12 @@ provably suppresses them.
   lemma/comparative/diminutive/particle mechanisms; conn-9/10 are temporal
   consequences tracking the model-side GEEN residual (conn-9 fires as of the
   set-5 run; conn-10 is the surviving inferential case — see backlog item 1).
+- `corpus_spelling.json` — spelling and grammar-slip set (2026-11-11), not
+  one of the 100-item sets: 34 realistic errors (d/t in present, past and
+  participle; typos; split compounds; hun/zij, die/dat, wat/dat, als/dan),
+  each with `error: {wrong, right}`, and 22 controls, mostly their minimal
+  pairs. Scored per checker by `spelling_compare.py` (Hunspell, a local
+  LanguageTool, or a `run_eval.py` results file).
 
 ## Cross-set results (presence/absence, precision/recall)
 
@@ -981,6 +987,76 @@ Read from the result files, not a full judge pass.
 `mistral-large-2512` is fit to replace Qwen on the live demo before
 2026-12-08: same recall, precision about 2-3 points lower, mostly from word
 swaps on sentences that need none. Pin the dated model.
+
+### Check: LanguageTool vs Hunspell for spelling (2026-11-11)
+
+Prompted by a note from Franka Buitenhuis (Cito): LanguageTool works a lot
+better than Hunspell. LanguageTool 6.6, self-hosted on the box (Java 21 JRE,
+`HTTPServer` on a local port, ~1.2 GB RSS, ~0.2 s per text; LGPL), was run
+next to our guarded Hunspell pass (`generate_hunspell_suggestions`) over 509
+texts / 10,273 words: all five eval sets, the five study letters and the
+demo's example texts. No LLM calls; nothing left the box. Not wired into the
+service.
+
+The sets hold only six planted spelling errors (set 5, `spelling-1..6`):
+
+| | acomodatie | Ik wordt | Hij loop | onmiddelijk | aggresief | Zij vind |
+|---|---|---|---|---|---|---|
+| Hunspell pass alone | ✓ | – | – | – | ✓ | – |
+| LanguageTool alone | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| pipeline (Hunspell + Qwen spelling pass, `results5g`) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+All six LanguageTool corrections are right. It catches the d/t cases with
+fixed subject + verb rules (`NL_SIMPLE_REPLACE_IK_WORDT`, `JIJ_LOOP`,
+`NL_SIMPLE_REPLACE_ZIJ_VIND_HET`, also "Vind u het" and "Hij vind" in a
+probe), i.e. deterministically, without the LLM. It does not catch the
+article-gender error "De door u beoogde gebruik".
+
+**False alarms on correct text:** raw LanguageTool flagged ~50, the guarded
+Hunspell pass 0.
+- ~19 `MORFOLOGIK_RULE_NL_NL` typo flags on valid words, often with a bad
+  first suggestion: rare or productive words (`banenzwemmen → banenzwemmer`,
+  the exact case of backlog item 6; `telformulieren → webformulieren`,
+  `omjubeld → bejubeld`, `hartstarter → hartstarters`, `repaircafé`,
+  `overlegdruk`, `expeditieuze`, `satisfactoir`), long compounds
+  (`begraafplaatsonderhoudsploeg`), case numbers (`2026-PK-04417`) and
+  invented place names (`Oosterwijde`).
+- 14 `WEEKDAGEN_MAANDEN` flags: "Maandag" opening a list line.
+- 8 `ERG_LANG_WOORD` (very long word), which LiNT already measures.
+- A few style rules: `ter plekke`, `duurt kort → is kort`, `Mkb`,
+  `El Amrani → El-Amrani`.
+
+**Conclusion:** better than Hunspell alone, but not than the current
+pipeline on these items; its value is a provider-independent check (Mistral
+invents d/t errors, see above). If adopted: add it next to Hunspell, use its
+verb-agreement rules, pass its typo flags through the existing guards
+(compound of known words, protected terms, codes and names), and switch off
+casing, readability and style categories. Six simple planted errors are too
+few to judge recall, hence a dedicated spelling set.
+
+**Spelling set (`corpus_spelling.json`, 34 errors + 22 controls),** scored
+with `spelling_compare.py` (no LLM calls):
+
+| checker | fixed | flagged, wrong fix | missed | false alarms |
+|---|---|---|---|---|
+| Hunspell pass | 10 | 2 | 22 | 0 |
+| LanguageTool | 27 | 2 | 5 | 4 |
+
+- Hunspell catches only non-words (typos, `goedgekeurt`); every d/t error
+  whose wrong form is itself a word, every split compound and every grammar
+  slip passes. Its two wrong fixes: `comissie → omissie`,
+  `antwoorde → antwoorden`.
+- LanguageTool fixes all split compounds, `Hun hebben`, `het meisje die`
+  and 11 of 14 d/t errors. Missed: `Word u`, `Mijn zus antwoord`,
+  `We zijn ... verhuist`, `groter als ik`, `het boek wat`.
+- Its four false alarms are the known class: `banenzwemmen`, `hartstarter`,
+  `repaircafé` and a case number, all typo-rule flags that the existing
+  Hunspell-side guards (compound of known words, codes) are built to stop.
+- Leaving out the casing/readability/style categories changed nothing on
+  this set (its sentences are plain), so `lt-core` scores the same.
+
+The pipeline column (Hunspell + LLM spelling pass) needs a `run_eval.py`
+run on the set; pass its results file with `--results`.
 
 ### Hetzner rate limits tightened (2026-09)
 

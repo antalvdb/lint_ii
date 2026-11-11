@@ -1,0 +1,667 @@
+{
+ "description": "Spelling and grammar-slip set (2026-11-11): realistic Dutch errors — d/t in present, past and participle, common typos, wrongly split compounds, hun/zij, die/dat, wat/dat, als/dan — each positive with its error in `error` {wrong, right}. Controls are mostly the minimal pairs of the positives, plus rare-but-valid words, a case number, a place name and a list line. Short, plain sentences so readability triggers stay quiet. Synthetic, no PII. Built to compare Hunspell, LanguageTool and the LLM spelling pass.",
+ "items": [
+  {
+   "id": "dt-1",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "dt-present"
+   ],
+   "error": {
+    "wrong": "vind",
+    "right": "vindt"
+   },
+   "text": "Hij vind de nieuwe buren erg aardig. Ze groeten altijd vriendelijk."
+  },
+  {
+   "id": "dt-2",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "dt-present"
+   ],
+   "error": {
+    "wrong": "Word",
+    "right": "Wordt"
+   },
+   "text": "Word u al geholpen? Anders komt er zo iemand bij u."
+  },
+  {
+   "id": "dt-3",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "dt-present"
+   ],
+   "error": {
+    "wrong": "wordt",
+    "right": "word"
+   },
+   "text": "Wanneer wordt je jarig? Dan nemen we taart mee."
+  },
+  {
+   "id": "dt-4",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "dt-present"
+   ],
+   "error": {
+    "wrong": "rijd",
+    "right": "rijdt"
+   },
+   "text": "De bus rijd vandaag een andere route. De halte bij de kerk vervalt."
+  },
+  {
+   "id": "dt-5",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "dt-present"
+   ],
+   "error": {
+    "wrong": "antwoord",
+    "right": "antwoordt"
+   },
+   "text": "Mijn zus antwoord nooit op haar telefoon. Ze stuurt liever een bericht."
+  },
+  {
+   "id": "dt-6",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "dt-present"
+   ],
+   "error": {
+    "wrong": "gebeurd",
+    "right": "gebeurt"
+   },
+   "text": "Dat gebeurd hier wel vaker. De buren weten er alles van."
+  },
+  {
+   "id": "dt-7",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "dt-present"
+   ],
+   "error": {
+    "wrong": "Houdt",
+    "right": "Houd"
+   },
+   "text": "Houdt jij de deur even open? Ik heb mijn handen vol."
+  },
+  {
+   "id": "dt-8",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "dt-present"
+   ],
+   "error": {
+    "wrong": "vindt",
+    "right": "vind"
+   },
+   "text": "Ik vindt het een mooi plan. We beginnen volgende week."
+  },
+  {
+   "id": "dt-9",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "dt-participle"
+   ],
+   "error": {
+    "wrong": "verandert",
+    "right": "veranderd"
+   },
+   "text": "De afspraak is verplaatst en het tijdstip is verandert. U krijgt nog een brief."
+  },
+  {
+   "id": "dt-10",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "dt-participle"
+   ],
+   "error": {
+    "wrong": "bezorgt",
+    "right": "bezorgd"
+   },
+   "text": "Het pakket is gisteren bezorgt. Het ligt bij de buren."
+  },
+  {
+   "id": "dt-11",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "dt-participle"
+   ],
+   "error": {
+    "wrong": "verhuist",
+    "right": "verhuisd"
+   },
+   "text": "We zijn vorig jaar verhuist. Ons nieuwe huis is groter."
+  },
+  {
+   "id": "dt-12",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "dt-past"
+   ],
+   "error": {
+    "wrong": "antwoorde",
+    "right": "antwoordde"
+   },
+   "text": "Hij antwoorde snel op de vraag. Iedereen was verbaasd."
+  },
+  {
+   "id": "dt-13",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "dt-participle"
+   ],
+   "error": {
+    "wrong": "goedgekeurt",
+    "right": "goedgekeurd"
+   },
+   "text": "Uw aanvraag is goedgekeurt. Het geld staat binnen een week op uw rekening."
+  },
+  {
+   "id": "dt-14",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "dt-participle"
+   ],
+   "error": {
+    "wrong": "gebeurt",
+    "right": "gebeurd"
+   },
+   "text": "Wat is er gebeurt met de oude bank? Die stond hier altijd."
+  },
+  {
+   "id": "typo-1",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "typo"
+   ],
+   "error": {
+    "wrong": "eigelijk",
+    "right": "eigenlijk"
+   },
+   "text": "Ik wilde eigelijk morgen komen. Nu wordt het vrijdag."
+  },
+  {
+   "id": "typo-2",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "typo"
+   ],
+   "error": {
+    "wrong": "enigsinds",
+    "right": "enigszins"
+   },
+   "text": "Het weer viel enigsinds tegen. Toch was het een fijne dag."
+  },
+  {
+   "id": "typo-3",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "typo"
+   ],
+   "error": {
+    "wrong": "comissie",
+    "right": "commissie"
+   },
+   "text": "De comissie vergadert elke maand. De verslagen liggen bij de balie."
+  },
+  {
+   "id": "typo-4",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "typo"
+   ],
+   "error": {
+    "wrong": "nivo",
+    "right": "niveau"
+   },
+   "text": "Het nivo van de cursus is hoog. Beginners volgen eerst een basisles."
+  },
+  {
+   "id": "typo-5",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "typo"
+   ],
+   "error": {
+    "wrong": "geinteresseerd",
+    "right": "geïnteresseerd"
+   },
+   "text": "Bent u geinteresseerd in een rondleiding? Meld u dan aan bij de balie."
+  },
+  {
+   "id": "typo-6",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "typo"
+   ],
+   "error": {
+    "wrong": "ideeen",
+    "right": "ideeën"
+   },
+   "text": "We hebben veel goede ideeen gekregen. Dank voor uw hulp."
+  },
+  {
+   "id": "typo-7",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "typo"
+   ],
+   "error": {
+    "wrong": "officiëel",
+    "right": "officieel"
+   },
+   "text": "Het besluit is nu officiëel. De regels gaan in maart in."
+  },
+  {
+   "id": "typo-8",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "typo"
+   ],
+   "error": {
+    "wrong": "parralel",
+    "right": "parallel"
+   },
+   "text": "De nieuwe weg loopt parralel aan het spoor. Fietsers hebben een eigen pad."
+  },
+  {
+   "id": "typo-9",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "typo"
+   ],
+   "error": {
+    "wrong": "interresant",
+    "right": "interessant"
+   },
+   "text": "Het boek was erg interresant. Ik heb het in twee dagen uit."
+  },
+  {
+   "id": "typo-10",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "typo"
+   ],
+   "error": {
+    "wrong": "accoord",
+    "right": "akkoord"
+   },
+   "text": "Bent u accoord met de voorwaarden? Zet dan hier uw handtekening."
+  },
+  {
+   "id": "typo-11",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "typo"
+   ],
+   "error": {
+    "wrong": "definatief",
+    "right": "definitief"
+   },
+   "text": "De datum is nog niet definatief. We laten het u snel weten."
+  },
+  {
+   "id": "typo-12",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "typo"
+   ],
+   "error": {
+    "wrong": "vanavont",
+    "right": "vanavond"
+   },
+   "text": "Het concert begint vanavont om acht uur. De zaal gaat om zeven uur open."
+  },
+  {
+   "id": "split-1",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "compound-split"
+   ],
+   "error": {
+    "wrong": "politie agent",
+    "right": "politieagent"
+   },
+   "text": "Een politie agent hielp de oude man oversteken. Hij bedankte haar hartelijk."
+  },
+  {
+   "id": "split-2",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "compound-split"
+   ],
+   "error": {
+    "wrong": "boven genoemde",
+    "right": "bovengenoemde"
+   },
+   "text": "Het boven genoemde adres is niet meer geldig. Gebruik voortaan het nieuwe adres."
+  },
+  {
+   "id": "split-3",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "compound-split"
+   ],
+   "error": {
+    "wrong": "zonne energie",
+    "right": "zonne-energie"
+   },
+   "text": "Ons dak levert zonne energie op. Daarmee besparen we veel geld."
+  },
+  {
+   "id": "split-4",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "compound-split"
+   ],
+   "error": {
+    "wrong": "fiets pad",
+    "right": "fietspad"
+   },
+   "text": "Het fiets pad langs de rivier is weer open. Het werk duurde twee maanden."
+  },
+  {
+   "id": "gram-1",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "pronoun"
+   ],
+   "error": {
+    "wrong": "Hun",
+    "right": "Zij"
+   },
+   "text": "Hun hebben de prijs gewonnen. Het hele dorp was trots."
+  },
+  {
+   "id": "gram-2",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "relative"
+   ],
+   "error": {
+    "wrong": "die",
+    "right": "dat"
+   },
+   "text": "Het meisje die naast ons woont, past soms op de kinderen. Ze is heel lief."
+  },
+  {
+   "id": "gram-3",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "comparative"
+   ],
+   "error": {
+    "wrong": "als",
+    "right": "dan"
+   },
+   "text": "Mijn broer is groter als ik. Hij speelt basketbal."
+  },
+  {
+   "id": "gram-4",
+   "should_suggest": true,
+   "phenomena": [
+    "spelling",
+    "relative"
+   ],
+   "error": {
+    "wrong": "wat",
+    "right": "dat"
+   },
+   "text": "Het boek wat ik las, was erg spannend. Ik leen het je graag."
+  },
+  {
+   "id": "ok-1",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "dt-present"
+   ],
+   "must_not": [],
+   "text": "Houd jij de deur even open? Ik heb mijn handen vol."
+  },
+  {
+   "id": "ok-2",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "dt-present"
+   ],
+   "must_not": [],
+   "text": "Wordt u al geholpen? Anders komt er zo iemand bij u."
+  },
+  {
+   "id": "ok-3",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "dt-present"
+   ],
+   "must_not": [],
+   "text": "Word je morgen jarig? Dan nemen we taart mee."
+  },
+  {
+   "id": "ok-4",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "dt-present"
+   ],
+   "must_not": [],
+   "text": "Vind jij het ook te koud? Dan zet ik de verwarming hoger."
+  },
+  {
+   "id": "ok-5",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "dt-participle"
+   ],
+   "must_not": [],
+   "text": "Het tijdstip is veranderd. Het weer verandert snel."
+  },
+  {
+   "id": "ok-6",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "dt-participle"
+   ],
+   "must_not": [],
+   "text": "Dat gebeurt hier wel vaker. Gisteren is het ook gebeurd."
+  },
+  {
+   "id": "ok-7",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "dt-present"
+   ],
+   "must_not": [],
+   "text": "De bus rijdt vandaag een andere route. De chauffeur weet de weg."
+  },
+  {
+   "id": "ok-8",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "dt-past"
+   ],
+   "must_not": [],
+   "text": "Hij antwoordde snel. Zij antwoordt altijd later."
+  },
+  {
+   "id": "ok-9",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "dt-present"
+   ],
+   "must_not": [],
+   "text": "Ik vind het een mooi plan. We beginnen volgende week."
+  },
+  {
+   "id": "ok-10",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "dt-participle"
+   ],
+   "must_not": [],
+   "text": "Het pakket is gisteren bezorgd. Het ligt bij de buren."
+  },
+  {
+   "id": "ok-11",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "dt-present"
+   ],
+   "must_not": [],
+   "text": "Kun jij me morgen helpen? Ik verhuis volgende week."
+  },
+  {
+   "id": "ok-12",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "relative"
+   ],
+   "must_not": [],
+   "text": "Het meisje dat naast ons woont, past soms op de kinderen. Ze is heel lief."
+  },
+  {
+   "id": "ok-13",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "comparative"
+   ],
+   "must_not": [],
+   "text": "Mijn broer is groter dan ik. Hij speelt basketbal."
+  },
+  {
+   "id": "ok-14",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "pronoun"
+   ],
+   "must_not": [],
+   "text": "Zij vinden de cursus te zwaar. Hun huiswerk kost veel tijd."
+  },
+  {
+   "id": "ok-15",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "relative"
+   ],
+   "must_not": [],
+   "text": "Wat het bestuur besloten heeft, staat in de brief. Lees die goed door."
+  },
+  {
+   "id": "ok-16",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "rare-valid"
+   ],
+   "must_not": [],
+   "text": "We gaan elke zaterdag banenzwemmen. Het bad is dan rustig."
+  },
+  {
+   "id": "ok-17",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "rare-valid"
+   ],
+   "must_not": [],
+   "text": "In de hal hangt een hartstarter. Het personeel weet hoe die werkt."
+  },
+  {
+   "id": "ok-18",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "rare-valid"
+   ],
+   "must_not": [],
+   "text": "Het repaircafé is elke eerste zaterdag open. Neem uw kapotte lamp mee."
+  },
+  {
+   "id": "ok-19",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "code"
+   ],
+   "must_not": [],
+   "text": "Uw dossiernummer is 2026-KL-0815. Vermeld dat nummer bij elke vraag."
+  },
+  {
+   "id": "ok-20",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "name"
+   ],
+   "must_not": [],
+   "text": "De markt in Ootmarsum is op zaterdag. Er staan dan veel kraampjes."
+  },
+  {
+   "id": "ok-21",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "list"
+   ],
+   "must_not": [],
+   "text": "Maandag: inloopspreekuur. Dinsdag: gesloten."
+  },
+  {
+   "id": "ok-22",
+   "should_suggest": false,
+   "phenomena": [
+    "spelling-control",
+    "typo"
+   ],
+   "must_not": [],
+   "text": "Bent u akkoord met de voorwaarden? Zet dan hier uw handtekening."
+  }
+ ]
+}
