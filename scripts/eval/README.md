@@ -1076,6 +1076,23 @@ LanguageTool fixes seven of those (the splits, `Hun hebben`, `wordt je`,
 fixes `Word u`, `We zijn ... verhuist`, `antwoorde` or `groter als`;
 LanguageTool's `Houdt jij → Hou jij` is counted as a wrong fix.
 
+**Integrated (2026-11-12, `languagetool_spelling.py`, off unless
+`LINT_II_LANGUAGETOOL_URL` is set).** Step 1c of the pipeline, after the
+LLM and Hunspell passes, skipping words they already flagged. Only
+error categories, only one-token fixes (so the four split compounds are
+still missed: joining words needs a frontend change), dictionary flags
+through the Hunspell gates plus a same-first-letter gate, and every fix
+through the checks shared with the LLM pass. Results:
+- Pass alone, over the 509 texts above: 7 fixes, all right (the six set-5
+  errors and nothing on correct text) once `duurt kort → is kort` was
+  disabled; the first-letter gate removed `omjubeld → bejubeld`.
+- Pipeline on the spelling set (test instance, Qwen, `results_spelling_qlt.json`,
+  `VALIDITY: CLEAN`): **25 fixed** (22 without), 3 wrong fixes, 6 missed,
+  0 false alarms. LanguageTool added `Hun hebben`, `wordt je`,
+  `Dat gebeurd` and `Houdt jij → hou`; the rest it found were already
+  flagged by Qwen or Hunspell. Median 0.19 s per analysis.
+- Lost to the gates: `enigsinds` (splits into the known words enig + sinds).
+
 ### Hetzner rate limits tightened (2026-09)
 
 429 responses as a share of calls: **0.1% (Jul), 0.2% (Aug), 6.6% (Sep)** — a

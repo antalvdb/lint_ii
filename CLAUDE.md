@@ -180,6 +180,13 @@ pushing.** Don't assume the other side is idle.
 - `LINT_II_CONNECTIVES=1` — the connective pass is OFF by default; the live box
   has it on. Any local engine experiment that should include connectives needs
   this set, or the pass silently returns nothing.
+- `LINT_II_LANGUAGETOOL_URL=http://127.0.0.1:8081` — spelling pass via a
+  LOCAL LanguageTool server (`net.valkuil.languagetool`, Java, ~1.2 GB;
+  install in `deploy/linux/README.md`). Off when unset; a down server only
+  logs `LANGUAGETOOL_ERROR`. One-token fixes only (word joins like
+  "politie agent" need a frontend change, held during the study);
+  dictionary flags pass the Hunspell gates. Never use the public
+  languagetool.org API: tester texts can hold PII.
 - `LINT_II_SWAP_JUDGE=1` — verification pass that drops meaning-changing
   word_frequency swaps (backlog item 2). OFF by default in code, and the box
   env file sets it to 0, so it is inactive in production (turned off after the
