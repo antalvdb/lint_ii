@@ -157,6 +157,37 @@ is used. The Hetzner endpoint is OpenAI-compatible and serves a Qwen3 model, who
 `<think>` reasoning (if the endpoint has it on) is stripped in the provider so it
 never reaches the suggestion parser.
 
+## LanguageTool (spelling pass)
+
+The spelling pass can use a local LanguageTool server next to Hunspell and the
+LLM (`src/lint_ii/llm/languagetool_spelling.py`; why: `scripts/eval/README.md`,
+"LanguageTool vs Hunspell"). It is a separate Java service on loopback port
+8081, off unless `LINT_II_LANGUAGETOOL_URL` is set. If it is down, analyses go
+on without it and the app log shows `LANGUAGETOOL_ERROR`.
+
+Install (no sudo needed for the files; done on the box 2026-11-12):
+
+```bash
+mkdir -p ~/opt/languagetool && cd ~/opt/languagetool
+curl -sSLo jre.tgz "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jre/hotspot/normal/eclipse"
+curl -sSLo lt.zip  "https://languagetool.org/download/LanguageTool-stable.zip"
+tar xzf jre.tgz && unzip -q lt.zip
+ln -sfn jdk-21.*-jre jre && ln -sfn LanguageTool-6.6 current   # adjust versions
+```
+
+Then the unit and the env line:
+
+```bash
+sudo cp deploy/linux/net.valkuil.languagetool.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now net.valkuil.languagetool
+curl -s -d language=nl --data-urlencode "text=Hij vind het mooi." http://127.0.0.1:8081/v2/check | head -c 300
+sudoedit /etc/lint-ii/lint-ii.env      # LINT_II_LANGUAGETOOL_URL=http://127.0.0.1:8081
+sudo systemctl restart net.valkuil.lint-ii
+```
+
+It takes ~1.2 GB RAM and ~0.2 s per analysis. To switch it off, remove the env
+line and restart `net.valkuil.lint-ii`.
+
 ## Rollback
 
 If anything is wrong, bring the Mac back:

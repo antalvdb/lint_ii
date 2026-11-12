@@ -1363,40 +1363,12 @@ class SuggestionEngine:
                     "'%s' -> '%s' (%s)", word, correction, error_category,
                 )
                 continue
-            if self._introduces_other_address(word, correction):
-                logger.info(
-                    "Spelling suggestion skipped: '%s' -> '%s' switches the form of "
-                    "address (text uses '%s')", word, correction, self._address,
-                )
-                continue
-            if word.lower() in self._protected_terms:
-                logger.info("Spelling suggestion skipped: '%s' is a term the text "
-                            "defines", word)
-                continue
-            if self._adds_t_before_subject_je(
-                    analysis.sentence_analyses[sent_num], word_index, word, correction):
-                logger.info("Spelling suggestion skipped: '%s' -> '%s' before the "
-                            "subject je/jij (inversion drops the t)", word, correction)
-                continue
-            broken = self._breaks_finite_agreement(
-                analysis.sentence_analyses[sent_num], word_index, word, correction)
-            if broken:
+            rejected = self._spelling_fix_rejection(
+                analysis.sentence_analyses[sent_num], word_index, word, correction,
+                sent_text, suggested_text)
+            if rejected:
                 logger.info("Spelling suggestion skipped: '%s' -> '%s': %s",
-                            word, correction, broken)
-                continue
-            # A correction that creates an adjective agreement error the sentence
-            # did not have ("toegepast meteorologisch onderzoek" ->
-            # "toegepaste ...", Kleijn).
-            if (self._dehet_disagreement(suggested_text)
-                    and not self._dehet_disagreement(sent_text)):
-                logger.info("Spelling suggestion skipped: '%s' -> '%s' creates an "
-                            "agreement error", word, correction)
-                continue
-            # "maatschappelijke terreinen" -> "maatschappelijke terrein" after "de".
-            clash = self._introduces_article_mismatch(sent_text, suggested_text)
-            if clash:
-                logger.info("Spelling suggestion skipped: '%s' -> '%s' gives '%s'",
-                            word, correction, clash)
+                            word, correction, rejected)
                 continue
 
             suggestions.append(Suggestion(
@@ -1414,6 +1386,35 @@ class SuggestionEngine:
             ))
 
         return suggestions
+
+    def _spelling_fix_rejection(self, sent_analysis, word_index: int, word: str,
+                                correction: str, sent_text: str,
+                                suggested_text: str) -> str | None:
+        """Why a one-word spelling/grammar fix must be dropped, else None.
+
+        The checks every spelling source shares (the LLM pass and LanguageTool):
+        each catches a "correction" that makes the sentence worse.
+        """
+        if self._introduces_other_address(word, correction):
+            return f"switches the form of address (text uses '{self._address}')"
+        if word.lower() in self._protected_terms:
+            return "a term the text defines"
+        if self._adds_t_before_subject_je(sent_analysis, word_index, word, correction):
+            return "adds a t before the subject je/jij (inversion drops the t)"
+        broken = self._breaks_finite_agreement(sent_analysis, word_index, word, correction)
+        if broken:
+            return broken
+        # A correction that creates an adjective agreement error the sentence
+        # did not have ("toegepast meteorologisch onderzoek" ->
+        # "toegepaste ...", Kleijn).
+        if (self._dehet_disagreement(suggested_text)
+                and not self._dehet_disagreement(sent_text)):
+            return "creates an agreement error"
+        # "maatschappelijke terreinen" -> "maatschappelijke terrein" after "de".
+        clash = self._introduces_article_mismatch(sent_text, suggested_text)
+        if clash:
+            return f"gives '{clash}'"
+        return None
 
     @staticmethod
     def _adds_t_before_subject_je(sent_analysis, word_index: int, word: str,
@@ -1620,6 +1621,24 @@ class SuggestionEngine:
             analysis, llm_covered, protected=self._protected_terms)
         spelling_suggestions = spelling_suggestions + hunspell_suggestions
         logger.info("TIMING spelling_hunspell=%.2fs (%d suggestions)", time.perf_counter() - t1, len(hunspell_suggestions))
+
+        # Step 1c: LanguageTool (a local server; off unless
+        # LINT_II_LANGUAGETOOL_URL is set). Fixed rules for errors whose wrong
+        # form is itself a word (d/t, "Hun hebben"), which neither Hunspell nor
+        # every LLM catches. Skips words the passes above already flagged.
+        from lint_ii.llm import languagetool_spelling
+        if languagetool_spelling.enabled():
+            t_lt = time.perf_counter()
+            covered = {
+                (s.sentence_index, s.word_index)
+                for s in spelling_suggestions
+                if s.word_index is not None
+            }
+            lt_suggestions = languagetool_spelling.generate_languagetool_suggestions(
+                analysis, self, covered)
+            spelling_suggestions = spelling_suggestions + lt_suggestions
+            logger.info("TIMING spelling_languagetool=%.2fs (%d suggestions)",
+                        time.perf_counter() - t_lt, len(lt_suggestions))
 
         # Step 2: Find readability triggers and plan the LLM calls (jobs).
         # When consolidation is on, sentence-level triggers for a sentence are

@@ -1,0 +1,36 @@
+# systemd unit for the local LanguageTool server used by LiNT-II's spelling
+# pass (src/lint_ii/llm/languagetool_spelling.py). Paths are the Strato box's
+# actual setup (user antalb). Install:
+#
+#   sudo cp deploy/linux/net.valkuil.languagetool.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now net.valkuil.languagetool
+#
+# then add LINT_II_LANGUAGETOOL_URL=http://127.0.0.1:8081 to
+# /etc/lint-ii/lint-ii.env and restart net.valkuil.lint-ii.
+#
+# /home/antalb/opt/languagetool holds a Java 21 JRE (Eclipse Temurin, `jre`
+# symlink) and LanguageTool 6.6 (`current` symlink). It listens on loopback
+# only: never expose it, and never use the public languagetool.org API
+# instead (tester texts can hold personal data). ~1.2 GB RSS.
+
+[Unit]
+Description=LanguageTool server for LiNT-II (loopback only)
+After=network.target
+Before=net.valkuil.lint-ii.service
+
+[Service]
+Type=simple
+User=antalb
+Group=antalb
+WorkingDirectory=/home/antalb/opt/languagetool/current
+ExecStart=/home/antalb/opt/languagetool/jre/bin/java -Xmx2g -cp languagetool-server.jar org.languagetool.server.HTTPServer --port 8081
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
