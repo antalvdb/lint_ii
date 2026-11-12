@@ -1055,8 +1055,26 @@ with `spelling_compare.py` (no LLM calls):
 - Leaving out the casing/readability/style categories changed nothing on
   this set (its sentences are plain), so `lt-core` scores the same.
 
-The pipeline column (Hunspell + LLM spelling pass) needs a `run_eval.py`
-run on the set; pass its results file with `--results`.
+**Pipeline on the set (2026-11-11, live Qwen3.6 on `680f1a0`,
+`results_spelling_q.json`, `VALIDITY: CLEAN`):** Hunspell + the Qwen
+spelling pass fixes 22 of 34, flags 2 with a wrong fix (`antwoorde →
+antwoorden`, `fiets pad → fietsen pad`) and misses 10, with no spelling
+false alarm on the controls (ok-21 got a word swap, `inloopspreekuur →
+spreekuur zonder afspraak`, not a spelling flag).
+
+| checker | fixed | flagged, wrong fix | missed | false alarms |
+|---|---|---|---|---|
+| Hunspell pass | 10 | 2 | 22 | 0 |
+| LanguageTool | 27 | 2 | 5 | 4 |
+| pipeline (Hunspell + Qwen) | 22 | 2 | 10 | 0 |
+| pipeline or LanguageTool | 29 | 2 | 3 | 4 |
+
+The pipeline misses all four split compounds, `Hun hebben`, `wordt je`,
+`Dat gebeurd hier`, `Houdt jij`, `Word u`, `verhuist` and `groter als`.
+LanguageTool fixes seven of those (the splits, `Hun hebben`, `wordt je`,
+`Dat gebeurd`), so the two are complementary: together 29 of 34. Neither
+fixes `Word u`, `We zijn ... verhuist`, `antwoorde` or `groter als`;
+LanguageTool's `Houdt jij → Hou jij` is counted as a wrong fix.
 
 ### Hetzner rate limits tightened (2026-09)
 
